@@ -1,0 +1,50 @@
+{
+  "name": "web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "serve": "vite preview",
+    "dev:bare": "vite dev"
+  },
+  "dependencies": {
+    "@convex-dev/react-query": "^0.1.0",
+    "@tailwindcss/vite": "^4.3.1",
+    "@tanstack/ai": "^0.39.1",
+    "@tanstack/ai-openai": "^0.15.10",
+    "@tanstack/ai-react": "^0.16.3",
+    "@tanstack/react-query": "^5.99.0",
+    "@tanstack/react-router": "^1.168.22",
+    "@tanstack/react-router-ssr-query": "^1.166.11",
+    "@tanstack/react-start": "^1.167.41",
+    "@web-starter/backend": "workspace:*",
+    "@web-starter/env": "workspace:*",
+    "@web-starter/ui": "workspace:*",
+    "@workos/authkit-tanstack-react-start": "catalog:",
+    "convex": "catalog:",
+    "dotenv": "catalog:",
+    "lucide-react": "catalog:",
+    "next-themes": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "sonner": "catalog:",
+    "tailwindcss": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.17.1",
+    "@tanstack/react-router-devtools": "^1.166.13",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "^6.0.1",
+    "@web-starter/config": "workspace:*",
+    "alchemy": "catalog:",
+    "jsdom": "^29.0.2",
+    "typescript": "catalog:",
+    "vite": "^8.0.8",
+    "web-vitals": "^5.2.0",
+    "wrangler": "^4.103.0"
+  }
+}
