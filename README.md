@@ -92,7 +92,18 @@ The `/ai` page and `/api/ai/chat` route use TanStack AI with the OpenAI adapter.
 
 ## Payments
 
-Payments are optional by design. See `docs/payments.md` for the Dodo Payments Convex component setup.
+Billing uses Dodo Payments through the Convex component. See `docs/payments.md` for provider details.
+
+Set Convex environment variables:
+
+```bash
+cd packages/backend
+bunx convex env set DODO_PAYMENTS_API_KEY ...
+bunx convex env set DODO_PAYMENTS_ENVIRONMENT test_mode
+bunx convex env set DODO_PAYMENTS_WEBHOOK_SECRET ...
+```
+
+Billing functions live in `packages/backend/convex/billing.ts`; webhook handling lives in `packages/backend/convex/http.ts`.
 
 ## Deploy
 

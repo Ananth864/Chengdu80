@@ -67,9 +67,14 @@ Use `ctx.auth.getUserIdentity()` in Convex functions. Prefer explicit auth check
 
 ## Payments
 
-Payments are intentionally optional. If adding billing, use Dodo Payments:
+Billing uses Dodo Payments through the Convex component:
 
 - Dodo Payments Convex component: `@dodopayments/convex`
+- `packages/backend/convex/convex.config.ts` installs the Dodo Payments component.
+- `packages/backend/convex/dodo.ts` configures the Dodo client.
+- `packages/backend/convex/billing.ts` exposes `createCheckout` and `createCustomerPortal` actions.
+- `packages/backend/convex/http.ts` exposes the `/dodo/webhook` Convex HTTP route.
+- Save the real Dodo customer ID with `billingCustomers.saveDodoCustomerId` before using the customer portal.
 
 Do not add another billing abstraction unless replacing Dodo Payments is explicitly requested.
 
