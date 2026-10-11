@@ -11,11 +11,18 @@ import { BackendStatus } from "../components/convex-status";
 // import { BackendStatus } from "../components/db-status";
 // @endif
 import { StatusCard } from "../components/status-card";
+// @if drizzle
+// import { api } from "../integrations/api";
+// @endif
 // @if auth
 import { auth } from "../integrations/auth";
 // @endif
 
 export const Route = createFileRoute("/")({
+  // @if drizzle
+  // // Runs on the server for the first load, so the status card renders with data.
+  // loader: ({ context }) => context.queryClient.prefetchQuery(api.health.queryOptions()),
+  // @endif
   component: HomeComponent,
 });
 

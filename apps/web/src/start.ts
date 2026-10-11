@@ -1,5 +1,8 @@
 import { createCsrfMiddleware, createStart } from "@tanstack/react-start";
 
+// @if drizzle
+// import { apiSerializationAdapter } from "./integrations/api";
+// @endif
 // @if auth
 import { auth } from "./integrations/auth";
 // @endif
@@ -15,4 +18,7 @@ export const startInstance = createStart(() => ({
     ...auth.middleware,
     // @endif
   ],
+  // @if drizzle
+  // serializationAdapters: [apiSerializationAdapter],
+  // @endif
 }));

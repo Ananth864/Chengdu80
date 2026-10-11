@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./rpc": "./src/rpc.ts",
+    "./contract": "./src/contract.ts",
     "./worker": "./src/worker.ts"
   },
   "dependencies": {

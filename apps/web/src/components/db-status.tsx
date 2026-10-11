@@ -1,11 +1,11 @@
 // @if drizzle
 // import { useQuery } from "@tanstack/react-query";
 //
-// import { apiQuery } from "../integrations/api";
+// import { api } from "../integrations/api";
 // import { StatusCard } from "./status-card";
 //
 // export function BackendStatus() {
-//   const { data, error, isLoading } = useQuery(apiQuery(["api", "health"], (api) => api.Health()));
+//   const { data, error, isLoading } = useQuery(api.health.queryOptions());
 //
 //   return (
 //     <StatusCard
