@@ -1,6 +1,10 @@
+// @if auth
+// @if convex
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
+// @endif
 import { createFileRoute, redirect } from "@tanstack/react-router";
+// @if convex
 import { api } from "@web-starter/backend/convex/_generated/api";
 import {
   Card,
@@ -10,33 +14,33 @@ import {
   CardTitle,
 } from "@web-starter/ui/components/card";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@web-starter/ui/components/empty";
-import { getAuth } from "@workos/authkit-tanstack-react-start";
+// @endif
+// @if convex
 import { Authenticated, Unauthenticated } from "convex/react";
+// @endif
+
+import { auth } from "../integrations/auth";
 
 export const Route = createFileRoute("/dashboard")({
-  loader: async ({ location }) => {
-    const { user } = await getAuth();
-
-    if (!user) {
-      throw redirect({
-        href: `/api/auth/sign-in?returnPathname=${encodeURIComponent(location.pathname)}`,
-      });
+  beforeLoad: ({ context, location }) => {
+    if (!context.viewer) {
+      throw redirect({ href: auth.signInHref(location.pathname) });
     }
-
-    return { user };
+    return { viewer: context.viewer };
   },
   component: DashboardPage,
 });
 
 function DashboardPage() {
-  const { user } = Route.useLoaderData();
+  const { viewer } = Route.useRouteContext();
 
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-8">
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">Signed in as {user.email}</p>
+        <p className="text-sm text-muted-foreground">Signed in as {viewer.email}</p>
       </div>
+      {/* @if convex */}
 
       <Authenticated>
         <DashboardContent />
@@ -46,15 +50,17 @@ function DashboardPage() {
           <EmptyHeader>
             <EmptyTitle>Convex auth is loading</EmptyTitle>
             <EmptyDescription>
-              WorkOS is signed in, but Convex has not received a valid access token yet.
+              You are signed in, but Convex has not received a valid access token yet.
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
       </Unauthenticated>
+      {/* @endif */}
     </main>
   );
 }
 
+// @if convex
 function DashboardContent() {
   const { data, isLoading } = useQuery(convexQuery(api.viewer.current, {}));
 
@@ -63,7 +69,7 @@ function DashboardContent() {
       <Empty>
         <EmptyHeader>
           <EmptyTitle>Loading profile</EmptyTitle>
-          <EmptyDescription>Convex is validating the WorkOS access token.</EmptyDescription>
+          <EmptyDescription>Convex is validating the access token.</EmptyDescription>
         </EmptyHeader>
       </Empty>
     );
@@ -74,7 +80,7 @@ function DashboardContent() {
       <Card>
         <CardHeader>
           <CardTitle>Viewer</CardTitle>
-          <CardDescription>Validated by Convex from the WorkOS JWT.</CardDescription>
+          <CardDescription>Validated by Convex from the auth JWT.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-1 text-sm">
           <span>{data.email}</span>
@@ -95,7 +101,7 @@ function DashboardContent() {
       <Card>
         <CardHeader>
           <CardTitle>Role</CardTitle>
-          <CardDescription>WorkOS role and permission claims.</CardDescription>
+          <CardDescription>Role and permission claims.</CardDescription>
         </CardHeader>
         <CardContent className="text-sm">
           {data.role ?? <span className="text-muted-foreground">No role claim</span>}
@@ -104,3 +110,5 @@ function DashboardContent() {
     </div>
   );
 }
+// @endif
+// @endif

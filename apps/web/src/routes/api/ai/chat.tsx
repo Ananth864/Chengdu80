@@ -1,17 +1,22 @@
 import { chat, toServerSentEventsResponse } from "@tanstack/ai";
 import { openaiText } from "@tanstack/ai-openai";
 import { createFileRoute } from "@tanstack/react-router";
-import { getAuth } from "@workos/authkit-tanstack-react-start";
+
+// @if auth
+import { auth } from "../../../integrations/auth";
+// @endif
 
 export const Route = createFileRoute("/api/ai/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const { user } = await getAuth();
+        // @if auth
+        const { viewer } = await auth.getSession();
 
-        if (!user) {
+        if (!viewer) {
           return Response.json({ error: "Unauthorized" }, { status: 401 });
         }
+        // @endif
 
         if (!process.env.OPENAI_API_KEY) {
           return Response.json({ error: "OPENAI_API_KEY is not configured" }, { status: 500 });

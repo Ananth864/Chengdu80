@@ -1,33 +1,50 @@
+// @if convex
 import type { ConvexQueryClient } from "@convex-dev/react-query";
+// @endif
 import type { QueryClient } from "@tanstack/react-query";
 import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { Toaster } from "@web-starter/ui/components/sonner";
-import { getAuth } from "@workos/authkit-tanstack-react-start";
+// @if convex
 import type { ConvexReactClient } from "convex/react";
+// @endif
 
 import Header from "../components/header";
+// @if auth
+import { auth } from "../integrations/auth";
+// @endif
 
 import appCss from "../index.css?url";
 
 export interface RouterAppContext {
   queryClient: QueryClient;
+  // @if convex
   convexClient: ConvexReactClient;
   convexQueryClient: ConvexQueryClient;
+  // @endif
 }
 
 export const Route = createRootRouteWithContext<RouterAppContext>()({
+  // @if auth
+  // Every route reads the signed-in viewer from context; null when signed out.
+  // @if convex
   beforeLoad: async ({ context }) => {
-    const auth = await getAuth();
+    // @endif
+    // @if !convex
+    // beforeLoad: async () => {
+    // @endif
+    const session = await auth.getSession();
+    // @if convex
 
-    if (auth.user) {
-      context.convexQueryClient.serverHttpClient?.setAuth(auth.accessToken);
+    // SSR Convex queries run as the signed-in user.
+    if (session.accessToken) {
+      context.convexQueryClient.serverHttpClient?.setAuth(session.accessToken);
     }
+    // @endif
 
-    return {
-      auth,
-    };
+    return { viewer: session.viewer };
   },
+  // @endif
   head: () => ({
     meta: [
       {
@@ -38,12 +55,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "MIS Stack Starter",
-      },
-      {
-        name: "description",
-        content:
-          "Production-ready TanStack Start, Convex, WorkOS, Cloudflare, and TanStack AI starter.",
+        title: "Web Starter",
       },
     ],
     links: [

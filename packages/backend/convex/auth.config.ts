@@ -1,3 +1,4 @@
+// @if workos
 const clientId = process.env.WORKOS_CLIENT_ID;
 
 if (!clientId) {
@@ -23,3 +24,12 @@ const authConfig = {
 };
 
 export default authConfig;
+// @endif
+// @if clerk
+// // Clerk's Convex integration issues session tokens with `aud: "convex"`.
+// const authConfig = {
+//   providers: [{ domain: process.env.CLERK_JWT_ISSUER_DOMAIN!, applicationID: "convex" }],
+// };
+//
+// export default authConfig;
+// @endif

@@ -2,89 +2,98 @@
 
 ## Stack
 
-This repo is a Bun-first Better-T-Stack monorepo customized for:
+Bun monorepo:
 
-- TanStack Start in `apps/web`
-- Convex backend in `packages/backend/convex`
-- WorkOS AuthKit for auth
-- Cloudflare Workers deployment through Alchemy in `packages/infra`
+- TanStack Start in `apps/web`, deployed to Cloudflare Workers through Alchemy v2 (`apps/web/alchemy.run.ts`)
 - Tailwind CSS v4 and shadcn/ui primitives in `packages/ui`
-- Oxlint and Oxfmt for checks
-- Optional TanStack AI route in `apps/web/src/routes/api/ai/chat.tsx`
+- Vite+ (`vp`) for dev, build, lint, format, type checks, and task running. Lint and format config lives in the root `vite.config.ts`
+<!-- @if convex -->
+- Convex backend in `packages/backend/convex`
+  <!-- @endif -->
+  <!-- @if drizzle -->
+- Effect v4 API Worker with Drizzle on PlanetScale Postgres via Hyperdrive in `packages/api`
+  <!-- @endif -->
+  <!-- @if workos -->
+- WorkOS AuthKit for auth
+  <!-- @endif -->
+  <!-- @if clerk -->
+- Clerk for auth
+  <!-- @endif -->
+  <!-- @if ai -->
+- TanStack AI chat route in `apps/web/src/routes/api/ai/chat.tsx`
+<!-- @endif -->
+
+<!-- @if template -->
+
+## Template
+
+Run `bun run init` to pick options (see `README.md`). Until then the repo holds every option: code for non-default options is commented out under `// @if <option>` markers, and `scripts/options.ts` lists each option's files and deps. When changing shared files, keep code for every option behind its marker.
+
+<!-- @endif -->
 
 ## Required Rules
 
-- Use Bun commands. Prefer `bun install`, `bun run dev`, `bun run build`, and `bun run check`.
+- Use Bun commands: `bun install`, `bun run dev`, `bun run build`, `bun run check`.
 - Do not introduce another backend, auth provider, deployment target, formatter, or linter.
-- Keep Convex functions inside `packages/backend/convex`.
-- Import Convex APIs from `@web-starter/backend/convex/_generated/api`.
-- Run `bun run codegen` after adding or renaming Convex functions.
-- Use WorkOS server helpers from `@workos/authkit-tanstack-react-start`.
-- Do not put WorkOS API keys or cookie passwords in public `VITE_` variables.
 - Use shadcn primitives from `@web-starter/ui/components/*` before adding custom UI.
 - This shadcn setup uses Base UI. Use exported class helpers like `buttonVariants` for link-styled buttons instead of Radix `asChild`.
-- Keep deployment on Cloudflare through Alchemy. Do not add Vercel, Netlify, or Docker deployment unless the product direction changes.
+- Keep deployment on Cloudflare through Alchemy.
+- Worker bindings are declared in `apps/web/alchemy.run.ts`. Read them with `import { env } from "cloudflare:workers"` inside request handlers, not at module scope.
+- Do not put secrets in public `VITE_` variables.
+<!-- @if convex -->
+- Keep Convex functions in `packages/backend/convex` and import APIs from `@web-starter/backend/convex/_generated/api`.
+- Run `bun run codegen` after adding or renaming Convex functions.
+  <!-- @endif -->
+  <!-- @if drizzle -->
+- Write app logic in `packages/api/src` as Effects that yield services like `Db` (`src/db.ts`), never platform APIs. `src/worker.ts` is the only Cloudflare-aware runtime code: it provides the implementations and exposes logic as RPC methods. New dependencies (storage, queues) follow the same shape: a `Context.Service` plus an implementation provided in the worker.
+- The web app calls API RPC methods through the `API` service binding with `toRpcAsync`.
+- Edit tables in `packages/api/src/schema.ts`. Do not hand-write migrations; Alchemy generates them into `packages/api/migrations`.
+<!-- @endif -->
 
 ## Environment
 
-Local web env lives in `apps/web/.env`; examples are in `apps/web/.env.example`.
+Local env lives in `apps/web/.env` (examples in `apps/web/.env.example`). Alchemy loads it and binds each var listed in `alchemy.run.ts`.
 
-Required for local app runtime:
+<!-- @if convex -->
 
-- `VITE_CONVEX_URL`
-- `WORKOS_CLIENT_ID`
-- `WORKOS_API_KEY`
-- `WORKOS_REDIRECT_URI`
-- `WORKOS_COOKIE_PASSWORD`
+Convex deployment env is set with `bunx convex env set` from `packages/backend`; see `packages/backend/.env.example`.
 
-Required in Convex deployment:
+<!-- @endif -->
 
-- `WORKOS_CLIENT_ID`
-- `WORKOS_API_KEY`
-
-Required only for the AI demo route:
-
-- `OPENAI_API_KEY`
+<!-- @if auth -->
 
 ## Auth Notes
 
-WorkOS middleware is configured in `apps/web/src/start.ts`. It must stay in Start request middleware, not TanStack Router config.
+The active provider implements `AuthIntegration` (`apps/web/src/integrations/auth/types.ts`). Use `auth` from `apps/web/src/integrations/auth` instead of provider SDKs in shared code. Its middleware is registered in `apps/web/src/start.ts`, and must stay in Start request middleware.
 
-Auth routes:
+Protected pages read `context.viewer` in `beforeLoad` and redirect to `auth.signInHref(location.pathname)` when it is null (see `routes/dashboard.tsx`).
 
-- `/api/auth/sign-in`
-- `/api/auth/sign-up`
-- `/api/auth/callback`
-- `/sign-out`
+<!-- @if workos -->
 
-Protected pages should use `getAuth()` in route loaders and redirect unauthenticated users to `/api/auth/sign-in?returnPathname=...`.
+WorkOS routes: `/api/auth/sign-in`, `/api/auth/sign-up`, `/api/auth/callback`, `/sign-out`.
 
-## Convex Notes
+<!-- @endif -->
+<!-- @if clerk -->
 
-Convex validates WorkOS JWTs through `packages/backend/convex/auth.config.ts`.
+Clerk routes: `/auth/sign-in`, `/auth/sign-up`, `/auth/sign-out`. The viewer comes from custom session token claims (`email`, `name`).
 
-Use `ctx.auth.getUserIdentity()` in Convex functions. Prefer explicit auth checks over trusting client state.
+<!-- @endif -->
+<!-- @if convex -->
 
-## Payments
+Convex validates auth JWTs in `packages/backend/convex/auth.config.ts`. Use `ctx.auth.getUserIdentity()` in Convex functions and prefer explicit auth checks over client state.
 
-Billing uses Dodo Payments through the Convex component:
+<!-- @endif -->
 
-- Dodo Payments Convex component: `@dodopayments/convex`
-- `packages/backend/convex/convex.config.ts` installs the Dodo Payments component.
-- `packages/backend/convex/dodo.ts` configures the Dodo client.
-- `packages/backend/convex/billing.ts` exposes `createCheckout` and `createCustomerPortal` actions.
-- `packages/backend/convex/http.ts` exposes the `/dodo/webhook` Convex HTTP route.
-- Save the real Dodo customer ID with `billingCustomers.saveDodoCustomerId` before using the customer portal.
-
-Do not add another billing abstraction unless replacing Dodo Payments is explicitly requested.
+<!-- @endif -->
 
 ## Verification
 
 Before handing off meaningful changes, run:
 
 ```bash
+<!-- @if convex -->
 bun run codegen
-bun run check-types
+<!-- @endif -->
 bun run check
 ```
 

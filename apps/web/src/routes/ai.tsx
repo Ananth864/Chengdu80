@@ -1,5 +1,10 @@
 import { fetchServerSentEvents, useChat } from "@tanstack/ai-react";
+// @if auth
 import { createFileRoute, redirect } from "@tanstack/react-router";
+// @endif
+// @if !auth
+// import { createFileRoute } from "@tanstack/react-router";
+// @endif
 import { buttonVariants } from "@web-starter/ui/components/button";
 import {
   Card,
@@ -10,21 +15,20 @@ import {
 } from "@web-starter/ui/components/card";
 import { Textarea } from "@web-starter/ui/components/textarea";
 import { cn } from "@web-starter/ui/lib/utils";
-import { getAuth } from "@workos/authkit-tanstack-react-start";
 import { useState } from "react";
 
+// @if auth
+import { auth } from "../integrations/auth";
+// @endif
+
 export const Route = createFileRoute("/ai")({
-  loader: async ({ location }) => {
-    const { user } = await getAuth();
-
-    if (!user) {
-      throw redirect({
-        href: `/api/auth/sign-in?returnPathname=${encodeURIComponent(location.pathname)}`,
-      });
+  // @if auth
+  beforeLoad: ({ context, location }) => {
+    if (!context.viewer) {
+      throw redirect({ href: auth.signInHref(location.pathname) });
     }
-
-    return { user };
   },
+  // @endif
   component: AiPage,
 });
 
@@ -41,7 +45,7 @@ function AiPage() {
       return;
     }
 
-    sendMessage(message);
+    void sendMessage(message);
     setInput("");
   };
 

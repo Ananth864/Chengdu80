@@ -1,0 +1,23 @@
+{
+  "name": "@web-starter/api",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./worker": "./src/worker.ts"
+  },
+  "dependencies": {
+    "@effect/sql-pg": "^4.0.3",
+    "alchemy": "catalog:",
+    "drizzle-orm": "1.0.0-rc.5-ab785fc",
+    "effect": "catalog:",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260621.1",
+    "@types/node": "^22.13.14",
+    "@types/pg": "^8.15.6",
+    "@web-starter/config": "workspace:*",
+    "drizzle-kit": "1.0.0-rc.5-ab785fc",
+    "typescript": "catalog:"
+  }
+}

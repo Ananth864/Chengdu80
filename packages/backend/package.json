@@ -10,9 +10,7 @@
     "codegen": "convex codegen"
   },
   "dependencies": {
-    "@dodopayments/convex": "^0.2.12",
     "convex": "catalog:",
-    "dotenv": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
