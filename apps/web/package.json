@@ -26,6 +26,7 @@
     "@web-starter/ui": "workspace:*",
     "@workos/authkit-tanstack-react-start": "catalog:",
     "convex": "catalog:",
+    "effect": "catalog:",
     "lucide-react": "catalog:",
     "next-themes": "catalog:",
     "react": "catalog:",
@@ -41,7 +42,6 @@
     "@vitejs/plugin-react": "^6.0.1",
     "@web-starter/config": "workspace:*",
     "alchemy": "catalog:",
-    "effect": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:"

@@ -1,27 +1,25 @@
 // @if drizzle
 // import { useQuery } from "@tanstack/react-query";
-// import { createServerFn } from "@tanstack/react-start";
-// import type Api from "@web-starter/api/worker";
-// import { toRpcAsync } from "alchemy/Cloudflare/Bridge";
-// import * as cf from "cloudflare:workers";
 //
+// import { apiQuery } from "../integrations/api";
 // import { StatusCard } from "./status-card";
 //
-// // Calls the API Worker over its service binding. `cf.env` is read per call because
-// // TanStack Start's dev server evaluates modules outside a Worker request.
-// const getHealth = createServerFn().handler(() => toRpcAsync<Api>(cf.env.API).health());
-//
 // export function BackendStatus() {
-//   const { data, isLoading } = useQuery({ queryKey: ["api", "health"], queryFn: () => getHealth() });
-//   const ok = data === "ok";
+//   const { data, error, isLoading } = useQuery(apiQuery(["api", "health"], (api) => api.Health()));
 //
 //   return (
 //     <StatusCard
 //       title="API"
 //       description={
-//         isLoading ? "Checking database" : ok ? "Postgres connected via Hyperdrive" : "Database unavailable"
+//         isLoading
+//           ? "Checking database"
+//           : data === "ok"
+//             ? "Postgres connected via Hyperdrive"
+//             : error?._tag === "DatabaseUnavailable"
+//               ? "Database unavailable"
+//               : "API unreachable"
 //       }
-//       state={ok ? "ready" : isLoading ? "loading" : "error"}
+//       state={data === "ok" ? "ready" : isLoading ? "loading" : "error"}
 //     />
 //   );
 // }

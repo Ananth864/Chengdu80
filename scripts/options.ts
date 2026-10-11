@@ -26,7 +26,12 @@ export const options = {
   drizzle: {
     group: "backend",
     label: "Effect v4 + Drizzle on PlanetScale Postgres via Hyperdrive",
-    paths: ["packages/api", "apps/web/src/components/db-status.tsx"],
+    paths: [
+      "packages/api",
+      "apps/web/src/components/db-status.tsx",
+      "apps/web/src/integrations/api.ts",
+      "apps/web/src/routes/api/rpc.tsx",
+    ],
     deps: { [webPackage]: ["@web-starter/api"] },
     catalog: [],
     scripts: [],

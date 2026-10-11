@@ -46,9 +46,12 @@ Run `bun run init` to pick options (see `README.md`). Until then the repo holds 
   <!-- @endif -->
   <!-- @if drizzle -->
 - Write app logic in `packages/api/src` as Effects that yield services like `Db` (`src/db.ts`), never platform APIs. `src/worker.ts` is the only Cloudflare-aware runtime code: it provides the implementations and exposes logic as RPC methods. New dependencies (storage, queues) follow the same shape: a `Context.Service` plus an implementation provided in the worker.
-- The web app calls API RPC methods through the `API` service binding with `toRpcAsync`.
+- The API contract is `packages/api/src/rpc.ts`: Effect RPC procedures whose payloads, results, and errors are schemas. Add a procedure there, implement it in `src/app.ts`, then call it from components with `apiQuery` / `apiMutation` (`apps/web/src/integrations/api.ts`). Errors stay typed end to end; map driver errors to contract errors in handlers.
 - Edit tables in `packages/api/src/schema.ts`. Do not hand-write migrations; Alchemy generates them into `packages/api/migrations`.
-<!-- @endif -->
+  <!-- @if auth -->
+- Protect a procedure with `.middleware(RequireViewer)` in `rpc.ts`, then yield `CurrentViewer` in its handler. The viewer comes from a header that `apps/web/src/routes/api/rpc.tsx` sets from the session; the API Worker has no public URL, so never expose it directly.
+    <!-- @endif -->
+  <!-- @endif -->
 
 ## Environment
 

@@ -65,6 +65,13 @@ Add PlanetScale credentials to your Alchemy profile (`bunx alchemy profile edit`
 
 Cost: the database is a paid `PS_10` cluster, and every stage adds a branch. Run `bun run destroy` on stages you no longer need.
 
+Call the API from components through the typed client. Data and errors are typed from the contract in `packages/api/src/rpc.ts`:
+
+```tsx
+const { data, error } = useQuery(apiQuery(["user", id], (api) => api.GetUser({ id })));
+if (error?._tag === "UserNotFound") return <p>No user {error.id}</p>;
+```
+
 Edit tables in `packages/api/src/schema.ts`. Alchemy generates migration SQL into `packages/api/migrations` and applies it on the next dev or deploy run.
 
 <!-- @endif -->
