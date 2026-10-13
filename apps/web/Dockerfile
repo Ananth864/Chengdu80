@@ -38,7 +38,8 @@ RUN bunx --no-install vp run --filter web build
 
 # The built server.js externalizes npm dependencies (React, TanStack, etc.),
 # so the runtime image still needs node_modules alongside dist/.
-FROM oven/bun:1 AS runtime
+FROM node:24-bookworm-slim AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libatomic1 && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /repo/node_modules ./node_modules
@@ -48,4 +49,4 @@ COPY --from=build /repo/apps/web/server ./apps/web/server
 COPY --from=build /repo/apps/web/package.json ./apps/web/package.json
 EXPOSE 3001
 WORKDIR /app/apps/web
-CMD ["bun", "run", "start"]
+CMD ["node", "server/node-entry.mjs"]

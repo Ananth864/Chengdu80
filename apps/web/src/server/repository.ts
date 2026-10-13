@@ -9,9 +9,10 @@ async function client(access: Access) {
   const config = await settings();
   const demo = await demoMode();
   if (demo && access.ownerId !== demoOwnerId) throw new Error("Invalid demo workspace");
-  if (!config.VITE_CONVEX_URL || (!access.accessToken && !(demo && access.ownerId === demoOwnerId)))
+  const url = config.CONVEX_SERVER_URL || config.VITE_CONVEX_URL;
+  if (!url || (!access.accessToken && !(demo && access.ownerId === demoOwnerId)))
     throw new Error("Hosted database and an authenticated or explicit demo session are required");
-  const c = new ConvexHttpClient(config.VITE_CONVEX_URL);
+  const c = new ConvexHttpClient(url);
   if (access.accessToken) c.setAuth(access.accessToken);
   return c;
 }
