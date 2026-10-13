@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { AppFrame } from "../components/app-frame";
+import { Alert, AlertTitle, AlertDescription } from "@web-starter/ui/components/alert";
 import { api } from "../lib/client";
 import type { Application } from "../lib/contracts";
 export const Route = createFileRoute("/app/$appId")({ component: PublishedApp });
@@ -18,13 +19,16 @@ function PublishedApp() {
       .catch((e) => setError(e.message));
   }, [appId]);
   return (
-    <main className="standalone-app">
+    <main className="flex min-h-0 min-w-0 flex-1 flex-col">
       {error ? (
-        <p role="alert">{error}</p>
+        <Alert variant="destructive">
+          <AlertTitle>Application unavailable</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : app?.current ? (
         <AppFrame app={app} release={app.current} />
       ) : (
-        <p>Opening private application…</p>
+        <p>Opening application…</p>
       )}
     </main>
   );

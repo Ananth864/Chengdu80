@@ -114,6 +114,21 @@ function newApp(access: Access, spec: ProductSpec): Application {
     createdAt: new Date().toISOString(),
   };
 }
+// Verified source becomes active atomically; failed builds preserve the working release.
+async function applyRelease(app: Application, release: Release) {
+  if (!release.verification.passed) {
+    app.preview = release;
+    return false;
+  }
+  if (release.verification.sourceHash !== (await sourceHash(release.bundle)))
+    throw new Error("Source changed after verification.");
+  if (app.current) app.history = [app.current, ...app.history].slice(0, 2);
+  app.current = release;
+  app.preview = null;
+  app.spec = release.spec;
+  app.name = release.spec.name;
+  return true;
+}
 async function build(
   spec: ProductSpec,
   mode: "model" | "sample",
@@ -179,8 +194,16 @@ export async function dispatch(access: Access, raw: unknown) {
     const gate = feasibility(req.spec.purpose);
     if (!gate.allowed) throw new Error(gate.reason);
     const app = newApp(access, req.spec);
-    app.preview = await build(app.spec, req.mode, "Build the confirmed product specification");
-    event(app, "Built a preview from the confirmed specification. Acceptance required.");
+    const active = await applyRelease(
+      app,
+      await build(app.spec, req.mode, "Build the product specification"),
+    );
+    event(
+      app,
+      active
+        ? "Generated and activated the verified application."
+        : "Generation failed verification.",
+    );
     return saveApp(access, app, null);
   }
   if (req.action === "import") {
@@ -193,20 +216,34 @@ export async function dispatch(access: Access, raw: unknown) {
       throw new Error(
         "Changing an existing app's protocol requires a new app to protect its data.",
       );
-    app.preview = await makeRelease(spec, req.bundle, "import", "Imported application source");
-    event(app, "Imported source and verified a preview. Acceptance required.");
+    const active = await applyRelease(
+      app,
+      await makeRelease(spec, req.bundle, "import", "Imported application source"),
+    );
+    event(
+      app,
+      active
+        ? "Imported and activated verified source."
+        : "Imported source failed verification; working app retained.",
+    );
     return saveApp(access, app, req.appId ? app.revision : null);
   }
   const app = await findApp(access, req.appId);
   if (req.action === "reverify") {
     if (app.preview?.id !== req.releaseId) throw new Error("Preview changed. Refresh first.");
     app.preview.verification = await verify(app.preview.bundle, app.preview.spec);
-    event(app, "Re-ran checks on unchanged preview source. Acceptance is still required.");
+    const active = await applyRelease(app, app.preview);
+    event(
+      app,
+      active
+        ? "Verified source activated."
+        : "Source still fails verification; working app retained.",
+    );
     return saveApp(access, app, app.revision);
   }
   if (req.action === "load-prices") {
     if (app.spec.protocol !== "strategy" || !app.current)
-      throw new Error("Accept a strategy app before loading a price series.");
+      throw new Error("Build a strategy app before loading a price series.");
     if (req.provider === "alpha-demo" && !(await localMode()))
       throw new Error(
         "The public demo provider is restricted to local technical tests. Configure a licensed hosted provider instead.",
@@ -236,8 +273,16 @@ export async function dispatch(access: Access, raw: unknown) {
       ...app.spec,
       constraints: [...app.spec.constraints, `Change: ${req.request}`].slice(-20),
     };
-    app.preview = await build(spec, req.mode, req.request, app.current ?? app.preview ?? undefined);
-    event(app, "Created an update preview. The accepted release and shared data remain available.");
+    const active = await applyRelease(
+      app,
+      await build(spec, req.mode, req.request, app.current ?? app.preview ?? undefined),
+    );
+    event(
+      app,
+      active
+        ? "Applied verified changes. Shared data retained."
+        : "Update failed verification; working app and data retained.",
+    );
     return saveApp(access, app, app.revision);
   }
   if (req.action === "accept") {
@@ -249,12 +294,8 @@ export async function dispatch(access: Access, raw: unknown) {
       release.verification.sourceHash !== (await sourceHash(release.bundle))
     )
       throw new Error("A verified, unchanged preview is required before accepting a release.");
-    if (app.current) app.history = [app.current, ...app.history].slice(0, 2);
-    app.current = release;
-    app.preview = null;
-    app.spec = release.spec;
-    app.name = release.spec.name;
-    event(app, "Accepted the verified preview. Shared data retained.");
+    await applyRelease(app, release);
+    event(app, "Activated verified source. Shared data retained.");
     return saveApp(access, app, app.revision);
   }
   if (req.action === "discard") {
@@ -288,9 +329,7 @@ export async function dispatch(access: Access, raw: unknown) {
   }
   if (req.capability === "storage.write") {
     if (app.current?.id !== release.id)
-      throw new Error(
-        "Preview storage is read-only. Accept the release before changing shared data.",
-      );
+      throw new Error("Only the active verified release can change shared data.");
     const { key, value } = z
       .object({ key: z.string().regex(/^[a-zA-Z0-9_-]{1,50}$/), value: z.unknown() })
       .parse(req.input);

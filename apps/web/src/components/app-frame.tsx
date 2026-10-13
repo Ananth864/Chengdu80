@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Application, Release } from "../lib/contracts";
+import { Alert, AlertTitle, AlertDescription } from "@web-starter/ui/components/alert";
 import { api } from "../lib/client";
 
 export function AppFrame({ app, release }: { app: Application; release: Release }) {
@@ -93,28 +94,31 @@ export function AppFrame({ app, release }: { app: Application; release: Release 
   const doc = useMemo(() => {
     const sdk = `const pending=new Map();let count=0;window.cd80={call(capability,input={}){return new Promise((resolve,reject)=>{const id=String(++count);const timer=setTimeout(()=>{pending.delete(id);reject(new Error('Capability request timed out'));},100000);pending.set(id,{resolve,reject,timer});parent.postMessage({channel:'cd80',nonce:'${nonce}',id,capability,input},'*');});},ready(){parent.postMessage({channel:'cd80',nonce:'${nonce}',ready:true},'*');}};window.addEventListener('message',e=>{const m=e.data;if(e.source!==parent||!m||m.channel!=='cd80-result'||m.nonce!=='${nonce}')return;const p=pending.get(m.id);if(!p)return;clearTimeout(p.timer);pending.delete(m.id);m.error?p.reject(new Error(m.error)):p.resolve(m.result);});`;
     const csp = `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none';`;
-    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${release.bundle.files["style.css"].replace(/<\/style/gi, "<\\/style")}</style></head><body>${release.bundle.files["index.html"]}<script nonce="${nonce}">${sdk}</script><script nonce="${nonce}" type="module">${release.bundle.files["app.js"].replace(/<\/script/gi, "<\\/script")}</script></body></html>`;
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=device-width, initial-scale=1"><style>html,textarea{scrollbar-gutter:stable}${release.bundle.files["style.css"].replace(/<\/style/gi, "<\\/style")}</style></head><body>${release.bundle.files["index.html"]}<script nonce="${nonce}">${sdk}</script><script nonce="${nonce}" type="module">${release.bundle.files["app.js"].replace(/<\/script/gi, "<\\/script")}</script></body></html>`;
   }, [nonce, release.bundle]);
   return (
-    <div className="frame-wrap">
-      <div className="frame-status">
-        <span className={`status-dot ${ready ? "green" : ""}`} />
-        {ready ? "Application rendered" : "Starting isolated application…"}
-        <span>
-          Shared app data ·{" "}
-          {app.current?.id === release.id ? "Accepted release" : "Read-only preview"}
-        </span>
-      </div>
-      {!ready && error && <div className="notice warning">{error}</div>}
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {!ready && !error && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Loading preview…
+        </p>
+      )}
+      {!ready && error && (
+        <Alert>
+          <AlertTitle>Preview needs review</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
       <iframe
         ref={frame}
         onLoad={onFrameLoad}
         key={`${release.id}:${app.revision}`}
         title={`${app.name} application`}
+        aria-busy={!ready}
         srcDoc={doc}
         sandbox="allow-scripts"
         referrerPolicy="no-referrer"
-        className="app-frame"
+        className="min-h-0 w-full flex-1 border-0"
       />
     </div>
   );
