@@ -60,8 +60,8 @@ export async function findApp(access: Access, id: string): Promise<Application> 
 }
 export async function saveApp(access: Access, app: Application, expectedRevision: number | null) {
   if (app.ownerId !== access.ownerId) throw new Error("Account ownership mismatch");
-  if (JSON.stringify(app).length > 700000)
-    throw new Error("Application exceeds prototype storage limit");
+  const serialized = JSON.stringify(app);
+  if (serialized.length > 700000) throw new Error("Application exceeds prototype storage limit");
   if (await localMode())
     return localStore((apps) => {
       const i = apps.findIndex((a) => a.id === app.id);
@@ -79,7 +79,8 @@ export async function saveApp(access: Access, app: Application, expectedRevision
   return (await client(access)).action(
     (await demoMode()) ? api.platform.saveDemo : api.platform.save,
     {
-      app,
+      // Chat messages contain Date instances; persist the same JSON shape as local storage.
+      app: JSON.parse(serialized),
       expectedRevision,
       serverKey: config.PLATFORM_INTERNAL_KEY,
     },

@@ -103,6 +103,28 @@ try {
         ["platform:listDemo", "platform:saveDemo"],
       );
     });
+    await test("Agent conversation dates persist through Convex as ISO strings", async () => {
+      // StreamProcessor emits Date instances even though HTTP/file persistence uses ISO strings.
+      const app: any = {
+        ownerId,
+        id: "date-regression",
+        conversation: [
+          {
+            id: "date-regression-message",
+            role: "user",
+            parts: [{ type: "text", content: "I want to build an app" }],
+            createdAt: new Date("2026-10-13T17:20:35.202Z"),
+          },
+        ],
+      };
+      assert.ok(app.conversation[0].createdAt instanceof Date);
+      const saved = await saveApp(access, app, null);
+      assert.equal(saved.conversation[0].createdAt, app.conversation[0].createdAt.toISOString());
+      assert.equal(
+        requests.at(-1).args[0].app.conversation[0].createdAt,
+        saved.conversation[0].createdAt,
+      );
+    });
     await test("Hosted repository rejects other owners in demo mode", async () => {
       await assert.rejects(() => listApps({ ownerId: "other", accessToken: null }), /workspace/);
     });
