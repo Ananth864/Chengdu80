@@ -1,0 +1,3 @@
+# Use web-starter as the platform base
+
+The user selected `https://github.com/adityamiskin/web-starter` and its stack as the prototype's base, with additions permitted where the starter is insufficient. This replaces the earlier assumption that the platform would be a VibeSDK fork. Financial protocols, free application generation, external source import, mandatory verification and private account ownership remain product requirements; generated-app isolation and hosting need to be assessed separately from the starter's ordinary web application features. Cloudflare runtime mechanisms from the earlier plan remain candidates rather than an accepted integration.

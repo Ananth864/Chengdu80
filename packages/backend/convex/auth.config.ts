@@ -1,12 +1,15 @@
-// @if workos
-const clientId = process.env.WORKOS_CLIENT_ID;
+import type { AuthConfig } from "convex/server";
 
-if (!clientId) {
-  throw new Error("WORKOS_CLIENT_ID must be set for Convex WorkOS JWT validation.");
-}
+const authConfig: AuthConfig = { providers: [] };
 
-const authConfig = {
-  providers: [
+// Convex rejects missing environment variables when they are read during
+// auth configuration evaluation, so defer WorkOS reads until login is enabled.
+if (process.env.CD80_DEMO_MODE !== "1") {
+  const clientId = process.env.WORKOS_CLIENT_ID;
+  if (!clientId) {
+    throw new Error("WORKOS_CLIENT_ID must be set for Convex WorkOS JWT validation.");
+  }
+  authConfig.providers = [
     {
       type: "customJwt",
       issuer: "https://api.workos.com/",
@@ -20,16 +23,7 @@ const authConfig = {
       algorithm: "RS256",
       jwks: `https://api.workos.com/sso/jwks/${clientId}`,
     },
-  ],
-};
+  ];
+}
 
 export default authConfig;
-// @endif
-// @if clerk
-// // Clerk's Convex integration issues session tokens with `aud: "convex"`.
-// const authConfig = {
-//   providers: [{ domain: process.env.CLERK_JWT_ISSUER_DOMAIN!, applicationID: "convex" }],
-// };
-//
-// export default authConfig;
-// @endif

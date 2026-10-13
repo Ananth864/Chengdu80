@@ -1,0 +1,3 @@
+# Import externally prepared application source
+
+The platform accepts compatible application source prepared with an external AI tool, verifies it, and deploys and runs it. Specification-only import followed by internal regeneration is deferred, concentrating the prototype on the code-import path already proposed by the Cloudflare plan and directly demonstrating the brief's interoperability requirement. The built-in guided builder remains part of the agreed design. Imported apps must meet the applicable type protocol and mandatory verification gates; additional submission metadata remains to be decided.

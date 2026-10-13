@@ -12,8 +12,8 @@ build
 apps/web/src/routeTree.gen.ts
 
 # Environment variables
-.env
-.env*.local
+.env*
+!.env.example
 
 # IDEs and editors
 .vscode/*
@@ -47,6 +47,7 @@ coverage
 .nyc_output
 
 # Misc
+.local
 *.tgz
 .cache
 tmp

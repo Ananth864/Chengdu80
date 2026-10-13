@@ -1,57 +1,40 @@
-// @if drizzle
-// import Api from "@web-starter/api/worker";
-// @endif
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "alchemy/Cloudflare";
-// @if drizzle
-// import * as Drizzle from "alchemy/Drizzle";
-// import * as Planetscale from "alchemy/Planetscale";
-// @endif
-// @if convex|auth|ai
 import * as Config from "effect/Config";
-// @endif
 import * as Effect from "effect/Effect";
-// @if drizzle
-// import * as Layer from "effect/Layer";
-// @endif
 
 // The TanStack Start app as a Worker plus static assets. Each `env` entry becomes a
 // Worker binding: `Config` values are read from `.env` (or the shell) at deploy time.
 export class Website extends Cloudflare.Website.Vite<Website>()("Web", {
   env: {
-    // @if convex
+    CD80_DEMO_MODE: Config.String("CD80_DEMO_MODE").pipe(Config.withDefault("0")),
+    VITE_DEMO_MODE: Config.String("VITE_DEMO_MODE").pipe(Config.withDefault("0")),
     VITE_CONVEX_URL: Config.String("VITE_CONVEX_URL"),
-    // @endif
-    // @if drizzle
-    // API: Api,
-    // @endif
-    // @if workos
-    WORKOS_CLIENT_ID: Config.String("WORKOS_CLIENT_ID"),
-    WORKOS_API_KEY: Config.Redacted("WORKOS_API_KEY"),
-    WORKOS_REDIRECT_URI: Config.String("WORKOS_REDIRECT_URI"),
-    WORKOS_COOKIE_PASSWORD: Config.Redacted("WORKOS_COOKIE_PASSWORD"),
-    // @endif
-    // @if clerk
-    // CLERK_PUBLISHABLE_KEY: Config.String("CLERK_PUBLISHABLE_KEY"),
-    // CLERK_SECRET_KEY: Config.Redacted("CLERK_SECRET_KEY"),
-    // @endif
-    // @if ai
-    OPENAI_API_KEY: Config.Redacted("OPENAI_API_KEY"),
-    // @endif
+    WORKOS_CLIENT_ID: Config.String("WORKOS_CLIENT_ID").pipe(Config.withDefault("")),
+    WORKOS_API_KEY: Config.Redacted("WORKOS_API_KEY").pipe(Config.withDefault("")),
+    WORKOS_REDIRECT_URI: Config.String("WORKOS_REDIRECT_URI").pipe(Config.withDefault("")),
+    WORKOS_COOKIE_PASSWORD: Config.Redacted("WORKOS_COOKIE_PASSWORD").pipe(Config.withDefault("")),
+    MODEL_PROVIDER: Config.String("MODEL_PROVIDER").pipe(Config.withDefault("glm")),
+    GLM_API_KEY: Config.Redacted("GLM_API_KEY").pipe(Config.withDefault("")),
+    GLM_MODEL: Config.String("GLM_MODEL").pipe(Config.withDefault("GLM-5.3")),
+    GLM_BASE_URL: Config.String("GLM_BASE_URL").pipe(Config.withDefault("https://ai.gitee.com/v1")),
+    OPENAI_API_KEY: Config.Redacted("OPENAI_API_KEY").pipe(Config.withDefault("")),
+    OPENAI_MODEL: Config.String("OPENAI_MODEL").pipe(Config.withDefault("gpt-6-luna")),
+    OPENAI_BASE_URL: Config.String("OPENAI_BASE_URL").pipe(
+      Config.withDefault("https://api.openai.com/v1"),
+    ),
+    PLATFORM_INTERNAL_KEY: Config.Redacted("PLATFORM_INTERNAL_KEY"),
+    TUSHARE_TOKEN: Config.Redacted("TUSHARE_TOKEN").pipe(Config.withDefault("")),
+    APP_LOADER: Cloudflare.WorkerLoader("APP_LOADER"),
   },
 }) {}
 
 export type WebsiteEnv = Cloudflare.InferEnv<typeof Website>;
 
 export default Alchemy.Stack(
-  "web-starter",
+  "chengdu80",
   {
-    // @if !drizzle
     providers: Cloudflare.providers(),
-    // @endif
-    // @if drizzle
-    // providers: Layer.mergeAll(Cloudflare.providers(), Drizzle.providers(), Planetscale.providers()),
-    // @endif
     state: Cloudflare.state(),
   },
   Effect.gen(function* () {

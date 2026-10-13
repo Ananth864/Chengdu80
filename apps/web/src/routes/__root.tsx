@@ -1,50 +1,32 @@
-// @if convex
 import type { ConvexQueryClient } from "@convex-dev/react-query";
-// @endif
 import type { QueryClient } from "@tanstack/react-query";
 import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
-import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { Toaster } from "@web-starter/ui/components/sonner";
-// @if convex
 import type { ConvexReactClient } from "convex/react";
-// @endif
 
 import Header from "../components/header";
-// @if auth
 import { auth } from "../integrations/auth";
-// @endif
 
 import appCss from "../index.css?url";
 
 export interface RouterAppContext {
   queryClient: QueryClient;
-  // @if convex
-  convexClient: ConvexReactClient;
-  convexQueryClient: ConvexQueryClient;
-  // @endif
+  convexClient: ConvexReactClient | null;
+  convexQueryClient: ConvexQueryClient | null;
 }
 
 export const Route = createRootRouteWithContext<RouterAppContext>()({
-  // @if auth
   // Every route reads the signed-in viewer from context; null when signed out.
-  // @if convex
   beforeLoad: async ({ context }) => {
-    // @endif
-    // @if !convex
-    // beforeLoad: async () => {
-    // @endif
     const session = await auth.getSession();
-    // @if convex
 
     // SSR Convex queries run as the signed-in user.
     if (session.accessToken) {
-      context.convexQueryClient.serverHttpClient?.setAuth(session.accessToken);
+      context.convexQueryClient?.serverHttpClient?.setAuth(session.accessToken);
     }
-    // @endif
 
     return { viewer: session.viewer };
   },
-  // @endif
   head: () => ({
     meta: [
       {
@@ -55,10 +37,11 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "Web Starter",
+        title: "Chengdu80 · Financial app studio",
       },
     ],
     links: [
+      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
       {
         rel: "stylesheet",
         href: appCss,
@@ -71,17 +54,20 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 
 function RootDocument() {
   return (
-    <html lang="en" className="dark">
+    <html lang="en">
       <head>
+        <meta
+          httpEquiv="Content-Security-Policy"
+          content="frame-src 'self'; object-src 'none'; base-uri 'self'"
+        />
         <HeadContent />
       </head>
       <body>
-        <div className="grid min-h-svh grid-rows-[auto_1fr]">
+        <div className="grid min-h-svh min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_1fr]">
           <Header />
           <Outlet />
         </div>
         <Toaster richColors />
-        <TanStackRouterDevtools position="bottom-left" />
         <Scripts />
       </body>
     </html>

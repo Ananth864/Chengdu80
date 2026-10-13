@@ -1,0 +1,3 @@
+# Guide application generation with type protocols
+
+The platform agent selects instructions for the requested financial application type and clarifies the user's requirements. The user confirms the final product specification, and the platform then generates the application freely instead of restricting construction to an authoritative executable node graph. The workflow is a read-only explanation of data, calculations and outputs, supported by a capability catalog and API contracts. The builder chooses how to implement the app within the product's constraints and information; there is no drag-and-drop editor. Custom financial code is allowed but must pass mandatory verification. The exact protocols and verification criteria remain to be settled.

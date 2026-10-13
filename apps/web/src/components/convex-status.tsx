@@ -1,4 +1,3 @@
-// @if convex
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@web-starter/backend/convex/_generated/api";
@@ -19,4 +18,3 @@ export function BackendStatus() {
     />
   );
 }
-// @endif

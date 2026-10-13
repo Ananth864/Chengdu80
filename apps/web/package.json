@@ -10,7 +10,6 @@
     "destroy": "alchemy destroy"
   },
   "dependencies": {
-    "@clerk/tanstack-react-start": "catalog:",
     "@convex-dev/react-query": "^0.1.0",
     "@tailwindcss/vite": "^4.3.1",
     "@tanstack/ai": "^0.39.1",
@@ -20,14 +19,15 @@
     "@tanstack/react-router": "^1.168.22",
     "@tanstack/react-router-ssr-query": "^1.166.11",
     "@tanstack/react-start": "^1.167.41",
-    "@web-starter/api": "workspace:*",
     "@web-starter/backend": "workspace:*",
     "@web-starter/env": "workspace:*",
     "@web-starter/ui": "workspace:*",
     "@workos/authkit-tanstack-react-start": "catalog:",
+    "acorn": "^8.19.0",
     "convex": "catalog:",
     "effect": "catalog:",
     "lucide-react": "catalog:",
+    "miniflare": "4",
     "next-themes": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
@@ -36,6 +36,8 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@effect/platform-bun": "4.0.2",
+    "@effect/platform-node": "4.0.2",
     "@tanstack/react-router-devtools": "^1.166.13",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",

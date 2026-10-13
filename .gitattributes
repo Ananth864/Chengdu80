@@ -1,0 +1,2 @@
+# Unified diffs contain a space before the upstream code's tab indentation.
+patches/*.patch -whitespace

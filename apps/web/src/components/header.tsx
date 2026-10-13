@@ -1,30 +1,14 @@
-// @if auth
 import { Link, useRouteContext } from "@tanstack/react-router";
-// @endif
-// @if !auth
-// import { Link } from "@tanstack/react-router";
-// @endif
-// @if auth
 import { buttonVariants } from "@web-starter/ui/components/button";
 import { cn } from "@web-starter/ui/lib/utils";
-// @endif
 
-// @if auth
 import { auth } from "../integrations/auth";
-// @endif
 
 export default function Header() {
-  // @if auth
   const { viewer } = useRouteContext({ from: "__root__" });
-  // @endif
   const links = [
-    { to: "/", label: "Home" },
-    // @if auth
-    { to: "/dashboard", label: "Dashboard" },
-    // @endif
-    // @if ai
-    { to: "/ai", label: "AI" },
-    // @endif
+    { to: "/", label: "Workspace" },
+    { to: "/docs", label: "Developer docs" },
   ] as const;
 
   return (
@@ -32,7 +16,7 @@ export default function Header() {
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-4">
         <nav className="flex items-center gap-1 text-sm">
           <Link to="/" className="mr-3 font-medium">
-            Web Starter
+            <span className="brand-mark">C80</span> Chengdu80
           </Link>
           {links.map(({ to, label }) => {
             return (
@@ -46,9 +30,12 @@ export default function Header() {
             );
           })}
         </nav>
-        {/* @if auth */}
         <div className="flex items-center gap-2">
-          {viewer ? (
+          {import.meta.env.VITE_LOCAL_MODE === "1" ? (
+            <span className="local-label">Local prototype · Single owner</span>
+          ) : import.meta.env.VITE_DEMO_MODE === "1" ? (
+            <span className="local-label">Shared demo · No login</span>
+          ) : viewer ? (
             <a
               href={auth.signOutHref}
               className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
@@ -69,7 +56,6 @@ export default function Header() {
             </>
           )}
         </div>
-        {/* @endif */}
       </div>
     </header>
   );

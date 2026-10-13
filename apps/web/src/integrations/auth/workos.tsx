@@ -2,14 +2,10 @@ import { createServerFn } from "@tanstack/react-start";
 import { authkitMiddleware, getAuth } from "@workos/authkit-tanstack-react-start";
 import {
   AuthKitProvider,
-  // @if convex
   useAccessToken,
   useAuth,
-  // @endif
 } from "@workos/authkit-tanstack-react-start/client";
-// @if convex
 import { useCallback, useMemo } from "react";
-// @endif
 
 import type { AuthIntegration } from "./types";
 
@@ -37,12 +33,9 @@ export const auth: AuthIntegration = {
       : "/api/auth/sign-in",
   signUpHref: "/api/auth/sign-up",
   signOutHref: "/sign-out",
-  // @if convex
   useConvexAuth,
-  // @endif
 };
 
-// @if convex
 // Adapts AuthKit's session to the shape ConvexProviderWithAuth expects.
 function useConvexAuth() {
   const { loading, user } = useAuth();
@@ -61,4 +54,3 @@ function useConvexAuth() {
     [loading, user, fetchAccessToken],
   );
 }
-// @endif

@@ -1,4 +1,3 @@
-// @if auth
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 
 async function requireIdentity(ctx: QueryCtx | MutationCtx) {
@@ -60,4 +59,3 @@ export const sync = mutation({
     return await ctx.db.insert("users", patch);
   },
 });
-// @endif

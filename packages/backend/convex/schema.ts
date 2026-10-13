@@ -1,11 +1,16 @@
 import { defineSchema } from "convex/server";
-// @if auth
 import { defineTable } from "convex/server";
 import { v } from "convex/values";
-// @endif
 
 export default defineSchema({
-  // @if auth
+  apps: defineTable({
+    appId: v.string(),
+    ownerId: v.string(),
+    revision: v.number(),
+    payload: v.any(),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_app", ["appId"]),
   users: defineTable({
     authSubject: v.string(),
     email: v.optional(v.string()),
@@ -16,5 +21,4 @@ export default defineSchema({
   })
     .index("by_auth_subject", ["authSubject"])
     .index("by_email", ["email"]),
-  // @endif
 });

@@ -1,9 +1,6 @@
-// @if auth
 import type { AnyRequestMiddleware } from "@tanstack/react-start";
-// @if convex
 import type { ConvexProviderWithAuth } from "convex/react";
 import type { ComponentProps } from "react";
-// @endif
 import type { ReactNode } from "react";
 
 export type Viewer = { id: string; email: string | null; name: string | null };
@@ -18,8 +15,5 @@ export type AuthIntegration = {
   signInHref: (returnTo?: string) => string;
   signUpHref: string;
   signOutHref: string;
-  // @if convex
   useConvexAuth: ComponentProps<typeof ConvexProviderWithAuth>["useAuth"];
-  // @endif
 };
-// @endif
