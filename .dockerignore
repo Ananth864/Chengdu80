@@ -9,3 +9,10 @@ dist
 .env
 .env.*
 !.env.example
+
+.scratch
+**/.env
+**/.env.*
+!**/.env.example
+.selfhosted-web.pid
+.selfhosted-web.log
