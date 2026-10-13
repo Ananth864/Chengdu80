@@ -198,7 +198,7 @@ bun run setup:k3s          # scripts/setup-k3s.sh, requires: brew install k3d ku
 
 - `convex.yaml` — self-hosted Convex backend (PVC-backed) + dashboard Deployments/Services.
 - `web.yaml` — the app Deployment/Service. Note the `hostAliases` entry: `VITE_CONVEX_URL` is
-  inlined into the browser bundle at build time, so the *same* hostname must also resolve from
+  inlined into the browser bundle at build time, so the _same_ hostname must also resolve from
   inside this pod for server-side Convex calls. It's pointed at the Traefik Ingress ClusterIP so
   both the browser (via Ingress + a real/`/etc/hosts` DNS entry) and the pod itself reach Convex
   through the identical Ingress route — the same pattern a real public DNS hostname gives you for

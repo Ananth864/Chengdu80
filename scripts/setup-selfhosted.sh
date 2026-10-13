@@ -15,7 +15,7 @@
 #   4. Starts the self-hosted Convex backend + dashboard via docker compose.
 #   5. Waits for the Convex backend to be healthy.
 #   6. Generates a Convex admin key (first run only) and writes
-#      packages/backend/.env.local.
+#      packages/backend/.env.selfhosted.
 #   7. Sets CD80_DEMO_MODE and PLATFORM_INTERNAL_KEY on the Convex deployment
 #      (must match apps/web/.env's PLATFORM_INTERNAL_KEY).
 #   8. Deploys Convex functions/schema.
@@ -103,35 +103,35 @@ for _ in $(seq 1 30); do
 done
 curl -fsS http://127.0.0.1:3210/version >/dev/null 2>&1 || die "Convex backend did not become healthy in time. Check: docker compose logs convex-backend"
 
-# --- 6. Admin key + packages/backend/.env.local -------------------------
-log "Ensuring Convex admin key / packages/backend/.env.local"
-if [ ! -f packages/backend/.env.local ]; then
+# --- 6. Admin key + packages/backend/.env.selfhosted -------------------------
+log "Ensuring Convex admin key / packages/backend/.env.selfhosted"
+if [ ! -f packages/backend/.env.selfhosted ]; then
   admin_key_line="$(docker compose --env-file .env.selfhost exec -T convex-backend ./generate_admin_key.sh | grep -A0 '|' | tail -1 | xargs)"
   [ -n "$admin_key_line" ] || die "Failed to generate a Convex admin key. Run manually: docker compose exec convex-backend ./generate_admin_key.sh"
-  cat > packages/backend/.env.local <<EOF
+  cat > packages/backend/.env.selfhosted <<EOF
 CONVEX_SELF_HOSTED_URL=http://127.0.0.1:3210
 CONVEX_SELF_HOSTED_ADMIN_KEY=${admin_key_line}
 CD80_DEMO_MODE=1
 EOF
-  chmod 600 packages/backend/.env.local
-  echo "Created packages/backend/.env.local with a generated admin key (not printed)."
+  chmod 600 packages/backend/.env.selfhosted
+  echo "Created packages/backend/.env.selfhosted with a generated admin key (not printed)."
 else
-  echo "packages/backend/.env.local already exists; leaving it unchanged."
+  echo "packages/backend/.env.selfhosted already exists; leaving it unchanged."
 fi
 
 # --- 7. Convex deployment env vars ---------------------------------------
 log "Setting Convex deployment env vars (CD80_DEMO_MODE, PLATFORM_INTERNAL_KEY)"
 (
   cd packages/backend
-  bunx --no-install convex env set CD80_DEMO_MODE 1 --env-file .env.local
-  bunx --no-install convex env set PLATFORM_INTERNAL_KEY "${platform_internal_key}" --env-file .env.local
+  bunx --no-install convex env set CD80_DEMO_MODE 1 --env-file .env.selfhosted
+  bunx --no-install convex env set PLATFORM_INTERNAL_KEY "${platform_internal_key}" --env-file .env.selfhosted
 )
 
 # --- 8. Deploy Convex functions ------------------------------------------
 log "Deploying Convex schema and functions"
 (
   cd packages/backend
-  bunx --no-install convex deploy --env-file .env.local -y
+  bunx --no-install convex deploy --env-file .env.selfhosted -y
 )
 
 # --- 9. Build and start the web app --------------------------------------
@@ -193,7 +193,7 @@ since it's inlined into the browser bundle at build time):
     -f apps/web/Dockerfile .
   docker run -d --name chengdu80-web -p 3098:3098 \\
     -e CD80_DEMO_MODE=1 -e PORT=3098 \\
-    -e PLATFORM_INTERNAL_KEY=${platform_internal_key} \\
+    -e PLATFORM_INTERNAL_KEY=YOUR_PLATFORM_INTERNAL_KEY \\
     -e VITE_CONVEX_URL=http://127.0.0.1:3210 \\
     chengdu80-web
 EOF
