@@ -1,0 +1,44 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: chengdu80
+  namespace: chengdu80
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: chengdu80.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port: { number: 80 }
+    - host: convex.chengdu80.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: convex-backend
+                port: { number: 3210 }
+    - host: convex-site.chengdu80.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: convex-backend
+                port: { number: 3211 }
+    - host: convex-dashboard.chengdu80.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: convex-dashboard
+                port: { number: 6791 }

@@ -44,6 +44,7 @@
     "fix": "vp check --fix",
     "docker:build": "docker build -t chengdu80-web -f apps/web/Dockerfile .",
     "setup:selfhosted": "bash scripts/setup-selfhosted.sh",
+    "setup:k3s": "bash scripts/setup-k3s.sh",
     "test:demo": "bun scripts/test-demo.ts",
     "test:glm-contract": "bun scripts/test-glm-contract.ts",
     "test:query-stream": "bun --conditions=development scripts/test-query-stream.ts",

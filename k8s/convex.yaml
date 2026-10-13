@@ -1,0 +1,101 @@
+# Self-hosted Convex backend + dashboard on k3s.
+# Secrets (CONVEX_INSTANCE_SECRET, PLATFORM_INTERNAL_KEY) are created
+# out-of-band via `kubectl create secret generic chengdu80-secrets` — see
+# scripts/setup-k3s.sh. Not stored in this file or in git.
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: convex-data
+  namespace: chengdu80
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: convex-backend
+  namespace: chengdu80
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: convex-backend }
+  template:
+    metadata:
+      labels: { app: convex-backend }
+    spec:
+      containers:
+        - name: convex-backend
+          image: ghcr.io/get-convex/convex-backend:latest
+          ports:
+            - containerPort: 3210
+            - containerPort: 3211
+          env:
+            - name: INSTANCE_NAME
+              value: chengdu80
+            - name: INSTANCE_SECRET
+              valueFrom:
+                secretKeyRef: { name: chengdu80-secrets, key: CONVEX_INSTANCE_SECRET }
+            - name: CONVEX_CLOUD_ORIGIN
+              value: http://convex.chengdu80.local
+            - name: CONVEX_SITE_ORIGIN
+              value: http://convex-site.chengdu80.local
+            - name: DISABLE_BEACON
+              value: "true"
+          volumeMounts:
+            - name: data
+              mountPath: /convex/data
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: convex-data }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: convex-backend
+  namespace: chengdu80
+spec:
+  selector: { app: convex-backend }
+  ports:
+    - name: cloud
+      port: 3210
+      targetPort: 3210
+    - name: site
+      port: 3211
+      targetPort: 3211
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: convex-dashboard
+  namespace: chengdu80
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: convex-dashboard }
+  template:
+    metadata:
+      labels: { app: convex-dashboard }
+    spec:
+      containers:
+        - name: convex-dashboard
+          image: ghcr.io/get-convex/convex-dashboard:latest
+          ports:
+            - containerPort: 6791
+          env:
+            - name: NEXT_PUBLIC_DEPLOYMENT_URL
+              value: http://convex.chengdu80.local
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: convex-dashboard
+  namespace: chengdu80
+spec:
+  selector: { app: convex-dashboard }
+  ports:
+    - port: 6791
+      targetPort: 6791
