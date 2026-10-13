@@ -47,7 +47,8 @@
     "test:demo": "bun scripts/test-demo.ts",
     "test:glm-contract": "bun scripts/test-glm-contract.ts",
     "test:query-stream": "bun --conditions=development scripts/test-query-stream.ts",
-    "deploy:backend": "bun scripts/convex.ts push"
+    "deploy:backend": "bun scripts/convex.ts push",
+    "test:ui": "VITE_LOCAL_MODE=1 bun run build && bun scripts/test-ui.ts"
   },
   "dependencies": {
     "@web-starter/env": "workspace:*",
@@ -57,6 +58,7 @@
     "@types/node": "^22.13.14",
     "@web-starter/config": "workspace:*",
     "convex": "catalog:",
+    "playwright": "^1.64.0",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:"

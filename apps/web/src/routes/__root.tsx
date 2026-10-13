@@ -2,6 +2,7 @@ import type { ConvexQueryClient } from "@convex-dev/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
 import { Toaster } from "@web-starter/ui/components/sonner";
+import { TooltipProvider } from "@web-starter/ui/components/tooltip";
 import type { ConvexReactClient } from "convex/react";
 
 import Header from "../components/header";
@@ -54,7 +55,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 
 function RootDocument() {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <meta
           httpEquiv="Content-Security-Policy"
@@ -63,11 +64,13 @@ function RootDocument() {
         <HeadContent />
       </head>
       <body>
-        <div className="grid min-h-svh min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_1fr]">
-          <Header />
-          <Outlet />
-        </div>
-        <Toaster richColors />
+        <TooltipProvider>
+          <div className="flex min-h-svh min-w-0 flex-col">
+            <Header />
+            <Outlet />
+          </div>
+          <Toaster theme="light" />
+        </TooltipProvider>
         <Scripts />
       </body>
     </html>

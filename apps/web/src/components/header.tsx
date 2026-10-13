@@ -1,4 +1,4 @@
-import { Link, useRouteContext } from "@tanstack/react-router";
+import { Link, useLocation, useRouteContext } from "@tanstack/react-router";
 import { buttonVariants } from "@web-starter/ui/components/button";
 import { cn } from "@web-starter/ui/lib/utils";
 
@@ -6,6 +6,8 @@ import { auth } from "../integrations/auth";
 
 export default function Header() {
   const { viewer } = useRouteContext({ from: "__root__" });
+  const { pathname } = useLocation();
+  if (pathname === "/" || pathname === "/docs" || pathname.startsWith("/docs/")) return null;
   const links = [
     { to: "/", label: "Workspace" },
     { to: "/docs", label: "Developer docs" },
@@ -13,18 +15,14 @@ export default function Header() {
 
   return (
     <header className="border-b">
-      <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-4">
+      <div className="mx-auto flex min-h-14 w-full max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-2">
         <nav className="flex items-center gap-1 text-sm">
           <Link to="/" className="mr-3 font-medium">
-            <span className="brand-mark">C80</span> Chengdu80
+            Chengdu80
           </Link>
           {links.map(({ to, label }) => {
             return (
-              <Link
-                key={to}
-                to={to}
-                className="rounded-sm px-2 py-1 text-muted-foreground hover:text-foreground [&.active]:text-foreground"
-              >
+              <Link key={to} to={to} className={buttonVariants({ variant: "ghost", size: "sm" })}>
                 {label}
               </Link>
             );
@@ -32,9 +30,9 @@ export default function Header() {
         </nav>
         <div className="flex items-center gap-2">
           {import.meta.env.VITE_LOCAL_MODE === "1" ? (
-            <span className="local-label">Local prototype · Single owner</span>
+            <span className="text-xs text-muted-foreground">Local prototype · Single owner</span>
           ) : import.meta.env.VITE_DEMO_MODE === "1" ? (
-            <span className="local-label">Shared demo · No login</span>
+            <span className="text-xs text-muted-foreground">Shared demo · No login</span>
           ) : viewer ? (
             <a
               href={auth.signOutHref}

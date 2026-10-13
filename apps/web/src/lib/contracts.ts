@@ -49,7 +49,7 @@ export const capabilityContracts = {
   },
   "storage.write": {
     input: "{key:string,value:JSON}",
-    output: "{saved:true}. Accepted releases only; previews are read-only.",
+    output: "{saved:true}. Active verified releases only; failed builds cannot write.",
   },
   "ai.explain": {
     input: "{question:string,result:JSON}",

@@ -48,24 +48,17 @@ try {
   assert.ok(ready, "Test server failed to start");
   const spec = { ...protocols[0]!.defaultSpec, name: "Lifecycle test" };
   let app = await request({ action: "create", spec, mode: "sample" });
-  assert.equal(app.current, null);
-  assert.equal(app.preview.verification.passed, true);
-  pass("Confirmed specification produces verified preview, not active release");
-  await request(
-    {
-      action: "rpc",
-      appId: app.id,
-      releaseId: app.preview.id,
-      capability: "storage.write",
-      input: { key: "note", value: "preview" },
-    },
-    false,
-  );
-  pass("Preview cannot mutate shared storage");
-  app = await request({ action: "accept", appId: app.id, releaseId: app.preview.id });
-  const first = app.current.id;
+  assert.ok(app.current?.verification.passed);
   assert.equal(app.preview, null);
-  pass("Acceptance activates the verified source");
+  const first = app.current.id;
+  await request({
+    action: "rpc",
+    appId: app.id,
+    releaseId: first,
+    capability: "storage.write",
+    input: { key: "note", value: "active" },
+  });
+  pass("Verified generation activates immediately and can save data");
   const inputs = { ...app.data.inputs, cash: 12345 };
   await request({
     action: "rpc",
@@ -80,23 +73,20 @@ try {
     request: "Improve the explanation layout",
     mode: "sample",
   });
-  assert.equal(app.current.id, first);
+  assert.notEqual(app.current.id, first);
+  assert.equal(app.preview, null);
   assert.deepEqual(app.data.inputs, inputs);
-  assert.ok(app.preview);
-  pass("Update keeps accepted release and shared inputs available");
+  assert.equal(app.history[0].id, first);
+  pass("Verified update activates atomically and retains data and previous source");
   const result = await request({
     action: "rpc",
     appId: app.id,
-    releaseId: first,
+    releaseId: app.current.id,
     capability: "finance.calculate",
     input: inputs,
   });
   assert.ok(result.totalValue > 0);
-  pass("Accepted app remains executable during an update");
-  app = await request({ action: "accept", appId: app.id, releaseId: app.preview.id });
-  assert.notEqual(app.current.id, first);
-  assert.deepEqual(app.data.inputs, inputs);
-  pass("Accepting an update retains shared data");
+  pass("Updated app remains executable");
   const provenance = await request({
     action: "rpc",
     appId: app.id,
@@ -123,6 +113,17 @@ try {
   app = await request({ action: "import", appId: app.id, bundle: broken });
   assert.equal(app.preview.verification.passed, false);
   const failedPreviewId = app.preview.id;
+  await request(
+    {
+      action: "rpc",
+      appId: app.id,
+      releaseId: failedPreviewId,
+      capability: "storage.write",
+      input: { key: "note", value: "bad" },
+    },
+    false,
+  );
+  pass("Failed source cannot write to shared storage");
   app = await request({ action: "reverify", appId: app.id, releaseId: failedPreviewId });
   assert.equal(app.preview.id, failedPreviewId);
   assert.equal(app.preview.verification.passed, false);
@@ -139,9 +140,9 @@ try {
   custom.files["app.js"] +=
     "\ndocument.getElementById('chart-title').textContent='Imported custom portfolio view';";
   app = await request({ action: "import", appId: app.id, bundle: custom });
-  assert.equal(app.preview.origin, "import");
-  assert.equal(app.preview.verification.passed, true);
-  app = await request({ action: "accept", appId: app.id, releaseId: app.preview.id });
+  assert.equal(app.current.origin, "import");
+  assert.equal(app.current.verification.passed, true);
+  assert.equal(app.preview, null);
   assert.ok(app.current.bundle.files["app.js"].includes("Imported custom portfolio view"));
   assert.deepEqual(app.data.inputs, inputs);
   pass("External source import verifies, releases, and retains app data");
