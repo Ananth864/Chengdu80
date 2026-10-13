@@ -6,6 +6,7 @@ export const platformRoot = fileURLToPath(new URL("..", import.meta.url).href);
 export function configuredEnvironment() {
   const values = { ...process.env };
   for (const file of [
+    resolve(platformRoot, ".env.selfhost"),
     resolve(platformRoot, "apps/web/.env"),
     resolve(platformRoot, ".env"),
     resolve(platformRoot, "../.env"),

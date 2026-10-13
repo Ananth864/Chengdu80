@@ -1,4 +1,5 @@
 import { Link, useRouteContext } from "@tanstack/react-router";
+import { Badge } from "@web-starter/ui/components/badge";
 import { buttonVariants } from "@web-starter/ui/components/button";
 import { cn } from "@web-starter/ui/lib/utils";
 
@@ -12,11 +13,14 @@ export default function Header() {
   ] as const;
 
   return (
-    <header className="border-b">
-      <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-4">
-        <nav className="flex items-center gap-1 text-sm">
-          <Link to="/" className="mr-3 font-medium">
-            <span className="brand-mark">C80</span> Chengdu80
+    <header className="border-b bg-card">
+      <div className="mx-auto flex min-h-14 w-full max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-2">
+        <nav aria-label="Main navigation" className="flex flex-wrap items-center gap-1 text-sm">
+          <Link to="/" className="mr-2 flex items-center gap-2 font-semibold sm:mr-4">
+            <span className="grid size-7 place-items-center rounded-sm bg-primary text-[10px] font-bold tracking-wide text-primary-foreground">
+              C80
+            </span>
+            Chengdu80
           </Link>
           {links.map(({ to, label }) => {
             return (
@@ -32,9 +36,9 @@ export default function Header() {
         </nav>
         <div className="flex items-center gap-2">
           {import.meta.env.VITE_LOCAL_MODE === "1" ? (
-            <span className="local-label">Local prototype · Single owner</span>
+            <Badge variant="secondary">Local prototype · Single owner</Badge>
           ) : import.meta.env.VITE_DEMO_MODE === "1" ? (
-            <span className="local-label">Shared demo · No login</span>
+            <Badge variant="secondary">Shared demo · No login</Badge>
           ) : viewer ? (
             <a
               href={auth.signOutHref}

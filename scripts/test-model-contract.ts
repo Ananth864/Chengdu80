@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { protocols } from "../apps/web/src/lib/contracts";
+import { protocols, type Release } from "../apps/web/src/lib/contracts";
 import { sampleBundle } from "../apps/web/src/lib/samples";
+import { appThemeInstructions } from "../apps/web/src/lib/app-theme";
 import { clarify, generate, explain } from "../apps/web/src/server/models";
 
 // A local transport fixture checks SDK wiring. It does not prove live model access.
@@ -77,6 +78,27 @@ try {
   console.log("PASS Luna Responses transport returns a schema-validated specification");
   assert.deepEqual(await generate(spec, "Build the confirmed app"), bundle);
   assert.ok(requests.some((r) => JSON.stringify(r).includes("finance.portfolio")));
+  assert.ok(
+    JSON.stringify(requests.at(-1)).includes(JSON.stringify(appThemeInstructions).slice(1, -1)),
+  );
+  const previous: Release = {
+    id: "fixture-release",
+    bundle,
+    spec,
+    origin: "model",
+    notes: "Existing app",
+    createdAt: new Date().toISOString(),
+    verification: {
+      passed: true,
+      checks: [],
+      sourceHash: "fixture",
+      checkedAt: new Date().toISOString(),
+    },
+  };
+  assert.deepEqual(await generate(spec, "Improve the layout", previous), bundle);
+  assert.ok(
+    JSON.stringify(requests.at(-1)).includes(JSON.stringify(appThemeInstructions).slice(1, -1)),
+  );
   console.log("PASS Builder sends capability contracts and validates the returned source bundle");
   assert.equal(
     await explain("Explain the result", { totalValue: 500 }),

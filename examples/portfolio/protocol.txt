@@ -7,3 +7,25 @@ concentrationPct is the largest single position value / total value × 100. Cash
 Reject negative units, costs, prices, or cash and non-finite numbers. Explain assumptions and show currency.
 Required numerical contract: {"input":{"holdings":[{"symbol":"AAA","units":2,"cost":100,"price":120},{"symbol":"BBB","units":1,"cost":200,"price":180}],"cash":80},"expected":{"totalValue":500,"profit":20,"returnPct":5,"concentrationPct":48}}
 Export analyze(input) from calculations.js. Keep calculation code self-contained and pure. Reject invalid inputs by throwing Error or returning {error:string}; the error field is reserved for failure and is never successful financial data. You may implement additional financial logic, but must preserve the protocol contract. Your browser app must use window.cd80.call(capability,input), and cd80.ready() when rendered. Public capability contracts: {"market.prices":{"input":"{symbol:string, provider:'fixtures'|'tushare'}","output":"{symbol, prices:[{date:'YYYY-MM-DD',close:number}], meta:{provider,synthetic,currency,coverage,warning}}"},"market.assets":{"input":"{}","output":"{assets:[{symbol,name,sector,price,pe:number|null,dividendYield:number|null}],meta:{provider,synthetic,currency,coverage,warning}}"},"finance.calculate":{"input":"Selected protocol input object","output":"Your calculations.js analyze(input) result"},"finance.portfolio":{"input":"{holdings:[{symbol,units,cost,price}],cash:number}. Cost and price are CNY per unit; units is the quantity held.","output":"{totalValue,profit,returnPct,concentrationPct,positions:[{symbol,value,invested,weightPct}]}"},"finance.screen":{"input":"{assets:[{symbol,pe:number|null,dividendYield:number|null}],maxPE:number,minYield:number}","output":"{selected:string[],missing:number}"},"finance.backtest":{"input":"{prices:number[],feeBps:number}","output":"{grossReturnPct,maxDrawdownPct,netReturnPct}"},"storage.read":{"input":"{key:string}","output":"JSON value or null. The initial key 'inputs' contains default protocol inputs."},"storage.write":{"input":"{key:string,value:JSON}","output":"{saved:true}. Accepted releases only; previews are read-only."},"ai.explain":{"input":"{question:string,result:JSON}","output":"String explanation of server-calculated saved inputs. Model configuration required."}}. Prefer verified finance.portfolio, finance.screen, and finance.backtest where applicable, declaring each used capability. The same contract is available in /docs. No external network access, imports, CDN scripts, or secrets. Return the exact bundle schema with manifest and files index.html, app.js, calculations.js, style.css. The HTML is a body fragment without scripts, event handlers, external links, or embedded documents. App JavaScript may use top-level await. Call finance.calculate for your analyze module; never duplicate financial numbers with AI. Use storage.read/write with key inputs. Read storage.read({key:'_provenance'}) for source metadata and display provider, synthetic status, coverage, currency, and warnings. Display data provenance. Freely design the app to satisfy the confirmed spec.
+
+Visual theme: Warm Professional, matching the Chengdu80 workspace.
+Include these exact shared CSS declarations in style.css and use their variables throughout the app:
+:root {
+  --background: #f7f5f0;
+  --foreground: #2c302d;
+  --card: #fffefa;
+  --primary: #28645b;
+  --primary-foreground: #ffffff;
+  --muted: #eeece5;
+  --muted-foreground: #64685f;
+  --border: #deded3;
+  --input: #bcbfb3;
+  --ring: #36796d;
+  --accent: #e5efe8;
+  --accent-foreground: #24574e;
+  --destructive: #a33d37;
+  --radius-card: 20px;
+  --radius-control: 12px;
+  --font-sans: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+Use warm ivory backgrounds, charcoal text, muted teal actions and charts, 20px soft card corners, 12px control corners, subtle borders and gentle shadows. Use locally available system fonts, readable 16px body/input text, generous spacing, tabular financial numbers, visible keyboard focus, and controls at least 40px tall. Reserve red for errors or losses; never rely on color alone. Keep layouts responsive without page-level horizontal scrolling, and put wide tables in scrollable containers. Use plain-language labels and one clear primary action per section. You may adapt the layout to the confirmed specification, but keep this palette and soft-edged visual language for new builds and updates. Apps are self-contained HTML/CSS/JS: do not import React, shadcn, external fonts, or packages; reproduce the workspace's component styling with local CSS.

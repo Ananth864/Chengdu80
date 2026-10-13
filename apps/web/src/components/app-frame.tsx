@@ -1,8 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, AlertDescription } from "@web-starter/ui/components/alert";
+import { Badge } from "@web-starter/ui/components/badge";
+import { cn } from "@web-starter/ui/lib/utils";
 import type { Application, Release } from "../lib/contracts";
 import { api } from "../lib/client";
 
-export function AppFrame({ app, release }: { app: Application; release: Release }) {
+export function AppFrame({
+  app,
+  release,
+  frameClassName,
+}: {
+  app: Application;
+  release: Release;
+  frameClassName?: string;
+}) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
@@ -96,16 +107,24 @@ export function AppFrame({ app, release }: { app: Application; release: Release 
     return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=device-width, initial-scale=1"><style>${release.bundle.files["style.css"].replace(/<\/style/gi, "<\\/style")}</style></head><body>${release.bundle.files["index.html"]}<script nonce="${nonce}">${sdk}</script><script nonce="${nonce}" type="module">${release.bundle.files["app.js"].replace(/<\/script/gi, "<\\/script")}</script></body></html>`;
   }, [nonce, release.bundle]);
   return (
-    <div className="frame-wrap">
-      <div className="frame-status">
-        <span className={`status-dot ${ready ? "green" : ""}`} />
+    <div className="bg-muted/30">
+      <div className="flex items-center gap-2 border-b px-4 py-2.5 text-xs text-muted-foreground">
+        <span
+          className={cn(
+            "size-1.5 shrink-0 rounded-full",
+            ready ? "bg-emerald-500" : "bg-amber-500",
+          )}
+        />
         {ready ? "Application rendered" : "Starting isolated application…"}
-        <span>
-          Shared app data ·{" "}
+        <Badge variant="outline" className="ml-auto hidden sm:inline-flex">
           {app.current?.id === release.id ? "Accepted release" : "Read-only preview"}
-        </span>
+        </Badge>
       </div>
-      {!ready && error && <div className="notice warning">{error}</div>}
+      {!ready && error && (
+        <Alert className="m-3 border-amber-200 bg-amber-50 text-amber-900">
+          <AlertDescription className="text-amber-800">{error}</AlertDescription>
+        </Alert>
+      )}
       <iframe
         ref={frame}
         onLoad={onFrameLoad}
@@ -114,7 +133,7 @@ export function AppFrame({ app, release }: { app: Application; release: Release 
         srcDoc={doc}
         sandbox="allow-scripts"
         referrerPolicy="no-referrer"
-        className="app-frame"
+        className={cn("block w-full border-0", frameClassName ?? "h-[700px]")}
       />
     </div>
   );

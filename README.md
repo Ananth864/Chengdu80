@@ -65,15 +65,33 @@ Lifecycle tests do not modify workspace apps. `bun run examples` regenerates bun
 ## Self-hosted deployment
 
 ```bash
-bun run setup:env             # Creates workspace ../.env with local secrets
-bun run dev:hosted             # Smoke-test the Node build with hosted/demo env
+bun run setup:selfhosted       # First run: generates secrets and deploys Convex functions
+bun run dev:hosted             # Development server with hosted/demo env
 bun run deploy:hosted          # Builds and starts docker-compose: app + self-hosted Convex
 ```
+
+Shell launcher: `bash scripts/start-docker.sh` runs the same deployment command and loads
+the configured environment files. It can be invoked from any working directory.
 
 `docker-compose.yml` runs the app (`apps/web/Dockerfile`, a standalone Node server) alongside the
 open-source self-hosted Convex backend (`ghcr.io/get-convex/convex-backend`). No Cloudflare account,
 Alchemy, or Convex Cloud subscription is required. See [docker-compose.yml](docker-compose.yml) for
 first-run setup (generating a Convex admin key, pushing functions).
+
+After setup, the Docker web app is available at `http://localhost:3001`. The launcher loads
+`.env.selfhost` and `apps/web/.env`, with non-empty repository/workspace `.env` values taking
+precedence. Plain `docker compose up` does not load those files automatically. To run Compose
+directly with the generated configuration:
+
+```bash
+docker compose --env-file .env.selfhost --env-file apps/web/.env up -d --build
+```
+
+`CONVEX_INSTANCE_SECRET` and `PLATFORM_INTERNAL_KEY` are required. `VITE_CONVEX_URL` is the
+public browser endpoint passed at build time; container requests default to
+`http://convex-backend:3210`. Set `CONVEX_SERVER_URL` to override that internal endpoint when
+using an external backend. Provider and WorkOS secrets are runtime-only. Add your model API
+key to the configured environment for custom AI builds; examples work without one.
 
 Self-hosted launchers default to a shared demo without login (`CD80_DEMO_MODE=1`). Set a matching
 `PLATFORM_INTERNAL_KEY` and `CD80_DEMO_MODE=1` in your self-hosted Convex deployment too. All visitors

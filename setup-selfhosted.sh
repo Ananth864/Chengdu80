@@ -23,7 +23,7 @@
 
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$repo_root"
 
 log() { printf '\n==> %s\n' "$1"; }
@@ -187,14 +187,11 @@ To instead build and run the containerized image (e.g. for Coolify/k3s — point
 VITE_CONVEX_URL at a publicly reachable Convex URL there instead of 127.0.0.1,
 since it's inlined into the browser bundle at build time):
 
-  docker build -t chengdu80-web \\
-    --build-arg VITE_DEMO_MODE=1 \\
-    --build-arg VITE_CONVEX_URL=http://127.0.0.1:3210 \\
-    -f apps/web/Dockerfile .
-  docker run -d --name chengdu80-web -p 3098:3098 \\
-    -e CD80_DEMO_MODE=1 -e PORT=3098 \\
-    -e PLATFORM_INTERNAL_KEY=${platform_internal_key} \\
-    -e VITE_CONVEX_URL=http://127.0.0.1:3210 \\
-    chengdu80-web
-EOF
+  bun run deploy:hosted
 
+Or load both generated environment files explicitly:
+
+  docker compose --env-file .env.selfhost --env-file apps/web/.env up -d --build
+
+The containerized web app is available at http://localhost:3001.
+EOF

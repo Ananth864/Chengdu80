@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { protocols, bundleSchema } from "../apps/web/src/lib/contracts";
 import { calculate } from "../apps/web/src/lib/finance";
 import { sampleBundle } from "../apps/web/src/lib/samples";
+import { appThemeCss } from "../apps/web/src/lib/app-theme";
 import {
   disposeRuntimes,
   execute,
@@ -48,7 +49,11 @@ try {
   });
   for (const p of protocols)
     await test(`${p.id}: independent numerical fixtures in Cloudflare workerd`, async () => {
-      const report = await verify(sampleBundle(p.defaultSpec), p.defaultSpec);
+      const bundle = sampleBundle(p.defaultSpec);
+      assert.ok(bundle.files["style.css"].startsWith(appThemeCss));
+      assert.ok(bundle.files["style.css"].includes("border-radius:var(--radius-card)"));
+      assert.ok(!bundle.files["app.js"].includes("#416bd7"));
+      const report = await verify(bundle, p.defaultSpec);
       assert.equal(report.passed, true, JSON.stringify(report.checks.filter((c) => !c.passed)));
       const actual = calculate(p.id, p.fixture.input);
       for (const [key, value] of Object.entries(p.fixture.expected))

@@ -112,7 +112,7 @@ async function render() {
     el("chart").innerHTML =
       '<svg viewBox="0 0 700 160" role="img" aria-label="Historical price chart"><polyline points="' +
       pts +
-      '" fill="none" stroke="#416bd7" stroke-width="3"/></svg>';
+      '" fill="none" stroke="var(--primary)" stroke-width="3"/></svg>';
     el("table").textContent =
       "Cash benchmark: 0% return. Fees use a simple two-transaction approximation at " +
       data.feeBps +
