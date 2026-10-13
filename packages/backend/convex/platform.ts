@@ -88,3 +88,62 @@ export const saveDemo = action({
     });
   },
 });
+
+// Registry writes are system actions, never model tools. Payloads contain credential names only.
+export const plugins = action({
+  args: { serverKey: v.string(), demo: v.boolean(), payload: v.optional(v.string()) },
+  handler: async (ctx, args): Promise<string[]> => {
+    const expected = process.env.PLATFORM_INTERNAL_KEY;
+    if (!expected || expected.length < 32 || args.serverKey !== expected)
+      throw new Error("Trusted platform server required");
+    let ownerId: string;
+    if (args.demo) {
+      requireDemo(args.serverKey);
+      ownerId = demoOwnerId;
+    } else {
+      const identity = await ctx.auth.getUserIdentity();
+      if (!identity) throw new Error("Authentication required");
+      ownerId = identity.subject;
+    }
+    if (args.payload) {
+      if (args.payload.length > 300000) throw new Error("Plugin is too large");
+      const payload: unknown = JSON.parse(args.payload);
+      if (
+        !payload ||
+        typeof payload !== "object" ||
+        !("ownerId" in payload) ||
+        payload.ownerId !== ownerId ||
+        !("id" in payload) ||
+        typeof payload.id !== "string"
+      )
+        throw new Error("Invalid plugin ownership");
+      await ctx.runMutation(internal.platform.commitPlugin, {
+        ownerId,
+        pluginId: payload.id,
+        payload: args.payload,
+      });
+    }
+    return ctx.runQuery(internal.platform.pluginRows, { ownerId });
+  },
+});
+export const pluginRows = internalQuery({
+  args: { ownerId: v.string() },
+  handler: async (ctx, { ownerId }) => {
+    const rows = await ctx.db
+      .query("plugins")
+      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
+      .collect();
+    return rows.map((row) => row.payload);
+  },
+});
+export const commitPlugin = internalMutation({
+  args: { ownerId: v.string(), pluginId: v.string(), payload: v.string() },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("plugins")
+      .withIndex("by_plugin", (q) => q.eq("pluginId", args.pluginId))
+      .unique();
+    if (existing) throw new Error("Plugin already exists");
+    await ctx.db.insert("plugins", args);
+  },
+});

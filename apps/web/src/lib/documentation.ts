@@ -47,7 +47,21 @@ export const documentation = [
     slug: "verification",
     title: "Release checks",
     navigation: "Verification",
-    description: "How source code is checked before acceptance.",
+    description: "How source code is checked before automatic activation.",
+    toc: [],
+  },
+  {
+    slug: "plugins",
+    title: "OpenAPI plugins",
+    navigation: "Plugins",
+    description: "System registration, AI tools, and app runtime API calls.",
+    toc: [],
+  },
+  {
+    slug: "conversation",
+    title: "Conversation agent",
+    navigation: "Conversation agent",
+    description: "Persistent streamed conversations and workspace tools.",
     toc: [],
   },
   {

@@ -88,3 +88,26 @@ export async function saveApp(access: Access, app: Application, expectedRevision
 export function event(app: Application, message: string) {
   app.events = [{ at: new Date().toISOString(), message }, ...app.events].slice(0, 50);
 }
+
+// Retry field merges after another writer (title, tools, or app data) advances the revision.
+export async function mutateApp(
+  access: Access,
+  id: string,
+  change: (app: Application) => void | Promise<void>,
+) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const app = await findApp(access, id);
+    await change(app);
+    try {
+      return await saveApp(access, app, app.revision);
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        !error.message.includes("Application changed") ||
+        attempt === 4
+      )
+        throw error;
+    }
+  }
+  throw new Error("Application changed during this operation.");
+}

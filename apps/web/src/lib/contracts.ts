@@ -1,3 +1,4 @@
+import type { UIMessage } from "@tanstack/ai";
 import { z } from "zod";
 
 export const capabilities = [
@@ -10,10 +11,16 @@ export const capabilities = [
   "storage.read",
   "storage.write",
   "ai.explain",
+  "plugin.call",
 ] as const;
 export const protocolIds = ["portfolio", "screening", "strategy"] as const;
 export type ProtocolId = (typeof protocolIds)[number];
 export const capabilityContracts = {
+  "plugin.call": {
+    input:
+      "{pluginId:string, operationId:string, parameters:object}. Only system-registered plugins enabled for this app.",
+    output: "JSON response from the plugin operation. Provider credentials stay on the server.",
+  },
   "market.prices": {
     input: "{symbol:string, provider:'fixtures'|'tushare'}",
     output:
@@ -74,7 +81,7 @@ export const bundleSchema = z
         schemaVersion: z.literal(1),
         name: z.string().min(3).max(80),
         protocol: z.enum(protocolIds),
-        permissions: z.array(z.enum(capabilities)).max(9),
+        permissions: z.array(z.enum(capabilities)).max(10),
       })
       .strict(),
     files: z
@@ -116,6 +123,24 @@ export type Application = {
   history: Release[];
   events: { at: string; message: string }[];
   createdAt: string;
+  chatTitle?: string;
+  conversation?: UIMessage[];
+  workspace?: AppBundle;
+  workspaceSpec?: ProductSpec;
+  browserEvents?: { releaseId: string; at: string; message: string }[];
+  enabledPlugins?: string[];
+  turns?: {
+    id: string;
+    startedAt: string;
+    completedAt?: string;
+    status: "running" | "complete" | "stopped" | "error";
+  }[];
+  agentTurn?: {
+    id: string;
+    startedAt: string;
+    completedAt?: string;
+    status: "running" | "complete" | "stopped" | "error";
+  };
 };
 export type Protocol = {
   id: ProtocolId;

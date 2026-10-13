@@ -1,6 +1,8 @@
+import { AgentChat } from "./agent-chat";
+import { ConversationNavigation } from "./conversation-navigation";
+import { PluginSettings } from "./plugin-settings";
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowUp,
   ArrowUpRight,
   Eye,
   Database,
@@ -8,21 +10,12 @@ import {
   Maximize,
   Minimize,
   Code2,
-  Layers,
-  Plus,
   RefreshCw,
-  Settings,
   ShieldCheck,
-  Upload,
   X,
 } from "lucide-react";
 import { Button, buttonVariants } from "@web-starter/ui/components/button";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupTextarea,
-  InputGroupButton,
-} from "@web-starter/ui/components/input-group";
+
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -32,15 +25,6 @@ import {
 } from "@web-starter/ui/components/dropdown-menu";
 import { cn } from "@web-starter/ui/lib/utils";
 import { Alert, AlertAction, AlertTitle, AlertDescription } from "@web-starter/ui/components/alert";
-import { Field, FieldLabel, FieldGroup } from "@web-starter/ui/components/field";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@web-starter/ui/components/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@web-starter/ui/components/tabs";
 import {
   Table,
@@ -50,20 +34,7 @@ import {
   TableHeader,
   TableRow,
 } from "@web-starter/ui/components/table";
-import {
-  Sidebar,
-  SidebarProvider,
-  SidebarHeader,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarTrigger,
-  useSidebar,
-} from "@web-starter/ui/components/sidebar";
+import { SidebarProvider, SidebarTrigger } from "@web-starter/ui/components/sidebar";
 import {
   Dialog,
   DialogContent,
@@ -80,21 +51,11 @@ import {
   EmptyMedia,
 } from "@web-starter/ui/components/empty";
 import { Separator } from "@web-starter/ui/components/separator";
-import { Message, MessageContent, MessageHeader } from "@web-starter/ui/components/message";
-import { Bubble, BubbleContent } from "@web-starter/ui/components/bubble";
-import {
-  MessageScrollerProvider,
-  MessageScroller,
-  MessageScrollerViewport,
-  MessageScrollerContent,
-  MessageScrollerItem,
-  MessageScrollerButton,
-} from "@web-starter/ui/components/message-scroller";
+
 import { api, download } from "../lib/client";
 import {
   bundleSchema,
   protocolFor,
-  protocols,
   type AppBundle,
   type Application,
   type ProductSpec,
@@ -115,7 +76,6 @@ type Snapshot = {
   };
 };
 type Tab = "preview" | "source" | "data";
-type ChatMessage = { id: string; role: "user" | "assistant"; content: string };
 const workspaceTabs = [
   { value: "preview", label: "Preview", Icon: Eye },
   { value: "source", label: "Code", Icon: Code2 },
@@ -124,17 +84,16 @@ const workspaceTabs = [
 export function Studio() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [tab, setTab] = useState<Tab>("preview");
-  const [mode, setMode] = useState<"sample" | "model">("sample");
   const [activeSourceFile, setActiveSourceFile] = useState<SourcePath>("app.js");
   const [review, setReview] = useState<"checks" | "spec" | null>(null);
   const [imported, setImported] = useState<AppBundle | null>(null);
   const [providerResult, setProviderResult] = useState<unknown>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [conversations, setConversations] = useState<Record<string, ChatMessage[]>>({});
+  const [chatKey, setChatKey] = useState("new");
+  const [agentBusy, setAgentBusy] = useState(false);
   const [previewRevision, setPreviewRevision] = useState(0);
   const file = useRef<HTMLInputElement>(null);
   const workspace = useRef<HTMLElement>(null);
@@ -154,29 +113,12 @@ export function Studio() {
   }
   const app = snapshot?.apps.find((a) => a.id === selected) ?? null;
   const release = app && (app.current ?? app.preview);
-  const conversationKey = selected ?? "new";
-  const messages = conversations[conversationKey] ?? [];
-  function appendMessage(key: string, role: ChatMessage["role"], content: string) {
-    const message = { id: crypto.randomUUID(), role, content };
-    setConversations((current) => ({ ...current, [key]: [...(current[key] ?? []), message] }));
-  }
-  // A newly created app takes over the conversation that produced its specification.
-  function openBuiltConversation(next: Application, request: string) {
-    const response: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: next.current ? "Your app is ready." : failureMessage(next),
-    };
-    const initial: ChatMessage = { id: crypto.randomUUID(), role: "user", content: request };
-    setConversations((current) => ({
-      ...current,
-      [next.id]: [...(current.new?.length ? current.new : [initial]), response],
-      new: [],
-    }));
-  }
+  const workspaceBundle = app?.workspace ?? release?.bundle;
+  const refreshVersion = useRef(0);
   async function refresh() {
+    const version = ++refreshVersion.current;
     const data = await api<Snapshot>();
-    setSnapshot(data);
+    if (version === refreshVersion.current) setSnapshot(data);
     return data;
   }
   useEffect(() => {
@@ -185,28 +127,47 @@ export function Studio() {
       .then((data) => {
         if (!mounted) return;
         setSnapshot(data);
-        setMode(data.status.modelConfigured ? "model" : "sample");
         const id = new URLSearchParams(window.location.hash.slice(1)).get("app");
-        if (id && data.apps.some((a) => a.id === id)) setSelected(id);
+        if (id && data.apps.some((a) => a.id === id)) {
+          setSelected(id);
+          setChatKey(id);
+        }
       })
       .catch((e) => mounted && setError(e.message));
     return () => {
       mounted = false;
     };
   }, []);
+  useEffect(() => {
+    if (!app || app.chatTitle !== "New chat") return;
+    let stopped = false;
+    let attempts = 0;
+    const timer = setInterval(() => {
+      if (++attempts > 20) {
+        clearInterval(timer);
+        return;
+      }
+      void api<Snapshot>().then((data) => {
+        if (!stopped) setSnapshot(data);
+      });
+    }, 2000);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [app?.id, app?.chatTitle]);
   function select(id: string | null) {
     setSelected(id);
     setImported(null);
-    setPrompt("");
     setError("");
-    if (id === null) setConversations((current) => ({ ...current, new: [] }));
+    setChatKey(id ?? crypto.randomUUID());
     setTab("preview");
     setReview(null);
     setActiveSourceFile("app.js");
     window.history.replaceState(null, "", id ? `/#app=${id}` : "/");
   }
   async function run<T>(label: string, task: () => Promise<T>) {
-    if (busy) return;
+    if (busy || agentBusy) return;
     setBusy(label);
     setError("");
     try {
@@ -214,54 +175,15 @@ export function Studio() {
     } catch (e) {
       const message = e instanceof Error ? e.message : "Operation failed";
       setError(message);
-      appendMessage(conversationKey, "assistant", message);
     } finally {
       setBusy("");
     }
   }
-  function failureMessage(next: Application) {
-    const failed = next.preview?.verification.checks
-      .filter((check) => !check.passed)
-      .map((check) => check.name)
-      .join(", ");
-    return `The changes could not be applied${failed ? `: ${failed}` : "."} Your working app is unchanged.`;
-  }
-  async function buildNew(spec: ProductSpec, request: string) {
-    const next = await api<Application>({ action: "create", spec, mode });
-    await refresh();
-    openBuiltConversation(next, request);
-    select(next.id);
-  }
-  async function suggest() {
-    if (busy || !prompt.trim()) return;
-    const request = prompt.trim();
-    appendMessage("new", "user", request);
-    setPrompt("");
-    await run("Building your application…", async () => {
-      const result = await api<{ spec: ProductSpec }>({ action: "clarify", prompt: request });
-      await buildNew(result.spec, request);
-    });
-  }
-  async function create(spec: ProductSpec) {
-    appendMessage("new", "user", spec.purpose);
-    await run("Building your application…", () => buildNew(spec, spec.purpose));
-  }
-  async function update() {
-    if (busy || !app || !prompt.trim()) return;
-    const request = prompt.trim();
-    appendMessage(app.id, "user", request);
-    setPrompt("");
-    await run("Applying your changes…", async () => {
-      const next = await api<Application>({
-        action: "update",
-        appId: app.id,
-        request,
-        mode,
-      });
+  async function createExample(spec: ProductSpec) {
+    await run("Installing example…", async () => {
+      const next = await api<Application>({ action: "create", spec, mode: "sample" });
       await refresh();
-      appendMessage(app.id, "assistant", next.preview ? failureMessage(next) : "Changes applied.");
-      setPrompt("");
-      setTab("preview");
+      select(next.id);
     });
   }
   async function importFiles(files: FileList | null) {
@@ -305,20 +227,20 @@ export function Studio() {
   return (
     <SidebarProvider
       className="h-svh min-h-0 overflow-hidden"
-      style={{ "--sidebar-width": "13rem" } as React.CSSProperties}
+      style={{ "--sidebar-width": "16rem" } as React.CSSProperties}
     >
-      <ApplicationNavigation
+      <ConversationNavigation
         apps={snapshot?.apps ?? []}
         selected={selected}
         select={select}
-        busy={!!busy}
+        busy={!!busy || agentBusy}
         openSettings={() => setSettingsOpen(true)}
       />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <header className="flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-2 px-3 py-2">
           <div className="flex min-w-0 items-center gap-2">
             <SidebarTrigger />
-            <h1 className="truncate font-medium">{app?.name ?? "New application"}</h1>
+            <h1 className="truncate font-medium">{app?.chatTitle ?? app?.name ?? "New chat"}</h1>
           </div>
           <div className="flex items-center gap-2">
             {release && (
@@ -371,35 +293,6 @@ export function Studio() {
                   <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
                     Connections
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={
-                      !!busy ||
-                      !app?.current ||
-                      !snapshot?.status.modelConfigured ||
-                      !app.current.bundle.manifest.permissions.includes("ai.explain")
-                    }
-                    onClick={() => {
-                      if (!app?.current) return;
-                      void run("Explaining saved inputs…", async () =>
-                        appendMessage(
-                          app.id,
-                          "assistant",
-                          await api<string>({
-                            action: "rpc",
-                            appId: app.id,
-                            releaseId: app.current!.id,
-                            capability: "ai.explain",
-                            input: {
-                              question: prompt.trim() || "Explain these results",
-                              result: null,
-                            },
-                          }),
-                        ),
-                      );
-                    }}
-                  >
-                    Explain results
-                  </DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -409,127 +302,28 @@ export function Studio() {
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
           <aside
             aria-label="Application chat"
-            className="flex w-full shrink-0 flex-col gap-4 p-4 md:w-90 md:overflow-hidden"
+            className="flex w-full shrink-0 flex-col gap-4 p-4 md:w-120 md:overflow-hidden"
           >
-            <div className="min-h-40 flex-1 md:min-h-0">
-              {messages.length ? (
-                <MessageScrollerProvider key={conversationKey} autoScroll>
-                  <MessageScroller>
-                    <MessageScrollerViewport>
-                      <MessageScrollerContent>
-                        {messages.map((message) => (
-                          <MessageScrollerItem
-                            key={message.id}
-                            messageId={message.id}
-                            scrollAnchor={message.role === "user"}
-                          >
-                            <Message align={message.role === "user" ? "end" : "start"}>
-                              <MessageContent>
-                                <MessageHeader>
-                                  {message.role === "user" ? "You" : "Assistant"}
-                                </MessageHeader>
-                                <Bubble
-                                  variant={message.role === "user" ? "secondary" : "ghost"}
-                                  align={message.role === "user" ? "end" : "start"}
-                                >
-                                  <BubbleContent>{message.content}</BubbleContent>
-                                </Bubble>
-                              </MessageContent>
-                            </Message>
-                          </MessageScrollerItem>
-                        ))}
-                      </MessageScrollerContent>
-                    </MessageScrollerViewport>
-                    <MessageScrollerButton />
-                  </MessageScroller>
-                </MessageScrollerProvider>
-              ) : (
-                <Empty className="h-full">
-                  <EmptyHeader>
-                    <EmptyTitle>
-                      {app ? "Start a conversation" : "What would you like to build?"}
-                    </EmptyTitle>
-                  </EmptyHeader>
-                  {!app && (
-                    <EmptyContent>
-                      {protocols.map((protocol) => (
-                        <Button
-                          key={protocol.id}
-                          variant="outline"
-                          disabled={!!busy}
-                          onClick={() => {
-                            void create({ ...protocol.defaultSpec });
-                            setImported(null);
-                          }}
-                        >
-                          {protocol.name}
-                        </Button>
-                      ))}
-                    </EmptyContent>
-                  )}
-                </Empty>
-              )}
-            </div>
-            {busy && (
-              <p role="status" aria-live="polite" className="text-xs text-muted-foreground">
-                {busy}
-              </p>
-            )}
-            <FieldGroup className="gap-2">
-              <Field data-disabled={!!busy}>
-                <FieldLabel htmlFor="request" className="sr-only">
-                  {app ? "Request a change" : "Application request"}
-                </FieldLabel>
-                <InputGroup>
-                  <InputGroupTextarea
-                    id="request"
-                    value={prompt}
-                    disabled={!!busy}
-                    onChange={(event) => setPrompt(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (
-                        event.key === "Enter" &&
-                        !event.shiftKey &&
-                        !event.nativeEvent.isComposing
-                      ) {
-                        event.preventDefault();
-                        void (app ? update() : suggest());
-                      }
-                    }}
-                    placeholder={app ? "Describe a change…" : "What would you like to build?"}
-                    className="min-h-24"
-                  />
-                  <InputGroupAddon align="block-end">
-                    <InputGroupButton
-                      variant="ghost"
-                      size="icon-xs"
-                      aria-label="Import source"
-                      disabled={!!busy}
-                      onClick={() => file.current?.click()}
-                    >
-                      <Upload />
-                    </InputGroupButton>
-                    <ModeSelect
-                      mode={mode}
-                      setMode={setMode}
-                      connected={!!snapshot?.status.modelConfigured}
-                      disabled={!!busy}
-                      compact
-                    />
-                    <InputGroupButton
-                      variant="default"
-                      size="icon-sm"
-                      aria-label={app ? "Send change" : "Build application"}
-                      disabled={!!busy}
-                      aria-disabled={!prompt.trim()}
-                      onClick={() => void (app ? update() : suggest())}
-                    >
-                      <ArrowUp />
-                    </InputGroupButton>
-                  </InputGroupAddon>
-                </InputGroup>
-              </Field>
-            </FieldGroup>
+            <AgentChat
+              key={chatKey}
+              app={app}
+              connected={!!snapshot?.status.modelConfigured}
+              disabled={!!busy}
+              modelName={snapshot?.status.model ?? "AI"}
+              onBusyChange={setAgentBusy}
+              onImport={() => file.current?.click()}
+              onExample={(spec) => void createExample(spec)}
+              onWorkspaceCreated={(next) => {
+                setSnapshot((current) =>
+                  current ? { ...current, apps: [...current.apps, next] } : current,
+                );
+                setSelected(next.id);
+                window.history.replaceState(null, "", `/#app=${next.id}`);
+              }}
+              onFinish={async () => {
+                await refresh();
+              }}
+            />
           </aside>
           <Separator orientation="vertical" className="hidden md:block" />
           <Separator className="md:hidden" />
@@ -699,10 +493,10 @@ export function Studio() {
                   )}
                 </TabsContent>
                 <TabsContent value="source" className="flex min-h-0 flex-col">
-                  {release && (
+                  {workspaceBundle && (
                     <CodeWorkspace
-                      key={release.id}
-                      release={release}
+                      bundle={workspaceBundle}
+                      workspaceId={`${app.id}:${app.revision}`}
                       activeFile={activeSourceFile}
                       onSelectFile={setActiveSourceFile}
                     />
@@ -783,6 +577,7 @@ export function Studio() {
               </TableRow>
             </TableBody>
           </Table>
+          <PluginSettings />
           <div className="flex flex-wrap gap-2">
             {app?.current && app.spec.protocol === "strategy" && (
               <Button
@@ -844,137 +639,6 @@ export function Studio() {
 
 function isTab(value: unknown): value is Tab {
   return value === "preview" || value === "source" || value === "data";
-}
-
-function ApplicationNavigation({
-  apps,
-  selected,
-  select,
-  busy,
-  openSettings,
-}: {
-  apps: Application[];
-  selected: string | null;
-  select: (id: string | null) => void;
-  busy: boolean;
-  openSettings: () => void;
-}) {
-  const { setOpenMobile } = useSidebar();
-  function navigate(id: string | null) {
-    select(id);
-    setOpenMobile(false);
-  }
-  return (
-    <Sidebar collapsible="offcanvas">
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton render={<a href="/" />} tooltip="Chengdu80">
-              <Layers />
-              <span>Chengdu80</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              disabled={busy}
-              onClick={() => navigate(null)}
-              tooltip="New application"
-            >
-              <Plus />
-              <span>New application</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarHeader>
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {apps.map((app) => (
-                <SidebarMenuItem key={app.id}>
-                  <SidebarMenuButton
-                    isActive={selected === app.id}
-                    disabled={busy}
-                    onClick={() => navigate(app.id)}
-                    tooltip={app.name}
-                  >
-                    <span>{app.name}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
-      <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              onClick={() => {
-                openSettings();
-                setOpenMobile(false);
-              }}
-              tooltip="Connections"
-            >
-              <Settings />
-              <span>Connections</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton render={<a href="/docs" />} tooltip="Developer docs">
-              <Code2 />
-              <span>Developer docs</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
-    </Sidebar>
-  );
-}
-
-function ModeSelect({
-  mode,
-  setMode,
-  connected,
-  disabled,
-  compact = false,
-}: {
-  mode: "sample" | "model";
-  setMode: (mode: "sample" | "model") => void;
-  connected: boolean;
-  disabled: boolean;
-  compact?: boolean;
-}) {
-  return (
-    <Field className={cn(compact && "min-w-0 flex-1")}>
-      <FieldLabel htmlFor="builder-mode" className={cn(compact && "sr-only")}>
-        Builder
-      </FieldLabel>
-      <Select
-        value={mode}
-        disabled={disabled}
-        items={[
-          { value: "sample", label: "Example builder" },
-          { value: "model", label: connected ? "AI model" : "AI model · key required" },
-        ]}
-        onValueChange={(value) => {
-          if (value === "sample" || value === "model") setMode(value);
-        }}
-      >
-        <SelectTrigger id="builder-mode" size={compact ? "sm" : "default"} className="max-w-full">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            <SelectItem value="sample">Example builder</SelectItem>
-            <SelectItem value="model" disabled={!connected}>
-              AI model{connected ? "" : " · key required"}
-            </SelectItem>
-          </SelectGroup>
-        </SelectContent>
-      </Select>
-    </Field>
-  );
 }
 
 function Checks({ release }: { release: Release }) {
