@@ -11,7 +11,7 @@ import {
   SidebarMenuButton,
 } from "@web-starter/ui/components/sidebar";
 import { Separator } from "@web-starter/ui/components/separator";
-import type { Release } from "../lib/contracts";
+import type { AppBundle } from "../lib/contracts";
 import { SourceViewer } from "./source-viewer";
 
 const fileIcons = {
@@ -28,18 +28,20 @@ export type SourcePath = (typeof sourcePaths)[number] | "cd80.json";
 // VibeSDK's file-explorer/editor composition, using the shared shadcn controls.
 // Source format has a flat, fixed file set, so the tree contains no invented folders.
 export function CodeWorkspace({
-  release,
+  bundle,
+  workspaceId,
   activeFile,
   onSelectFile,
 }: {
-  release: Release;
+  bundle: AppBundle;
+  workspaceId: string;
   activeFile: SourcePath;
   onSelectFile: (path: SourcePath) => void;
 }) {
   const content =
     activeFile === "cd80.json"
-      ? JSON.stringify(release.bundle.manifest, null, 2)
-      : release.bundle.files[activeFile];
+      ? JSON.stringify(bundle.manifest, null, 2)
+      : bundle.files[activeFile];
   return (
     <section aria-label="Source workspace" className="flex min-h-0 min-w-0 flex-1">
       <aside aria-label="Source files" className="flex w-32 shrink-0 flex-col md:w-56">
@@ -70,7 +72,7 @@ export function CodeWorkspace({
         </div>
       </aside>
       <Separator orientation="vertical" />
-      <SourceViewer path={`${release.id}/${activeFile}`} fileName={activeFile} content={content} />
+      <SourceViewer path={`${workspaceId}/${activeFile}`} fileName={activeFile} content={content} />
     </section>
   );
 }

@@ -48,7 +48,9 @@
     "test:glm-contract": "bun scripts/test-glm-contract.ts",
     "test:query-stream": "bun --conditions=development scripts/test-query-stream.ts",
     "deploy:backend": "bun scripts/convex.ts push",
-    "test:ui": "VITE_LOCAL_MODE=1 bun run build && bun scripts/test-ui.ts"
+    "test:ui": "VITE_LOCAL_MODE=1 bun run build && bun scripts/test-ui.ts",
+    "test:agent": "VITE_LOCAL_MODE=1 bun run build && bun scripts/test-agent.ts",
+    "test:plugins": "VITE_LOCAL_MODE=1 bun run build && bun scripts/test-plugins.ts"
   },
   "dependencies": {
     "@web-starter/env": "workspace:*",

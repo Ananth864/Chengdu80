@@ -8,6 +8,8 @@ import {
   ProtocolsContent,
   VerificationContent,
   PrivacyContent,
+  PluginsContent,
+  ConversationContent,
 } from "./docs-content";
 
 export const documentationContent = {
@@ -18,6 +20,8 @@ export const documentationContent = {
   protocols: ProtocolsContent,
   verification: VerificationContent,
   privacy: PrivacyContent,
+  plugins: PluginsContent,
+  conversation: ConversationContent,
 };
 
 export function DocumentationPage({ page }: { page: (typeof documentation)[number] }) {

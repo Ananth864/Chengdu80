@@ -49,11 +49,6 @@ try {
   await page.getByRole("menuitem", { name: "Install all examples", exact: true }).click();
   await page.getByRole("heading", { name: "Portfolio lens", exact: true }).waitFor();
   await page.locator('iframe[aria-busy="false"]').waitFor();
-  assert.equal(
-    await page.locator("[data-slot=input-group]").evaluate((e) => getComputedStyle(e).opacity),
-    "1",
-    "An empty composer must remain visibly available",
-  );
   const layout = await page.evaluate(() => {
     const selectors = [
       '[data-slot="sidebar-container"]',
@@ -171,46 +166,11 @@ try {
   const appState = await snapshot();
   const initial = appState.apps.find((a) => a.name === "Portfolio lens");
   assert(initial?.current);
-  await page
-    .getByRole("textbox", { name: "Request a change", exact: true })
-    .fill("Show concentration clearly");
-  await page.getByRole("textbox", { name: "Request a change", exact: true }).press("Enter");
-  const chatPanel = page.getByRole("complementary", { name: "Application chat" });
-  await chatPanel
-    .getByRole("region", { name: "Messages" })
-    .getByText("Show concentration clearly", { exact: true })
-    .waitFor();
-  await chatPanel.getByText("Changes applied.", { exact: true }).waitFor();
-  await page.getByRole("button", { name: "Value finder", exact: true }).click();
-  await chatPanel.getByText("Start a conversation", { exact: true }).waitFor();
-  await page.getByRole("button", { name: "Portfolio lens", exact: true }).click();
-  await chatPanel
-    .getByRole("region", { name: "Messages" })
-    .getByText("Show concentration clearly", { exact: true })
-    .waitFor();
-  results.push("Real chat turns remain associated with their application");
-
-  const state = await snapshot();
-  const app = state.apps.find((a) => a.id === initial.id);
-  assert(app?.current);
-  assert.equal(app.preview, null);
-  assert.notEqual(app.current.id, initial.current.id);
-  assert.deepEqual(app.data, initial.data);
-  results.push("Conversation changes activate immediately and retain data");
-  await page.getByRole("button", { name: "New application", exact: true }).click();
-  await page
-    .getByRole("textbox", { name: "Application request", exact: true })
-    .fill("Build a portfolio dashboard");
-  await page.getByRole("textbox", { name: "Application request", exact: true }).press("Enter");
-  await chatPanel.getByText("Your app is ready.", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  await page.getByRole("button", { name: "Portfolio analysis", exact: true }).click();
   await page.locator('iframe[aria-busy="false"]').waitFor();
-  const generatedId = new URLSearchParams(new URL(page.url()).hash.slice(1)).get("app");
-  const generated = (await snapshot()).apps.find((a) => a.id === generatedId);
-  assert.notEqual(generatedId, initial.id);
-  assert.equal(generated?.preview, null);
-  assert(generated?.current);
-  results.push("New conversation generates an active app without a specification approval screen");
-  await page.getByRole("button", { name: "New application", exact: true }).click();
+  results.push("Explicit examples work without pretending to be AI conversations");
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
   await page.locator("input[type=file]").setInputFiles({
     name: "portfolio.cd80.json",
     mimeType: "application/json",

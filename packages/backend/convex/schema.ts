@@ -11,6 +11,13 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .index("by_app", ["appId"]),
+  plugins: defineTable({
+    pluginId: v.string(),
+    ownerId: v.string(),
+    payload: v.string(),
+  })
+    .index("by_owner", ["ownerId"])
+    .index("by_plugin", ["pluginId"]),
   users: defineTable({
     authSubject: v.string(),
     email: v.optional(v.string()),

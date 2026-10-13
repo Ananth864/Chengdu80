@@ -14,13 +14,21 @@ import { sampleBundle } from "../lib/samples";
 import { auth } from "../integrations/auth";
 import { clarify, explain, feasibility, generate } from "./models";
 import { assetUniverse, prices } from "./providers";
-import { event, findApp, listApps, saveApp, type Access } from "./repository";
+import { event, findApp, listApps, saveApp, mutateApp, type Access } from "./repository";
 import { execute, sourceHash, verify } from "./runtime";
 import { demoMode, demoOwnerId, localMode, settings } from "./settings";
 
 const text = z.string().trim().min(1).max(4000);
 const requestSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("clarify"), prompt: text }),
+  z.object({ action: z.literal("create-workspace"), prompt: z.string().trim().min(1).max(12000) }),
+  z.object({
+    action: z.literal("browser-log"),
+    appId: z.string(),
+    releaseId: z.string(),
+    level: z.literal("error"),
+    message: z.string().max(2000),
+  }),
   z.object({ action: z.literal("create"), spec: specSchema, mode: z.enum(["sample", "model"]) }),
   z.object({ action: z.literal("seed") }),
   z.object({
@@ -83,7 +91,7 @@ export async function snapshot(access: Access) {
     },
   };
 }
-async function makeRelease(
+export async function makeRelease(
   spec: ProductSpec,
   bundle: AppBundle,
   origin: Release["origin"],
@@ -115,7 +123,7 @@ function newApp(access: Access, spec: ProductSpec): Application {
   };
 }
 // Verified source becomes active atomically; failed builds preserve the working release.
-async function applyRelease(app: Application, release: Release) {
+export async function applyRelease(app: Application, release: Release) {
   if (!release.verification.passed) {
     app.preview = release;
     return false;
@@ -159,6 +167,30 @@ async function build(
 }
 export async function dispatch(access: Access, raw: unknown) {
   const req = requestSchema.parse(raw);
+  if (req.action === "create-workspace") {
+    const app = newApp(access, {
+      ...protocols[0]!.defaultSpec,
+      name: "New chat",
+      purpose: req.prompt.length >= 10 ? req.prompt.slice(0, 4000) : `Conversation: ${req.prompt}`,
+    });
+    app.chatTitle = "New chat";
+    app.conversation = [];
+    const scaffold = sampleBundle(app.spec);
+    scaffold.files["index.html"] = '<main id="app"></main>';
+    scaffold.files["app.js"] = "cd80.ready();";
+    scaffold.files["style.css"] = "";
+    app.workspace = scaffold;
+    const saved = await saveApp(access, app, null);
+    const { generateChatTitle } = await import("./chat-title");
+    void generateChatTitle(req.prompt)
+      .then(async (title) => {
+        await mutateApp(access, saved.id, (current) => {
+          current.chatTitle = title;
+        });
+      })
+      .catch(() => {});
+    return saved;
+  }
   if (req.action === "clarify") {
     const gate = feasibility(req.prompt);
     if (!gate.allowed) throw new Error(gate.reason);
@@ -229,6 +261,17 @@ export async function dispatch(access: Access, raw: unknown) {
     return saveApp(access, app, req.appId ? app.revision : null);
   }
   const app = await findApp(access, req.appId);
+  if (req.action === "browser-log") {
+    if (![app.current?.id, app.preview?.id].includes(req.releaseId))
+      throw new Error("Unknown release");
+    await mutateApp(access, app.id, (current) => {
+      current.browserEvents = [
+        { releaseId: req.releaseId, at: new Date().toISOString(), message: req.message },
+        ...(current.browserEvents ?? []),
+      ].slice(0, 20);
+    });
+    return { recorded: true };
+  }
   if (req.action === "reverify") {
     if (app.preview?.id !== req.releaseId) throw new Error("Preview changed. Refresh first.");
     app.preview.verification = await verify(app.preview.bundle, app.preview.spec);
@@ -312,6 +355,23 @@ export async function dispatch(access: Access, raw: unknown) {
     throw new Error("Verified release and declared capability permission required");
   if (JSON.stringify(req.input ?? null).length > 150000)
     throw new Error("Capability input exceeds size limit");
+  if (req.capability === "plugin.call") {
+    const input = z
+      .object({
+        pluginId: z.string(),
+        operationId: z.string(),
+        parameters: z.record(z.string(), z.unknown()).default({}),
+      })
+      .parse(req.input);
+    if (!app.enabledPlugins?.includes(input.pluginId))
+      throw new Error("Plugin is not enabled for this app");
+    return (await import("./plugins")).callPlugin(
+      access,
+      input.pluginId,
+      input.operationId,
+      input.parameters,
+    );
+  }
   if (req.capability === "finance.calculate") return execute(release.bundle, req.input);
   if (req.capability === "finance.portfolio") return calculate("portfolio", req.input);
   if (req.capability === "finance.screen") return calculate("screening", req.input);
