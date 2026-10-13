@@ -79,7 +79,7 @@ export async function snapshot(access: Access) {
       modelConfigured: !!modelConfiguration(config).apiKey,
       tushareConfigured: !!config.TUSHARE_TOKEN,
       hostedDatabaseConfigured: !!config.VITE_CONVEX_URL,
-      runtime: (await localMode()) ? "Local Cloudflare workerd" : "Cloudflare Worker Loader",
+      runtime: "Miniflare workerd sandbox",
     },
   };
 }

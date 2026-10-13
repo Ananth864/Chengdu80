@@ -3,11 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "alchemy dev",
+    "dev": "vp dev",
     "build": "vp build",
     "serve": "vp preview",
-    "deploy": "alchemy deploy",
-    "destroy": "alchemy destroy"
+    "start": "node server/node-entry.mjs"
   },
   "dependencies": {
     "@convex-dev/react-query": "^0.1.0",
@@ -25,25 +24,22 @@
     "@workos/authkit-tanstack-react-start": "catalog:",
     "acorn": "^8.19.0",
     "convex": "catalog:",
-    "effect": "catalog:",
     "lucide-react": "catalog:",
     "miniflare": "4",
     "next-themes": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "sonner": "catalog:",
+    "srvx": "^0.11.20",
     "tailwindcss": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@effect/platform-bun": "4.0.2",
-    "@effect/platform-node": "4.0.2",
     "@tanstack/react-router-devtools": "^1.166.13",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "^6.0.1",
     "@web-starter/config": "workspace:*",
-    "alchemy": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:"

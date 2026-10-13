@@ -12,22 +12,28 @@ const identityKeys =
 const missing = ["VITE_CONVEX_URL", ...identityKeys, "PLATFORM_INTERNAL_KEY"].filter(
   (key) => !env[key],
 );
-if (missing.length) throw new Error("Hosted configuration is incomplete: " + missing.join(", "));
+if (missing.length)
+  throw new Error("Self-hosted configuration is incomplete: " + missing.join(", "));
 console.log(
   env.CD80_DEMO_MODE === "1"
-    ? "Hosted shared demo: login deferred; apps and data are shared by all visitors."
-    : "Hosted account mode: WorkOS required.",
+    ? "Self-hosted shared demo: login deferred; apps and data are shared by all visitors."
+    : "Self-hosted account mode: WorkOS required.",
 );
 const task = process.argv[2] === "dev" ? "dev" : "deploy";
-const child = spawn(
-  "bunx",
-  ["--no-install", "vp", "run", "--filter", "web", task, ...(task === "deploy" ? ["--yes"] : [])],
-  {
-    cwd: platformRoot,
-    env,
-    stdio: "inherit",
-  },
-);
+// `dev` runs the Node build directly for a quick self-hosted smoke test;
+// `deploy` builds and (re)starts the docker-compose stack (app + self-hosted Convex).
+const child =
+  task === "dev"
+    ? spawn("bunx", ["--no-install", "vp", "run", "--filter", "web", "dev"], {
+        cwd: platformRoot,
+        env,
+        stdio: "inherit",
+      })
+    : spawn("docker", ["compose", "up", "-d", "--build"], {
+        cwd: platformRoot,
+        env,
+        stdio: "inherit",
+      });
 process.on("SIGINT", () => child.kill());
 process.on("SIGTERM", () => child.kill());
 child.on("exit", (code) => process.exit(code ?? 1));

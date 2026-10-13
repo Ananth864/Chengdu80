@@ -1,0 +1,68 @@
+version: "3.9"
+
+# Fully self-hosted stack: the app (built from apps/web/Dockerfile) plus an
+# open-source self-hosted Convex backend (https://github.com/get-convex/convex-backend).
+# No Cloudflare, Alchemy, or Convex Cloud account required.
+#
+# First run:
+#   1. docker compose up -d convex-backend convex-dashboard
+#   2. docker compose exec convex-backend ./generate_admin_key.sh
+#      -> copy the printed admin key into CONVEX_SELF_HOSTED_ADMIN_KEY below
+#      (or packages/backend/.env) and re-run `bun scripts/convex.ts push`
+#      pointed at CONVEX_URL=http://localhost:3210 to deploy functions.
+#   3. docker compose up -d web
+#
+# See packages/backend/.env.example for required Convex env values.
+
+services:
+  convex-backend:
+    image: ghcr.io/get-convex/convex-backend:latest
+    restart: unless-stopped
+    stop_grace_period: 10s
+    environment:
+      INSTANCE_NAME: chengdu80
+      INSTANCE_SECRET: ${CONVEX_INSTANCE_SECRET:?set a random 32+ char secret}
+      CONVEX_CLOUD_ORIGIN: ${CONVEX_CLOUD_ORIGIN:-http://127.0.0.1:3210}
+      CONVEX_SITE_ORIGIN: ${CONVEX_SITE_ORIGIN:-http://127.0.0.1:3211}
+      DISABLE_BEACON: "true"
+    ports:
+      - "3210:3210"
+      - "3211:3211"
+    volumes:
+      - convex_data:/convex/data
+
+  convex-dashboard:
+    image: ghcr.io/get-convex/convex-dashboard:latest
+    restart: unless-stopped
+    depends_on:
+      - convex-backend
+    environment:
+      NEXT_PUBLIC_DEPLOYMENT_URL: ${CONVEX_CLOUD_ORIGIN:-http://127.0.0.1:3210}
+    ports:
+      - "6791:6791"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - convex-backend
+    environment:
+      CD80_DEMO_MODE: ${CD80_DEMO_MODE:-1}
+      VITE_DEMO_MODE: ${CD80_DEMO_MODE:-1}
+      VITE_CONVEX_URL: ${VITE_CONVEX_URL:-http://127.0.0.1:3210}
+      MODEL_PROVIDER: ${MODEL_PROVIDER:-glm}
+      GLM_API_KEY: ${GLM_API_KEY:-}
+      GLM_MODEL: ${GLM_MODEL:-GLM-5.3}
+      GLM_BASE_URL: ${GLM_BASE_URL:-https://ai.gitee.com/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-luna}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      PLATFORM_INTERNAL_KEY: ${PLATFORM_INTERNAL_KEY:?set a random key}
+      TUSHARE_TOKEN: ${TUSHARE_TOKEN:-}
+    ports:
+      - "3001:3001"
+
+volumes:
+  convex_data:

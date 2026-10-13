@@ -6,7 +6,6 @@ import {
   type ProductSpec,
   type Verification,
 } from "../lib/contracts";
-import { localMode } from "./settings";
 
 const workerEntry = `import { analyze } from './calculations.js'; function check(v,depth=0){if(depth>30)throw new Error('Result nesting too deep');if(typeof v==='number'&&!Number.isFinite(v))throw new Error('Calculation returned non-finite numbers');if(v&&typeof v==='object')for(const x of Object.values(v))check(x,depth+1);} export default { async fetch(request) { try { const input=await request.json(); const result=await analyze(input); if(result && typeof result.error==='string') throw new Error(result.error); check(result); const text=JSON.stringify(result); if(!text || text.length>200000) throw new Error('Calculation result too large'); return new Response(text,{headers:{'content-type':'application/json'}}); } catch(e) { return Response.json({error:String(e.message||e).slice(0,2000)},{status:422}); } } };`;
 const pool = new Map<string, any>();
@@ -108,68 +107,56 @@ export async function execute(bundle: AppBundle, input: unknown) {
   const key = "runtime-v2:" + (await sourceHash(bundle));
   let stub: { fetch: (request: Request) => Promise<Response> };
   let dispose: (() => Promise<void>) | undefined;
-  if (await localMode()) {
-    if (!pool.has(key)) {
-      // Miniflare runs this untrusted module in workerd, without Node APIs or secrets.
-      const { Miniflare, Log, LogLevel } = await import("miniflare");
-      const instance = new Miniflare({
-        cf: false,
-        compatibilityDate: "2026-07-01",
-        log: new Log(LogLevel.ERROR),
-        modules: [
-          { type: "ESModule", path: "/entry.js", contents: workerEntry },
-          { type: "ESModule", path: "/calculations.js", contents: bundle.files["calculations.js"] },
-        ],
-        modulesRoot: "/",
-        outboundService: () => new Response("Network access denied", { status: 403 }),
-      });
-      let startupTimer: ReturnType<typeof setTimeout> | undefined;
-      try {
-        await Promise.race([
-          instance.ready,
-          new Promise<never>((_, reject) => {
-            startupTimer = setTimeout(() => {
-              void instance.dispose();
-              reject(new Error("Calculation module startup exceeded 3 seconds"));
-            }, 3000);
-          }),
-        ]);
-      } finally {
-        if (startupTimer) clearTimeout(startupTimer);
-      }
-      if (pool.size >= 6) {
-        const [oldKey, old] = pool.entries().next().value!;
-        pool.delete(oldKey);
-        await old.dispose();
-      }
-      pool.set(key, instance);
-    }
-    const instance = pool.get(key);
-    stub = {
-      fetch: async (req) =>
-        instance.dispatchFetch(req.url, {
-          method: req.method,
-          headers: Object.fromEntries(req.headers.entries()),
-          body: await req.text(),
+  // Miniflare runs this untrusted module in workerd, without Node APIs or secrets.
+  // Used unconditionally (local dev, self-hosted deploys, and hosted mode alike) so
+  // the sandbox never depends on a Cloudflare account or Worker Loader binding.
+  if (!pool.has(key)) {
+    const { Miniflare, Log, LogLevel } = await import("miniflare");
+    const instance = new Miniflare({
+      cf: false,
+      compatibilityDate: "2026-07-01",
+      log: new Log(LogLevel.ERROR),
+      modules: [
+        { type: "ESModule", path: "/entry.js", contents: workerEntry },
+        { type: "ESModule", path: "/calculations.js", contents: bundle.files["calculations.js"] },
+      ],
+      modulesRoot: "/",
+      outboundService: () => new Response("Network access denied", { status: 403 }),
+    });
+    let startupTimer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        instance.ready,
+        new Promise<never>((_, reject) => {
+          startupTimer = setTimeout(() => {
+            void instance.dispose();
+            reject(new Error("Calculation module startup exceeded 3 seconds"));
+          }, 3000);
         }),
-    };
-    dispose = async () => {
-      pool.delete(key);
-      await instance.dispose();
-    };
-  } else {
-    const { env } = await import("cloudflare:workers");
-    const loader = (env as any).APP_LOADER;
-    if (!loader) throw new Error("Cloudflare APP_LOADER binding is not configured");
-    const worker = loader.get(key, () => ({
-      compatibilityDate: "2026-09-01",
-      mainModule: "entry.js",
-      modules: { "entry.js": workerEntry, "calculations.js": bundle.files["calculations.js"] },
-      globalOutbound: null,
-      limits: { cpuMs: 50 },
-    }));
-    stub = worker.getEntrypoint();
+      ]);
+    } finally {
+      if (startupTimer) clearTimeout(startupTimer);
+    }
+    if (pool.size >= 6) {
+      const [oldKey, old] = pool.entries().next().value!;
+      pool.delete(oldKey);
+      await old.dispose();
+    }
+    pool.set(key, instance);
   }
+  const instance = pool.get(key);
+  stub = {
+    fetch: async (req) =>
+      instance.dispatchFetch(req.url, {
+        method: req.method,
+        headers: Object.fromEntries(req.headers.entries()),
+        body: await req.text(),
+      }),
+  };
+  dispose = async () => {
+    pool.delete(key);
+    await instance.dispose();
+  };
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const response = await Promise.race([
@@ -259,10 +246,10 @@ export async function verify(bundle: AppBundle, spec: ProductSpec): Promise<Veri
         });
       }
       checks.push({
-        name: "Cloudflare runtime execution",
+        name: "Isolated runtime execution",
         passed: true,
         detail:
-          "Calculation executed in an isolated Worker with no outbound network or provider secrets. Browser rendering still requires preview review.",
+          "Calculation executed in an isolated Miniflare Worker with no outbound network or provider secrets. Browser rendering still requires preview review.",
       });
     } catch (e) {
       checks.push({

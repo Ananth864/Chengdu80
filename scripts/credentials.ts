@@ -18,7 +18,6 @@ for (const [purpose, keys] of Object.entries({
       }
     : {}),
   "Trusted persistence": ["PLATFORM_INTERNAL_KEY"],
-  "Cloudflare deployment": ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"],
   "Optional Tushare": ["TUSHARE_TOKEN"],
 })) {
   const missing = keys.filter((key) => !env[key]);

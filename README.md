@@ -1,6 +1,6 @@
 # Chengdu80 prototype
 
-A financial application studio using the selected [web-starter](https://github.com/adityamiskin/web-starter): Bun, TanStack Start, React, Tailwind 4, shadcn, Convex, WorkOS, TanStack AI, and Cloudflare through Alchemy 2.
+A financial application studio using the selected [web-starter](https://github.com/adityamiskin/web-starter): Bun, TanStack Start, React, Tailwind 4, shadcn, Convex, WorkOS, TanStack AI, deployed as a self-hosted Node server (Docker/docker-compose). Previously deployed to Cloudflare through Alchemy 2; see "Historical Cloudflare deployment" below.
 
 The prototype is deployed at [Chengdu80 studio](https://chengdu80-web-live-ananthacharya-mb7epyiddt4jehqm.chengdu80-1610dcd1.workers.dev). It supports specification review, financial examples, source-code import, isolated calculations, shared app data, and reviewed updates. Login is deferred: all visitors share the same demo workspace. The labelled example builder does not generate arbitrary custom changes.
 
@@ -39,7 +39,7 @@ Portfolio, screening and strategy protocols are provisional feasibility examples
 
 Public docs: `/docs` and `/api/docs`. A bundle contains a manifest and exactly `index.html`, `app.js`, `calculations.js`, `style.css`; alternatively select these files plus `cd80.json` together. Limit: 250 KB. Arbitrary server frameworks, package installation and remote resources are outside this prototype's import format.
 
-Browser apps run in opaque-origin iframes with restrictive CSP and a permission-checked `cd80.call()` bridge. `calculations.js` exports `analyze(input)` and runs in a separate workerd isolate locally, or Worker Loader when hosted, without secrets or network access. Hosted CPU is configured at 50 ms; local execution has a 3-second disposal timeout. Hosted tests confirmed denied egress, CPU-limit rejection and recovery. App sources, releases and shared data are in Convex; Alchemy uses a Durable Object for deployment state.
+Browser apps run in opaque-origin iframes with restrictive CSP and a permission-checked `cd80.call()` bridge. `calculations.js` exports `analyze(input)` and always runs in a separate Miniflare/workerd isolate (no Cloudflare account required), without secrets or network access. CPU is capped and a 3-second disposal timeout applies. App sources, releases and shared data are in Convex.
 
 Releases require syntax, contract, permission, credential-pattern, numerical fixture, boundary, and applicable invalid-input checks. SHA-256 binds checks to exact source. Passing establishes the tested protocol contract, not certification of every additional calculation or the full specification. Review custom logic and rendered previews.
 
@@ -62,9 +62,32 @@ bun scripts/test-hosted.ts https://your-worker.workers.dev # 15 live checks; cre
 
 Lifecycle tests do not modify workspace apps. `bun run examples` regenerates bundles, split source, schemas and protocol instructions. `examples/imported-risk-desk.cd80.json` demonstrates a fourth app with custom imported browser code.
 
-## Hosted setup
+## Self-hosted deployment
 
-See [credentials and hosting](docs/credentials-and-hosting.md), [implementation status](docs/implementation-status.md), and [assumptions](docs/assumptions.md). Use `bun run dev:hosted` or `bun run deploy:hosted` to load workspace credentials and remove local flags.
+```bash
+bun run setup:env             # Creates workspace ../.env with local secrets
+bun run dev:hosted             # Smoke-test the Node build with hosted/demo env
+bun run deploy:hosted          # Builds and starts docker-compose: app + self-hosted Convex
+```
+
+`docker-compose.yml` runs the app (`apps/web/Dockerfile`, a standalone Node server) alongside the
+open-source self-hosted Convex backend (`ghcr.io/get-convex/convex-backend`). No Cloudflare account,
+Alchemy, or Convex Cloud subscription is required. See [docker-compose.yml](docker-compose.yml) for
+first-run setup (generating a Convex admin key, pushing functions).
+
+Self-hosted launchers default to a shared demo without login (`CD80_DEMO_MODE=1`). Set a matching
+`PLATFORM_INTERNAL_KEY` and `CD80_DEMO_MODE=1` in your self-hosted Convex deployment too. All visitors
+share apps and data. WorkOS stays available for account mode when demo mode is explicitly disabled —
+set the `WORKOS_*` variables and point `WORKOS_REDIRECT_URI` at your deployed domain.
+
+For Coolify: point it at this repo with `apps/web/Dockerfile`, add the self-hosted Convex backend as a
+second service (same image/env as in `docker-compose.yml`), and set env vars in its UI. For k3s/Argo CD:
+translate `docker-compose.yml`'s two services into Deployments/Services/Ingress manifests and an
+Argo CD Application pointing at this repo.
+
+### Historical Cloudflare deployment
+
+The prototype was previously deployed at [Chengdu80 studio](https://chengdu80-web-live-ananthacharya-mb7epyiddt4jehqm.chengdu80-1610dcd1.workers.dev) via Cloudflare Workers through Alchemy. That deployment path (`apps/web/alchemy.run.ts`, the `APP_LOADER` Worker Loader binding) has been removed from the codebase in favor of the self-hosted Docker/docker-compose path above; the notes below describe that earlier, now-historical deployment.
 
 Hosted launchers default to a shared demo without login. Set `CD80_DEMO_MODE=1` and matching `PLATFORM_INTERNAL_KEY` in Convex, then generate bindings before deployment. All visitors share apps and data. WorkOS is deferred; the authenticated path remains available when demo mode is explicitly disabled. Dynamic Workers requires a paid Cloudflare account; Alchemy state bootstrap needs additional resource permissions.
 
@@ -78,6 +101,6 @@ The supplied token and Workers upgrade were sufficient. Deployment from China us
 - `apps/web/src/lib`: contracts, protocols, calculations and examples
 - `apps/web/src/server`: generation, providers, verification, runtime and persistence
 - `packages/backend/convex`: hosted account-owned storage
-- `apps/web/alchemy.run.ts`: Cloudflare stack and Worker Loader
+- `apps/web/Dockerfile`, `docker-compose.yml`: self-hosted Node build and deployment stack
 - `scripts`: launchers, credential checks, exports and verification
 - `patches`: persisted TanStack query-stream fix; `bun run test:query-stream` checks closed-stream hydration. GLM malformed JSON gets one format recovery within its existing deadline, checked by `bun run test:glm-contract`.

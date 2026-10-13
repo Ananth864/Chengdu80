@@ -52,3 +52,7 @@ coverage
 .cache
 tmp
 temp
+
+# Self-hosted setup script runtime artifacts
+.selfhosted-web.pid
+.selfhosted-web.log
