@@ -2,7 +2,7 @@ import { appProjectTemplateFiles } from "./app-project-template";
 import type { AppBundle, ProductSpec } from "./contracts";
 import type { BuildRecord } from "./build-plan";
 
-export const financialStarterVersion = "financial-react-v2";
+export const financialStarterVersion = "financial-react-v3";
 export const buildContextPath = "src/lib/build-context.ts";
 export function buildContextSource(record: BuildRecord, name: string) {
   return `// Platform-owned contract context.\nexport const buildContext = ${JSON.stringify({ name, mode: record.plan.mode, capabilities: record.resolvedCapabilities, companies: record.companyIds, industries: record.companyIndustries, theme: record.theme, provider: record.provider })} as const;\n`;

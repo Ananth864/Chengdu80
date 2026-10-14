@@ -4,7 +4,7 @@ Act as the design lead for this application's presentation. The confirmed specif
 
 ## Ground the design in the subject matter
 
-Before writing presentation source, settle the audience and the interface's primary job from the confirmed specification: a cautious individual investor's portfolio review reads differently from an analyst's screening desk. The financial domain, its instruments, its data shapes and its vocabulary are where distinctive choices come from. Design around the fixed financial modules, the mode label (Synthetic demo or Live · Shanghai Stock Exchange) and unavailable metrics honestly; never disguise a gap with decoration.
+Before writing presentation source, settle the audience and the interface's primary job from the confirmed specification: a cautious individual investor's portfolio review reads differently from an analyst's screening desk. The financial domain, its instruments, its data shapes and its vocabulary are where distinctive choices come from. Design around the fixed financial modules, the mode label (Live · Shanghai Stock Exchange) and unavailable metrics honestly; never disguise a gap with decoration.
 
 ## Design principles
 

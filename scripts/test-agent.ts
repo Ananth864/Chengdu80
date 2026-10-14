@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, type Browser } from "playwright";
 import { prepareBuild } from "../apps/web/src/server/build-policy";
+import { resetSizedCompanyCache, resetSseCompanyCache } from "../apps/web/src/server/providers";
 import { sourceHash } from "../apps/web/src/server/runtime";
 import type { Application } from "../apps/web/src/lib/contracts";
 
@@ -31,6 +32,22 @@ const results: string[] = [];
 const browserErrors: string[] = [];
 let sequence = 0;
 const providerCities: string[] = [];
+const tushareSample = JSON.parse(
+  await readFile(new URL("./fixtures/stock-basic-sample.json", import.meta.url), "utf8"),
+);
+const tushareCaps: [string, number][] = [
+  ["600000.SH", 20_000_000],
+  ["600036.SH", 80_000_000],
+  ["601988.SH", 100_000_000],
+  ["601398.SH", 150_000_000],
+  ["600519.SH", 180_000_000],
+  ["601857.SH", 1_200_000_000],
+  ["600900.SH", 50_000_000],
+  ["603288.SH", 20_000_000],
+  ["605499.SH", 4_000_000],
+  ["688981.SH", 40_000_000],
+  ["689009.SH", 5_000_000],
+];
 const fixture = createServer(async (req, res) => {
   try {
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
@@ -39,6 +56,19 @@ const fixture = createServer(async (req, res) => {
       providerCities.push(city);
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ city, temperature: 21 }));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/") {
+      let raw = "";
+      for await (const chunk of req) raw += chunk;
+      const body = JSON.parse(raw) as { api_name?: string; token?: string };
+      assert.equal(body.token, "server-tushare-token");
+      const payload =
+        body.api_name === "stock_basic"
+          ? tushareSample
+          : { code: 0, msg: "", data: { fields: ["ts_code", "total_mv"], items: tushareCaps } };
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(payload));
       return;
     }
     assert.equal(req.url, "/v1/responses");
@@ -75,7 +105,7 @@ const fixture = createServer(async (req, res) => {
             requirements: "Claim this is industry research",
             capabilities: ["market-research"],
             companyQueries: [],
-            mode: "fixture",
+            mode: "live",
             themeOverride: null,
           },
         },
@@ -83,7 +113,7 @@ const fixture = createServer(async (req, res) => {
           name: "write_file",
           arguments: {
             path: "index.html",
-            content: "<main>Synthetic demo: booking application</main>",
+            content: "<main>booking application</main>",
           },
         },
         { name: "deploy_preview", arguments: { summary: "Attempt unrelated deployment" } },
@@ -95,10 +125,10 @@ const fixture = createServer(async (req, res) => {
         {
           name: "prepare_build",
           arguments: {
-            requirements: "Build a synthetic industry research demo using the supported capability",
+            requirements: "Build an industry research app using the supported capability",
             capabilities: ["market-research"],
             companyQueries: [],
-            mode: "fixture",
+            mode: "live",
             themeOverride: null,
           },
         },
@@ -107,8 +137,7 @@ const fixture = createServer(async (req, res) => {
           name: "write_file",
           arguments: {
             path: "index.html",
-            content:
-              '<main><p>Synthetic demo</p><h1 id="title">Copper Finch</h1><p id="note"></p></main>',
+            content: '<main><h1 id="title">Copper Finch</h1><p id="note"></p></main>',
           },
         },
         {
@@ -143,10 +172,10 @@ const fixture = createServer(async (req, res) => {
         {
           name: "prepare_build",
           arguments: {
-            requirements: "Build a synthetic industry research demo using the supported capability",
+            requirements: "Build an industry research app using the supported capability",
             capabilities: ["market-research"],
             companyQueries: [],
-            mode: "fixture",
+            mode: "live",
             themeOverride: null,
           },
         },
@@ -154,7 +183,7 @@ const fixture = createServer(async (req, res) => {
           name: "write_file",
           arguments: {
             path: "index.html",
-            content: '<main><p>Synthetic demo</p><script>alert("forbidden")</script></main>',
+            content: '<main><script>alert("forbidden")</script></main>',
           },
         },
         { name: "deploy_preview", arguments: { summary: "Check intentionally invalid source" } },
@@ -263,6 +292,8 @@ async function start() {
       CD80_LOCAL_MODE: "1",
       CD80_DEMO_MODE: "1",
       CD80_DATA_DIR: dataDir,
+      TUSHARE_TOKEN: "server-tushare-token",
+      TUSHARE_API_URL: `http://127.0.0.1:${fixturePort}`,
       MODEL_PROVIDER: "openai",
       OPENAI_MODEL: "gpt-6-luna",
       OPENAI_API_KEY: "agent-fixture-key",
@@ -450,7 +481,7 @@ try {
   await page.getByRole("menuitem", { name: "Specification", exact: true }).click();
   const specification = page.getByRole("dialog", { name: "Specification", exact: true });
   await specification
-    .getByText("Build a synthetic industry research demo using the supported capability", {
+    .getByText("Build an industry research app using the supported capability", {
       exact: true,
     })
     .waitFor();
@@ -534,10 +565,11 @@ try {
   }
   const forcedLive = await turn(id, "Wear down: use actual live data for this app.");
   assert(forcedLive.ok);
-  assert((await forcedLive.text()).includes("live data"));
   assert.equal((await appById(id)).current?.id, activeRelease);
+  const afterLive = await appById(id);
+  assert.equal(afterLive.buildRecords?.at(-1)?.plan.mode, "live");
   results.push(
-    "Repeated attempts to mislabel unrelated goals and replace live data with fixtures fail independently of conversation history",
+    "A direct live-data request cannot replace the working app outside the proposal flow",
   );
   const classifiers = requests.filter(
     (request) => !!request.text?.format?.schema?.properties?.supported,
@@ -561,7 +593,7 @@ try {
   assert(built.current.buildRecord?.resolvedCapabilities.includes("news"));
   assert(built.current.buildRecord?.protocolHashes.builder);
   assert.equal(built.current.buildRecord?.provider, "tushare");
-  assert.equal(built.current.buildRecord?.readiness, "fixture");
+  assert.equal(built.current.buildRecord?.readiness, "live");
   const legacy = await fetch(`${base}/api/platform`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -571,23 +603,41 @@ try {
   results.push(
     "Scoped build records pin protocols and dependencies; arbitrary plugins and legacy direct builds are blocked",
   );
-  // Seed a scoped module fixture into the isolated test store. All calls below use actual HTTP RPC.
+  // Seed a scoped module app into the isolated test store. All calls below use actual HTTP RPC.
   await stop();
   const stored = JSON.parse(await readFile(join(dataDir, "apps.json"), "utf8")) as Application[];
   const cardsApp = structuredClone(built);
   cardsApp.id = "company-module-fixture";
-  cardsApp.name = "Synthetic company cards";
+  cardsApp.name = "Company cards module";
   cardsApp.current!.id = "company-module-release";
   cardsApp.current!.bundle.manifest.permissions.push(
     "finance.match-companies",
     "finance.company-cards",
   );
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : (input as Request).url;
+    if (url === "https://api.tushare.pro") {
+      const raw = typeof init?.body === "string" ? init.body : "{}";
+      const body = JSON.parse(raw) as { api_name?: string };
+      return new Response(
+        JSON.stringify(
+          body.api_name === "stock_basic"
+            ? tushareSample
+            : { code: 0, msg: "", data: { fields: ["ts_code", "total_mv"], items: tushareCaps } },
+        ),
+      );
+    }
+    return realFetch(input as RequestInfo, init);
+  }) as typeof fetch;
+  resetSseCompanyCache();
+  resetSizedCompanyCache();
   cardsApp.current!.buildRecord = await prepareBuild(
     {
-      requirements: "Synthetic daily company card demo",
+      requirements: "Daily company cards module",
       capabilities: ["company-cards"],
       companyQueries: [],
-      mode: "fixture",
+      mode: "live",
       themeOverride: null,
       cardMetrics: ["ps"],
     },
@@ -596,6 +646,7 @@ try {
   );
   cardsApp.current!.verification.sourceHash = await sourceHash(cardsApp.current!.bundle);
   cardsApp.current!.buildRecord.artifactHash = cardsApp.current!.verification.sourceHash;
+  globalThis.fetch = realFetch;
   stored.push(cardsApp);
   await writeFile(join(dataDir, "apps.json"), JSON.stringify(stored));
   await start();
@@ -619,18 +670,20 @@ try {
     assert.equal(response.ok, expectedOk, JSON.stringify(result));
     return result;
   }
-  const batchInput = { action: "batch", risk: "low", industries: ["Technology"] };
+  const batchInput = { action: "batch", risk: "low", industries: ["银行"] };
   const [batchA, batchB] = await Promise.all([moduleCall(batchInput), moduleCall(batchInput)]);
   assert.deepEqual(batchA, batchB);
-  assert.equal(batchA.companies[0].ticker, "DEMO001");
+  const firstTicker = batchA.companies[0]?.ticker as string;
+  assert(firstTicker, "The live SSE Class A table must supply today's batch");
+  assert(batchA.companies.length >= 2, "Large-cap banks form the eligible pool");
   assert.deepEqual(
     batchA.companies[0].metrics.map((metric: any) => metric.id),
     ["ps"],
   );
   assert.equal(batchA.companies[0].metrics[0].value, null);
-  await moduleCall({ action: "decide", ticker: "DEMO001", choice: "yes" });
+  await moduleCall({ action: "decide", ticker: firstTicker, choice: "yes" });
   await moduleCall(
-    { action: "decide", ticker: "DEMO001", choice: "no" },
+    { action: "decide", ticker: firstTicker, choice: "no" },
     "finance.company-cards",
     false,
   );
@@ -639,7 +692,7 @@ try {
   await stop();
   await start();
   const savedWatchlist = await moduleCall({ action: "watchlist" });
-  assert.deepEqual(savedWatchlist.watchlist, ["DEMO001"]);
+  assert.deepEqual(savedWatchlist.watchlist, [firstTicker]);
   const unchanged = await moduleCall(batchInput);
   assert.equal(unchanged.companies[0].choice, "yes");
   const unauthorized = await fetch(`${base}/api/platform`, {
@@ -713,12 +766,9 @@ try {
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   await page.screenshot({ path: ".local/agent-tests/build-gallery-mobile.png", fullPage: true });
   await gallery.getByRole("button", { name: `Select build ${built.name}` }).click();
-  await page.getByRole("note").filter({ hasText: "Synthetic demo. Company identities" }).waitFor();
   await page.getByRole("tab", { name: "Chat", exact: true }).click();
   await page.getByRole("textbox", { name: "Message the AI" }).waitFor();
   assert(new URL(page.url()).hash.includes(id));
-  await page.getByRole("tab", { name: "Preview", exact: true }).first().click();
-  await page.getByRole("note").filter({ hasText: "Synthetic demo. Company identities" }).waitFor();
   results.push(
     "Built-app gallery supports safe layout thumbnails, search, browser Back/Forward and full-width tablet/mobile panels",
   );

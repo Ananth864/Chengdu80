@@ -235,16 +235,6 @@ export async function startAgentTurn(
     const prior =
       app.current?.buildRecord ??
       [...(app.buildRecords ?? [])].reverse().find((record) => record.readiness !== "blocked");
-    const fixtureAuthorized =
-      prior?.plan.mode === "fixture" ||
-      (app.conversation ?? []).some(
-        (message) =>
-          message.role === "user" &&
-          message.parts.some(
-            (part) =>
-              part.type === "text" && /fixture|synthetic|demo|演示|模拟|示例/i.test(part.content),
-          ),
-      );
     const selected = prior ? selectedProtocols(prior.resolvedCapabilities) : [];
     async function requirePlan() {
       controller.signal.throwIfAborted();
@@ -319,23 +309,23 @@ export async function startAgentTurn(
       toolDefinition({
         name: "lookup_companies",
         description:
-          "Fuzzy-search companies by ticker, name, full registered name, English name or industry. Live mode covers Shanghai Stock Exchange Class A listed companies only, through the platform-managed Tushare token; fixture mode covers the synthetic DEMO001/DEMO002/DEMO003 table. Returns scored matches only.",
-        inputSchema: z.object({ mode: z.enum(["fixture", "live"]), query: z.string().max(100) }),
-      }).server(async ({ mode, query }) => {
-        const table = await managedCompanies(mode);
+          "Fuzzy-search real Shanghai Stock Exchange Class A listed companies by ticker, name, full registered name, English name or industry, through the platform-managed Tushare token. Returns scored matches only. There is no demo or synthetic company table. If the company the user named has no convincing match, treat it as unsupported: reject it, then search again with related terms (industry, alternative spelling, parent company) and propose the closest real companies as alternatives.",
+        inputSchema: z.object({ query: z.string().max(100) }),
+      }).server(async ({ query }) => {
+        const table = await managedCompanies();
         if (!table.available)
           return {
             available: false,
-            synthetic: mode === "fixture",
+            synthetic: false,
             reason: table.reason,
             companies: [],
           };
         const ranked = rankCompanyMatches(query, table.companies);
         return {
           version: table.version,
-          ...(table.synthetic ? {} : { asOf: table.asOf }),
+          asOf: table.asOf,
           available: true,
-          synthetic: table.synthetic,
+          synthetic: false,
           threshold: companyMatchThreshold,
           totalMatched: ranked.length,
           companies: ranked.slice(0, companyMatchLimit),
@@ -344,14 +334,10 @@ export async function startAgentTurn(
       toolDefinition({
         name: "propose_build",
         description:
-          "Present the build plan for the user's confirmation before any build or edit turn: business capabilities, data mode, companies and the assumptions you would build on. End the turn immediately after this call; prepare_build only works in a later turn after the user explicitly agrees.",
+          "Present the build plan for the user's confirmation before any build or edit turn: business capabilities, companies and the assumptions you would build on. Every build uses live mode on real Shanghai Stock Exchange Class A data; never propose demo or synthetic data. End the turn immediately after this call; prepare_build only works in a later turn after the user explicitly agrees.",
         inputSchema: buildPlanSchema.extend({ summary: z.string().min(1).max(2000) }),
       }).server(async (proposal) => {
         buildRecord = undefined;
-        if (proposal.mode === "fixture" && !fixtureAuthorized)
-          throw new Error(
-            "Ask whether the user wants a clearly labeled synthetic demo. Live data must not silently become fixtures.",
-          );
         await mutateApp(access, appId, (latest) => {
           controller.signal.throwIfAborted();
           if (latest.agentTurn?.id !== user.id || latest.agentTurn.status !== "running")
@@ -377,10 +363,6 @@ export async function startAgentTurn(
         inputSchema: buildPlanSchema,
       }).server(async (plan) => {
         buildRecord = undefined;
-        if (plan.mode === "fixture" && !fixtureAuthorized)
-          throw new Error(
-            "Ask whether the user wants a clearly labeled synthetic demo. Live data must not silently become fixtures.",
-          );
         const proposal = (await findApp(access, appId)).buildProposal;
         if (!proposal)
           throw new Error(
@@ -441,15 +423,12 @@ export async function startAgentTurn(
                 designNotice:
                   "The frontend design protocol loads with an approved build record, not a blocked one.",
               }),
-          ...(record.readiness === "live"
+          ...(record.readiness !== "blocked"
             ? {
                 liveNotice:
                   "Live build: market data comes from the platform's verified Tushare feed (SSE Class A daily data). Sections the feed does not cover must display as unavailable (暂无数据), never estimates. No buy/sell recommendations.",
               }
-            : {
-                fixtureNotice:
-                  "Synthetic demo: approved React/shadcn starter and fixed company modules; live financial outputs remain unavailable.",
-              }),
+            : {}),
         };
       }),
       toolDefinition({
@@ -698,13 +677,13 @@ export async function startAgentTurn(
         ...Object.values(agentProtocols),
         ...selected,
         `Available financial capability IDs: ${JSON.stringify(Object.keys((await import("./build-policy")).capabilityDependencies))}. Current internal build record: ${JSON.stringify(prior ?? null)}. Current draft requirements for the Requirements tab: ${JSON.stringify(app.requirements ?? null)}.`,
-        "Every build or edit is two-phase and needs two user approvals: call propose_build with the plan and assumptions and end the turn; after the user confirms, call prepare_build and build; deploy_preview stages a pending preview that the user reviews and activates from the Preview panel. Never state that an app is live or provide its link before the user approves the preview. Write every user-facing message in plain product language — say what you are building, what you are checking, and what the user can do next; never expose internal terms (capabilities, build records, proposals, releases, bundles, staging, deployment, endpoints, schemas, validations, fixture/synthetic/live modes, protocols) in chat text, only in tool inputs and the build record. Before fixture edits use prepare_build; read its selected protocols and apply the returned frontend design guidance (designGuidance) when writing presentation source. Preserve the platform module's mode label: Synthetic demo on fixture builds, Live · Shanghai Stock Exchange on live builds. New React apps use fixed financial modules in the protected root route. Fixture apps may use storage.read and storage.write. Legacy fixtures also preserve finance.calculate. Matching builds may also use finance.match-companies; company-card builds may also use finance.company-cards. Use these fixed platform modules for matching, daily batches, decisions and watchlists; do not recreate their logic. Metric selection is pinned in prepare_build.cardMetrics, with omitted selection using defaults. Demo risk selection is an explicit synthetic profile, not a completed expert assessment. Market APIs, LLM explanations and plugins are not enabled for this first scoped flow. Keep unsupported financial outputs unavailable. Fixture company table uses synthetic DEMO001/DEMO002/DEMO003 companies. Live companies come from lookup_companies in live mode: Shanghai Stock Exchange Class A listed companies only, scored fuzzy matches. When the user writes a company name, an exact match is not required. If the top match clearly captures the user's intent (high score, one clear winner), state the assumed company and ticker and proceed with that assumption. If several companies match equally, ask the user to choose. If the company does not exist in the list, tell the user the platform currently supports only SSE Class A companies. Live company data uses the platform-managed Tushare token; users never provide API keys.",
+        "Every build or edit is two-phase and needs two user approvals: call propose_build with the plan and assumptions and end the turn; after the user confirms, call prepare_build and build; deploy_preview stages a pending preview that the user reviews and activates from the Preview panel. Never state that an app is live or provide its link before the user approves the preview. Write every user-facing message in plain product language — say what you are building, what you are checking, and what the user can do next; never expose internal terms (capabilities, build records, proposals, releases, bundles, staging, deployment, endpoints, schemas, validations, data modes, protocols) in chat text, only in tool inputs and the build record. Before edits use prepare_build; read its selected protocols and apply the returned frontend design guidance (designGuidance) when writing presentation source. Preserve the platform module's Live · Shanghai Stock Exchange label. New React apps use fixed financial modules in the protected root route. Apps may use storage.read and storage.write. Legacy apps also preserve finance.calculate. Matching builds may also use finance.match-companies; company-card builds may also use finance.company-cards. Use these fixed platform modules for matching, daily batches, decisions and watchlists; do not recreate their logic. Metric selection is pinned in prepare_build.cardMetrics, with omitted selection using defaults. The risk profile is the user's self-selected comfort level, not a completed expert assessment. Market APIs, LLM explanations and plugins are not enabled for this first scoped flow. Keep unsupported financial outputs unavailable. Every build runs on real market data in live mode through the platform-managed Tushare token; users never provide API keys. There is no demo or synthetic dataset: never offer, propose, or ask whether the user wants demo, practice or synthetic data — build only on the real company table. Companies come from lookup_companies: Shanghai Stock Exchange Class A listed companies only, scored fuzzy matches. When the user writes a company name, an exact match is not required. If the top match clearly captures the user's intent (high score, one clear winner), state the assumed company and ticker and proceed with that assumption. If several companies match equally, ask the user to choose. If the company does not exist in the list, reject it: tell the user it is outside the Shanghai Stock Exchange Class A scope, then search lookup_companies again with related terms (industry, alternative spellings, similar businesses) and propose the closest real companies as alternatives, letting the user pick. Never invent a company and never substitute one silently.",
         projectFormat
           ? "This app is an actual TanStack Start React/TypeScript checkout with installed libraries and local shadcn Base UI source. Call read_starter_reference to inspect exact SDK types and toolkit imports. The platform renders confirmed financial modules in its protected root. Customize src/App.tsx and presentation components only after prepare_build approves this turn. Package/build configuration, SDK, financial modules and shadcn source are immutable. Use installed shadcn components; do not recreate controls or financial logic. Use the default theme; src/app.css changes require a recorded theme override. No direct provider/LLM/network calls, generic plugins or package installation. Permissions and src/lib/build-context.ts are derived from the contract. Keep missing financial outputs unavailable. deploy_preview uses platform-owned build/type checks and financial render checks in Linux isolation."
           : "Legacy workspace: index.html is a body fragment; app.js is self-contained JavaScript with top-level await; style.css supplies styling; calculations.js exports analyze(input); cd80.json is the manifest. Preserve the source format and pure calculation scaffold. No imports, npm, CDN, fetch or external resources. Call cd80.ready() after rendering; privileged calls use cd80.call(name,input).",
         projectFormat
           ? `Current presentation specification: ${JSON.stringify(spec)}. SDK permissions are derived by the platform from the feasible financial contract.`
-          : `Current scaffold specification: ${JSON.stringify(spec)}. Legacy transport contract: ${scaffoldInstructions(spec)}. Transport capability definitions: ${JSON.stringify(scopedTransportContracts)}. Only the fixture permissions above are enabled.`,
+          : `Current scaffold specification: ${JSON.stringify(spec)}. Legacy transport contract: ${scaffoldInstructions(spec)}. Transport capability definitions: ${JSON.stringify(scopedTransportContracts)}. Only the transport permissions above are enabled.`,
       ],
     });
     async function* tracked(): AsyncGenerator<StreamChunk> {

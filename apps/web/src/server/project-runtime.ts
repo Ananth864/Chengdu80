@@ -67,15 +67,14 @@ export async function verifyProject(
       const preview = await startPreview(workspace);
       const response = await readPreviewResponse(preview, "/");
       const html = await response.text();
-      const live = record?.plan.mode === "live";
-      const expectedLabel = live ? "Live · Shanghai Stock Exchange" : "Synthetic demo";
+      const expectedLabel = "Live · Shanghai Stock Exchange";
       if (
         response.status !== 200 ||
         !html.includes(expectedLabel) ||
         !html.includes(financialStarterVersion)
       )
         throw new Error(
-          `The compiled app did not render its fixed financial modules and ${live ? "live source" : "synthetic"} label.`,
+          "The compiled app did not render its fixed financial modules and live source label.",
         );
       const output = await readProjectFiles(workspace);
       for (const [name, source] of Object.entries(bundle.files))

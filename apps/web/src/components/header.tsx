@@ -17,7 +17,7 @@ export default function Header() {
     <header className="border-b">
       <div className="mx-auto flex min-h-14 w-full max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-2">
         <nav className="flex items-center gap-1 text-sm">
-          <Link to="/" className="mr-3 font-medium">
+          <Link to="/" hash="view=builds" className="mr-3 font-medium">
             Linus
           </Link>
           {links.map(({ to, label }) => {

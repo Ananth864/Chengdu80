@@ -33,7 +33,7 @@ const capabilityDetails: Record<BusinessCapability, string> = {
   "price-target":
     "A price target published by an outside source, always shown with who published it, when, in which currency, and over what time frame. The app never predicts prices itself.",
   "risk-assessment":
-    "A proper expert questionnaire is not available yet, so simple demo profiles stand in.",
+    "A proper expert questionnaire is not available yet; the risk profile is your own comfort choice, not an expert assessment.",
   "industry-preference": "Industries come from the platform's checked company list.",
   "risk-industry-matching":
     "Low risk is paired with larger companies, medium with mid-sized, and high with smaller ones — then narrowed to your chosen industries.",
@@ -54,17 +54,11 @@ export function workflowGraph(
     {
       id: "data",
       kind: "data",
-      label: record
-        ? record.plan.mode === "fixture"
-          ? "Demo sample data"
-          : "Live platform data"
-        : "Your inputs",
+      label: record ? "Live platform data" : "Your inputs",
       detail: record
-        ? record.plan.mode === "fixture"
-          ? "Sample company data for the demo — not live market prices."
-          : `Company list ${record.companyTableVersion}, data from ${
-              record.provider === "tushare" ? "Tushare" : record.provider
-            }.`
+        ? `Live market data from ${
+            record.provider === "tushare" ? "Tushare" : record.provider
+          }, using the platform's checked company list.`
         : "These are confirmed when the app is built.",
       inputs: [
         spec.inputs.join("; "),

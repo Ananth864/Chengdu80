@@ -16,7 +16,6 @@ import { buildPlanSchema, type BusinessCapability, type BuildRecord } from "../l
 import type { AppBundle } from "../lib/contracts";
 import { sseACompanies } from "./providers";
 import {
-  type Company,
   type CompanyLookupInput,
   type LiveCompany,
   rankCompanyMatches,
@@ -53,31 +52,7 @@ export function resolveCapabilities(selected: BusinessCapability[]) {
 export function selectedProtocols(selected: BusinessCapability[]) {
   return [...new Set(resolveCapabilities(selected).map((id) => capabilityProtocols[id]))];
 }
-export const fixtureCompanies: Company[] = [
-  {
-    name: "Demo Technology Large",
-    ticker: "DEMO001",
-    industry: "Technology",
-    marketCapRmb: 100000000000,
-    size: "large",
-  },
-  {
-    name: "Demo Technology Medium",
-    ticker: "DEMO002",
-    industry: "Technology",
-    marketCapRmb: 10000000000,
-    size: "medium",
-  },
-  {
-    name: "Demo Technology Small",
-    ticker: "DEMO003",
-    industry: "Technology",
-    marketCapRmb: 1000000000,
-    size: "small",
-  },
-];
 export type ManagedCompanyTable =
-  | { available: true; synthetic: true; version: string; companies: Company[] }
   | {
       available: true;
       synthetic: false;
@@ -92,16 +67,10 @@ export type ManagedCompanyTable =
       companies: [];
       reason: string;
     };
-// Live company identity comes from the platform's Tushare token (SSE Class A
-// listed shares). App users cannot replace this table.
-export async function managedCompanies(mode: "fixture" | "live"): Promise<ManagedCompanyTable> {
-  if (mode === "fixture")
-    return {
-      version: "synthetic-companies-v1",
-      companies: fixtureCompanies,
-      available: true,
-      synthetic: true,
-    };
+// Company identity comes from the platform's Tushare token (SSE Class A
+// listed shares). App users cannot replace this table, and no synthetic
+// fallback exists: when the feed is unavailable, company lookups fail.
+export async function managedCompanies(): Promise<ManagedCompanyTable> {
   const table = await sseACompanies();
   if (!table.available)
     return {
@@ -156,7 +125,7 @@ export async function prepareBuild(
 ): Promise<BuildRecord> {
   const plan = buildPlanSchema.parse(raw);
   const resolvedCapabilities = resolveCapabilities(plan.capabilities);
-  const table = await managedCompanies(plan.mode);
+  const table = await managedCompanies();
   const blockers: string[] = [...additionalBlockers];
   if (!table.available) blockers.push(`Live company lookup is unavailable: ${table.reason}`);
   const companyIds: string[] = [];
@@ -170,7 +139,7 @@ export async function prepareBuild(
     blockers.push(
       resolved.ambiguous
         ? `Ambiguous company: ${query}. Ask which ticker is intended.`
-        : `Company is outside the SSE Class A scope: ${query}. The platform currently supports Shanghai Stock Exchange Class A companies only.`,
+        : `Company is outside the SSE Class A scope: ${query}. Reject this company and propose a different real Shanghai Stock Exchange Class A company instead (lookup_companies); never offer demo or synthetic data.`,
     );
   }
   if (resolvedCapabilities.includes("historical-analysis") && !plan.companyQueries.length)
@@ -246,10 +215,4 @@ export function validateScopedBundle(bundle: AppBundle, record: BuildRecord) {
     throw new Error(
       "This build can use only its approved platform modules and app storage. The market-data capability, arbitrary plugins and LLM research are not wired yet.",
     );
-  if (
-    !project &&
-    record.readiness === "fixture" &&
-    !bundle.files["index.html"].includes("Synthetic demo")
-  )
-    throw new Error('Fixture applications must visibly include the label "Synthetic demo".');
 }

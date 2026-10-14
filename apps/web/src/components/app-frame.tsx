@@ -110,15 +110,6 @@ function LegacyAppFrame({ app, release }: { app: Application; release: Release }
   }, [nonce, release.bundle]);
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      {release.buildRecord?.plan.mode === "fixture" && (
-        <p
-          role="note"
-          className="shrink-0 border-b bg-accent px-4 py-2 text-xs text-accent-foreground"
-        >
-          Synthetic demo. Company identities and values are examples; live market data is not
-          connected.
-        </p>
-      )}
       {!ready && !error && (
         <p role="status" className="text-sm text-muted-foreground">
           Loading preview…

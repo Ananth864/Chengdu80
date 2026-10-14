@@ -1,4 +1,4 @@
-import { fixtureCompanies, requireBuild, validateScopedBundle } from "./build-policy";
+import { requireBuild, validateScopedBundle } from "./build-policy";
 import {
   companyCardsInputSchema,
   companyModuleVersion,
@@ -460,18 +460,9 @@ export async function dispatch(access: Access, raw: unknown) {
     );
   }
   if (["finance.match-companies", "finance.company-cards"].includes(req.capability)) {
-    const mode = release.buildRecord.plan.mode;
-    // Fixture builds serve the synthetic demo table; live builds serve the real
-    // SSE Class A identity table joined with daily_basic market caps.
-    const table =
-      mode === "fixture"
-        ? {
-            available: true as const,
-            synthetic: true as const,
-            version: "synthetic-companies-v1",
-            companies: fixtureCompanies,
-          }
-        : await sizedSseCompanies();
+    // All builds serve the real SSE Class A identity table joined with
+    // daily_basic market caps; there is no synthetic fallback.
+    const table = await sizedSseCompanies();
     if (!table.available) throw new Error(`Company data is unavailable right now. ${table.reason}`);
     if (req.capability === "finance.match-companies")
       return { ...matchCompanies(table.companies, req.input), synthetic: table.synthetic };

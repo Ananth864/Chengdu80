@@ -71,7 +71,7 @@ const record = {
     requirements: "Demo matching app",
     capabilities: ["risk-industry-matching", "company-cards"],
     companyQueries: ["Demo Technology Large"],
-    mode: "fixture" as const,
+    mode: "live" as const,
     themeOverride: null,
   },
   resolvedCapabilities: [
@@ -87,7 +87,7 @@ const record = {
   provider: "tushare" as const,
   moduleVersions: {},
   theme: "starter-default",
-  readiness: "fixture" as const,
+  readiness: "live" as const,
   blockers: [],
 } satisfies BuildRecord;
 const graph = workflowGraph(spec, initialRequirements(), record);

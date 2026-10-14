@@ -157,6 +157,26 @@ export function Studio() {
       setPreviewCollapsed(false);
     }
   }, [release?.id]);
+  const lastWorkflowRecord = useRef<{ appId: string | null; recordId: string | null }>({
+    appId: null,
+    recordId: null,
+  });
+  useEffect(() => {
+    const appId = app?.id ?? null;
+    const recordId = app?.buildRecords?.at(-1)?.id ?? null;
+    const seen = lastWorkflowRecord.current;
+    // Selecting an app seeds from its existing build so opening an old chat
+    // never yanks the tab; a build landing during the session switches the
+    // workspace to the workflow view, mirroring the preview panel above.
+    if (appId !== seen.appId) {
+      lastWorkflowRecord.current = { appId, recordId };
+      return;
+    }
+    if (recordId && recordId !== seen.recordId) {
+      lastWorkflowRecord.current = { appId, recordId };
+      setTab("workflow");
+    }
+  }, [app?.id, app?.buildRecords]);
   const workspaceBundle = app?.workspace ?? release?.bundle;
   const refreshVersion = useRef(0);
   async function refresh() {
@@ -924,7 +944,7 @@ export function Studio() {
                 <TableCell>
                   {snapshot?.status.tushareConfigured
                     ? "Tushare token configured · live daily prices"
-                    : "Tushare token not set · synthetic demos only"}
+                    : "Tushare token not set · live data unavailable"}
                 </TableCell>
               </TableRow>
             </TableBody>
@@ -1019,11 +1039,7 @@ function SpecView({ release }: { release: Release }) {
             ))}
           </ul>
         </section>
-        <p>
-          {record.plan.mode === "fixture"
-            ? "Synthetic demo. Live market data and financial outputs are not available in this build."
-            : "Uses the platform's configured market data."}
-        </p>
+        <p>Uses the platform's configured market data.</p>
         <p>Theme: {record.theme}</p>
         <Button
           variant="outline"

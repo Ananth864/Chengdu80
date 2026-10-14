@@ -17,7 +17,10 @@ export const buildPlanSchema = z
     requirements: z.string().trim().min(10).max(4000),
     capabilities: z.array(z.enum(businessCapabilities)).min(1).max(8),
     companyQueries: z.array(z.string().trim().min(1).max(100)).max(20),
-    mode: z.enum(["fixture", "live"]),
+    mode: z.enum(["live"], {
+      error: () =>
+        "The platform builds only in live mode on real Shanghai Stock Exchange Class A data. Never propose fixture or synthetic demo data; if the requested company is unsupported, reject it and propose a different real company instead.",
+    }),
     themeOverride: z.string().trim().min(1).max(300).nullable(),
     cardMetrics: metricSelectionSchema.optional(),
   })
@@ -39,7 +42,7 @@ export type BuildRecord = {
   provider: "tushare";
   moduleVersions: Record<string, string>;
   theme: string;
-  readiness: "fixture" | "live" | "blocked";
+  readiness: "live" | "blocked";
   blockers: string[];
   artifactHash?: string;
 };

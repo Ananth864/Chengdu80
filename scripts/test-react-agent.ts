@@ -9,24 +9,51 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { chromium } from "playwright";
 import { protocols, type Application } from "../apps/web/src/lib/contracts";
+import { readFile } from "node:fs/promises";
 
 let sequence = 0;
 const spec = {
   ...protocols[0]!.defaultSpec,
   name: "React company cards",
-  purpose: "A synthetic company-card demo using fixed platform modules",
+  purpose: "A daily company-card app using fixed platform modules",
 };
 const plan = {
   requirements: spec.purpose,
   capabilities: ["company-cards"],
   companyQueries: [],
-  mode: "fixture",
+  mode: "live",
   themeOverride: null,
 };
+const tushareSample = JSON.parse(
+  await readFile(new URL("./fixtures/stock-basic-sample.json", import.meta.url), "utf8"),
+);
+const tushareCaps: [string, number][] = [
+  ["600000.SH", 20_000_000],
+  ["600036.SH", 80_000_000],
+  ["601988.SH", 100_000_000],
+  ["601398.SH", 150_000_000],
+  ["600519.SH", 180_000_000],
+  ["601857.SH", 1_200_000_000],
+  ["600900.SH", 50_000_000],
+  ["603288.SH", 20_000_000],
+  ["605499.SH", 4_000_000],
+  ["688981.SH", 40_000_000],
+  ["689009.SH", 5_000_000],
+];
 const fixture = createServer(async (request, response) => {
   try {
     let raw = "";
     for await (const chunk of request) raw += chunk;
+    if (request.url === "/") {
+      const tushare = JSON.parse(raw) as { api_name?: string };
+      const payload =
+        tushare.api_name === "stock_basic"
+          ? tushareSample
+          : { code: 0, msg: "", data: { fields: ["ts_code", "total_mv"], items: tushareCaps } };
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify(payload));
+      return;
+    }
     const body = JSON.parse(raw);
     assert.equal(request.headers.authorization, "Bearer react-fixture-key");
     const properties = body.text?.format?.schema?.properties ?? {};
@@ -48,7 +75,7 @@ const fixture = createServer(async (request, response) => {
         reason: "Only the company-card demo is supported.",
       });
     else if (
-      prompt.includes("Build the synthetic") ||
+      prompt.includes("Build the daily company-card demo.") ||
       prompt.includes("broken change") ||
       prompt.includes("booking application")
     ) {
@@ -83,7 +110,7 @@ const fixture = createServer(async (request, response) => {
           : []),
         {
           name: "deploy_preview",
-          arguments: { summary: broken ? "Intentional invalid source" : "Synthetic company cards" },
+          arguments: { summary: broken ? "Intentional invalid source" : "Company cards module" },
         },
       ];
       tool = steps[calls];
@@ -91,7 +118,7 @@ const fixture = createServer(async (request, response) => {
         ? "The broken update was rejected. Your accepted app is unchanged."
         : unsupported
           ? "The booking request was blocked."
-          : "The synthetic company-card app is ready.";
+          : "The company-card app is ready.";
     }
     const id = `fixture_${++sequence}`;
     const item = tool
@@ -211,6 +238,10 @@ const docker = spawn(
     "OPENAI_API_KEY=react-fixture-key",
     "-e",
     `OPENAI_BASE_URL=http://host.lima.internal:${address.port}/v1`,
+    "-e",
+    "TUSHARE_TOKEN=react-tushare-token",
+    "-e",
+    `TUSHARE_API_URL=http://host.lima.internal:${address.port}`,
     process.env.CD80_PROJECT_TEST_IMAGE ?? "chengdu80-financial-tests",
     "apps/web/server/node-entry.mjs",
   ],
@@ -260,10 +291,7 @@ try {
     "I remember the discussion before building. Codename Copper Finch.",
   );
   assert.equal((await snapshot()).apps[0]?.current, null);
-  await send(
-    "Build the synthetic daily company-card demo.",
-    "The synthetic company-card app is ready.",
-  );
+  await send("Build the daily company-card demo.", "The company-card app is ready.");
   const built = (await snapshot()).apps[0]!;
   assert(built.current?.verification.passed, JSON.stringify(built.preview?.verification.checks));
   assert.equal(built.current.bundle.manifest.schemaVersion, 3);
@@ -288,7 +316,7 @@ try {
     "PASS fixed financial modules and non-build discussion persist across browser reload",
   );
   await send(
-    "Stage a broken change to the synthetic company-card demo.",
+    "Stage a broken change to the company-card demo.",
     "The broken update was rejected. Your accepted app is unchanged.",
   );
   assert.equal((await snapshot()).apps[0]!.current?.id, acceptedId);
@@ -305,7 +333,7 @@ try {
   await gallery.getByRole("button", { name: "Select build React company cards" }).waitFor();
   const thumbnail = gallery.locator('iframe[title="React company cards layout thumbnail"]');
   assert.equal(await thumbnail.getAttribute("sandbox"), "");
-  assert((await thumbnail.getAttribute("srcdoc"))?.includes("Synthetic demo"));
+  assert((await thumbnail.getAttribute("srcdoc"))?.includes("Live · Shanghai Stock Exchange"));
   await mkdir(".local/agent-tests", { recursive: true });
   await page.screenshot({ path: ".local/agent-tests/react-gallery.png", fullPage: true });
   await gallery.getByRole("button", { name: "Select build React company cards" }).click();

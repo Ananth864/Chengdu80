@@ -327,9 +327,7 @@ export function DesignReview({
                   )}
                   {record.readiness === "live"
                     ? "Feasible — live market data (Tushare)"
-                    : record.readiness === "fixture"
-                      ? "Feasible — synthetic demo build"
-                      : "Blocked"}
+                    : "Blocked"}
                 </span>
                 <span className="text-xs font-normal text-muted-foreground">
                   Record {record.revision} · {new Date(record.createdAt).toLocaleString()}
@@ -355,10 +353,7 @@ export function DesignReview({
                 </ul>
               )}
               <p className="text-xs text-muted-foreground">
-                Data:{" "}
-                {record.plan.mode === "fixture"
-                  ? "synthetic demo"
-                  : `live via ${record.provider} (pending)`}
+                Data: live from Tushare
                 {record.companyIds.length ? ` · companies ${record.companyIds.join(", ")}` : ""}
               </p>
             </CardContent>
@@ -402,7 +397,8 @@ export function WorkflowView({ app }: { app: Application }) {
             ? "Based on your app as it was last built."
             : "Based on the plan so far — nothing has been built yet."}{" "}
           A plain-language summary to help you review the idea. Inside the app these steps may be
-          combined or reordered, so the working app itself is always the final word.
+          combined or reordered, so the working app itself is always the final word. Select any item
+          to see what it does.
         </p>
       </header>
       <div
@@ -420,8 +416,13 @@ export function WorkflowView({ app }: { app: Application }) {
             <Card size="sm" className="min-w-0">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-sm">
-                  <Icon className="size-4 text-muted-foreground" />
-                  {title}
+                  <Icon className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0">
+                    <span className="mr-1.5 text-muted-foreground" aria-hidden="true">
+                      {index + 1}·
+                    </span>
+                    {title}
+                  </span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-1.5">

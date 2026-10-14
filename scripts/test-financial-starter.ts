@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { protocols, bundleSchema } from "../apps/web/src/lib/contracts";
 import { prepareBuild, validateScopedBundle } from "../apps/web/src/server/build-policy";
 import {
@@ -8,17 +9,29 @@ import {
   buildContextSource,
 } from "../apps/web/src/lib/financial-starter";
 import { inspectProject } from "../apps/web/src/server/project-runtime";
+import { resetSizedCompanyCache, resetSseCompanyCache } from "../apps/web/src/server/providers";
+
+// prepare_build verifies the live Tushare feed; stub it with the sample payload.
+const tushareSample = JSON.parse(
+  await readFile(new URL("./fixtures/stock-basic-sample.json", import.meta.url), "utf8"),
+);
+const originalFetch = globalThis.fetch;
+process.env.TUSHARE_TOKEN = "test-token";
+globalThis.fetch = (async () =>
+  new Response(JSON.stringify(tushareSample))) as unknown as typeof fetch;
+resetSseCompanyCache();
+resetSizedCompanyCache();
 
 const spec = { ...protocols[0]!.defaultSpec, name: "Company card demo" };
 const record = await prepareBuild(
   {
-    requirements: "A synthetic daily company-card demo",
+    requirements: "A daily company-card app on live SSE Class A data",
     capabilities: ["company-cards"],
     companyQueries: [],
-    mode: "fixture",
+    mode: "live",
     themeOverride: null,
   },
-  "fixture-turn",
+  "starter-turn",
   1,
 );
 const bundle = projectStarterBundle(spec);
@@ -77,7 +90,9 @@ for (const permission of [
 assert(!bundle.files["src/lib/cd80.ts"]!.includes("tushare"));
 assert(!bundle.files["src/lib/cd80.ts"]!.includes("ai.explain"));
 assert(bundle.files["src/routes/__root.tsx"]!.includes("<FinancialDemo"));
-assert(bundle.files["src/components/financial-app.tsx"]!.includes("Synthetic demo"));
+assert(
+  bundle.files["src/components/financial-app.tsx"]!.includes("Live · Shanghai Stock Exchange"),
+);
 assert(bundle.files["src/components/financial-app.tsx"]!.includes("@/components/ui/card"));
 const themed = await prepareBuild(
   { ...record.plan, themeOverride: "Use a warm terracotta accent" },
@@ -88,6 +103,7 @@ const customized = structuredClone(bundle);
 customized.files[buildContextPath] = buildContextSource(themed, spec.name);
 customized.files["src/app.css"] = ":root { --primary: #9f4d37; }";
 validateScopedBundle(customized, themed);
+globalThis.fetch = originalFetch;
 console.log(
   "PASS React starter, fixed SDK/modules/shadcn/configuration, fake-check rejection, financial permissions and contract-controlled theme overrides",
 );

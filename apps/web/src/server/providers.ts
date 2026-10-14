@@ -25,6 +25,10 @@ function compactDay(date: Date) {
   ).padStart(2, "0")}`;
 }
 const stockBasicFields = ["ts_code", "name", "fullname", "enname", "industry"] as const;
+// Isolated tests point TUSHARE_API_URL at a local stub; production uses the official endpoint.
+function tushareEndpoint(config: { TUSHARE_API_URL?: string }) {
+  return config.TUSHARE_API_URL || "https://api.tushare.pro";
+}
 // Cells arrive as parsed JSON; only scalar text is meaningful company data.
 function cellText(value: unknown): string {
   if (typeof value === "string") return value;
@@ -84,7 +88,7 @@ export async function sseACompanies(options?: { fetch?: typeof fetch }): Promise
     };
   try {
     const doFetch = options?.fetch ?? fetch;
-    const response = await doFetch("https://api.tushare.pro", {
+    const response = await doFetch(tushareEndpoint(config), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -180,10 +184,10 @@ export function resetSizedCompanyCache() {
   sizedCompanyCache = undefined;
 }
 // Latest trading day's caps: walk back over weekends and holidays.
-async function dailyBasicCaps(token: string, doFetch: typeof fetch) {
+async function dailyBasicCaps(token: string, base: string, doFetch: typeof fetch) {
   for (let back = 0; back < 10; back++) {
     const day = new Date(Date.now() - back * 24 * 60 * 60 * 1000);
-    const response = await doFetch("https://api.tushare.pro", {
+    const response = await doFetch(base, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -230,7 +234,11 @@ export async function sizedSseCompanies(options?: { fetch?: typeof fetch }): Pro
     const doFetch = options?.fetch ?? fetch;
     const base = await sseACompanies(options);
     if (!base.available) return { available: false, synthetic: false, reason: base.reason };
-    const { caps, asOf } = await dailyBasicCaps(config.TUSHARE_TOKEN, doFetch);
+    const { caps, asOf } = await dailyBasicCaps(
+      config.TUSHARE_TOKEN,
+      tushareEndpoint(config),
+      doFetch,
+    );
     const companies = base.companies.flatMap((company) => {
       const marketCapRmb = caps.get(company.ticker);
       return marketCapRmb === undefined
@@ -265,14 +273,14 @@ export async function sizedSseCompanies(options?: { fetch?: typeof fetch }): Pro
   }
 }
 // Tushare caps rows per call; walk backwards in ~4-year windows for full history.
-async function tushareDaily(token: string, tsCode: string) {
+async function tushareDaily(token: string, base: string, tsCode: string) {
   const rows: Array<{ date: string; close: number }> = [];
   const seen = new Set<string>();
   let end = new Date();
   for (let window = 0; window < 14; window++) {
     const start = new Date(end);
     start.setFullYear(start.getFullYear() - 4);
-    const response = await fetch("https://api.tushare.pro", {
+    const response = await fetch(base, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -363,7 +371,7 @@ export async function prices(input: unknown) {
   const tsCode = normalizeSseATicker(symbol);
   if (!tsCode || !isSseATicker(tsCode))
     throw new Error("The platform currently supports SSE Class A companies only.");
-  const rows = await tushareDaily(config.TUSHARE_TOKEN, tsCode);
+  const rows = await tushareDaily(config.TUSHARE_TOKEN, tushareEndpoint(config), tsCode);
   return {
     symbol: tsCode,
     prices: rows,

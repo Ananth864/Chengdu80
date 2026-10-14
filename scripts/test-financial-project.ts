@@ -1,6 +1,6 @@
 // Run inside the Linux test image. Only temporary fixture data and fake credentials are used.
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { prepareBuild } from "../apps/web/src/server/build-policy";
 import {
@@ -19,6 +19,7 @@ import {
   createPreviewSession,
   resolvePreviewSession,
 } from "../apps/web/src/server/preview-session";
+import { resetSizedCompanyCache, resetSseCompanyCache } from "../apps/web/src/server/providers";
 import type { Application } from "../apps/web/src/lib/contracts";
 
 assert.equal(
@@ -28,30 +29,41 @@ assert.equal(
 );
 process.env.CD80_LOCAL_MODE = "1";
 process.env.CD80_SANDBOX_SENTINEL = "fixture-secret-must-stay-outside-project";
+// prepare_build verifies the live Tushare feed; stub it with the sample payload.
+const tushareSample = JSON.parse(
+  await readFile(new URL("./fixtures/stock-basic-sample.json", import.meta.url), "utf8"),
+);
+process.env.TUSHARE_TOKEN = "test-token";
+const originalFetch = globalThis.fetch;
+globalThis.fetch = (async () =>
+  new Response(JSON.stringify(tushareSample))) as unknown as typeof fetch;
+resetSseCompanyCache();
+resetSizedCompanyCache();
 const directory = process.env.CD80_DATA_DIR;
 assert(directory, "Supply an isolated fixture data directory");
 await mkdir(directory, { recursive: true });
 const access = { ownerId: "local-prototype-owner", accessToken: null };
 let app = (await dispatch(access, {
   action: "create-workspace",
-  prompt: "Synthetic company card demo",
+  prompt: "Company card demo",
 })) as Application;
 const spec = {
   ...app.spec,
   name: "React company cards",
-  purpose: "A synthetic company-card demo using fixed platform modules",
+  purpose: "A daily company-card app using fixed platform modules",
 };
 const record = await prepareBuild(
   {
     requirements: spec.purpose,
     capabilities: ["company-cards"],
     companyQueries: [],
-    mode: "fixture",
+    mode: "live",
     themeOverride: null,
   },
   "react-fixture-turn",
   1,
 );
+globalThis.fetch = originalFetch;
 const bundle = app.workspace!;
 assert.equal(bundle.manifest.schemaVersion, 3);
 bundle.manifest.name = spec.name;
@@ -84,7 +96,7 @@ assert(
   JSON.stringify(release.verification.checks.filter((c) => !c.passed)),
 );
 release.buildRecord = { ...record, artifactHash: release.verification.sourceHash };
-assert(release.verification.thumbnail?.html.includes("Synthetic demo"));
+assert(release.verification.thumbnail?.html.includes("Live · Shanghai Stock Exchange"));
 assert(release.verification.thumbnail?.css.includes("--primary"));
 app = await findApp(access, app.id);
 assert(await applyRelease(app, release));

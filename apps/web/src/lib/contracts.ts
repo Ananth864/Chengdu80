@@ -1,4 +1,4 @@
-import type { BuildRecord, BusinessCapability } from "./build-plan";
+import type { BuildPlan, BuildRecord, BusinessCapability } from "./build-plan";
 import type { UIMessage } from "@tanstack/ai";
 import { z } from "zod";
 import { isProjectFile } from "./project-files";
@@ -194,7 +194,7 @@ export type Application = {
   buildProposal?: {
     turnId: string;
     createdAt: string;
-    mode: "fixture" | "live";
+    mode: BuildPlan["mode"];
     capabilities: BusinessCapability[];
     companyQueries: string[];
     summary: string;

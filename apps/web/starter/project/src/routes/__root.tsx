@@ -13,7 +13,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: buildContext.name },
       {
         name: "description",
-        content: "Synthetic financial demo. Live Tushare market data is not connected.",
+        content: "Financial workspace with real Shanghai Stock Exchange Class A companies.",
       },
     ],
     links: [{ rel: "stylesheet", href: appCss }],

@@ -46,25 +46,21 @@ const historyMetrics = [
 
 export function FinancialDemo() {
   const capabilities: readonly string[] = buildContext.capabilities;
-  const live = buildContext.mode === "live";
   return (
     <main
-      data-financial-module-version="financial-react-v2"
+      data-financial-module-version="financial-react-v3"
       className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-10"
     >
       <header className="space-y-3">
-        <Badge variant="secondary">
-          {live ? "Live · Shanghai Stock Exchange" : "Synthetic demo"}
-        </Badge>
+        <Badge variant="secondary">Live · Shanghai Stock Exchange</Badge>
         <h1 className="text-3xl font-semibold tracking-tight">{buildContext.name}</h1>
         <p className="text-muted-foreground">
-          {live
-            ? "Explore the confirmed financial workflow with real Shanghai Stock Exchange Class A companies. Expert assessments are unavailable."
-            : "Explore the confirmed financial workflow. Live data and expert assessments are unavailable."}
+          Explore the confirmed financial workflow with real Shanghai Stock Exchange Class A
+          companies. Expert assessments are unavailable.
         </p>
       </header>
       {capabilities.includes("risk-industry-matching") && (
-        <CompanySelection cards={capabilities.includes("company-cards")} live={live} />
+        <CompanySelection cards={capabilities.includes("company-cards")} />
       )}
       {capabilities.includes("historical-analysis") && (
         <section aria-label="Historical analysis" className="space-y-4">
@@ -101,7 +97,7 @@ export function FinancialDemo() {
   );
 }
 
-function CompanySelection({ cards, live }: { cards: boolean; live: boolean }) {
+function CompanySelection({ cards }: { cards: boolean }) {
   const client = useQueryClient();
   const industries: readonly string[] = buildContext.industries.length
     ? buildContext.industries
@@ -149,16 +145,12 @@ function CompanySelection({ cards, live }: { cards: boolean; live: boolean }) {
         <CardHeader>
           <CardTitle>Find companies for your profile</CardTitle>
           <CardDescription>
-            {live
-              ? "Your risk comfort chooses the company size band. It is not an expert risk assessment."
-              : "This synthetic risk choice demonstrates the mapping. It is not an expert risk assessment."}
+            Your risk comfort chooses the company size band. It is not an expert risk assessment.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <Field>
-            <FieldLabel htmlFor="risk-profile">
-              {live ? "Risk profile" : "Synthetic risk profile"}
-            </FieldLabel>
+            <FieldLabel htmlFor="risk-profile">Risk profile</FieldLabel>
             <Select
               value={criteria.risk}
               disabled={!!saved.data?.criteria || started}
@@ -203,9 +195,7 @@ function CompanySelection({ cards, live }: { cards: boolean; live: boolean }) {
               </SelectContent>
             </Select>
             <p className="text-sm text-muted-foreground">
-              {live
-                ? "Industries come from the live Shanghai Stock Exchange company table."
-                : "The synthetic table contains Technology examples."}
+              Industries come from the live Shanghai Stock Exchange company table.
             </p>
           </Field>
         </CardContent>
