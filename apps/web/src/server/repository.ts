@@ -1,3 +1,4 @@
+import { eraseConversation } from "@web-starter/backend/convex/lib/chat_state";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@web-starter/backend/convex/_generated/api";
 import type { Application } from "../lib/contracts";
@@ -42,10 +43,11 @@ async function localStore<T>(
   queue = task.catch(() => {});
   return task;
 }
-export async function listApps(access: Access): Promise<Application[]> {
+export async function listApps(access: Access, includeMessages = true): Promise<Application[]> {
   if (await localMode())
     return localStore((apps) => apps.filter((a) => a.ownerId === access.ownerId));
   const c = await client(access);
+  if (!includeMessages) return c.query(api.platform.studioApps, {});
   if (await demoMode()) {
     const config = await settings();
     if (!config.PLATFORM_INTERNAL_KEY) throw new Error("PLATFORM_INTERNAL_KEY is missing");
@@ -54,14 +56,27 @@ export async function listApps(access: Access): Promise<Application[]> {
   return c.query(api.platform.list, {});
 }
 export async function findApp(access: Access, id: string): Promise<Application> {
-  const app = (await listApps(access)).find((a) => a.id === id);
+  let app: Application | null | undefined;
+  if (await localMode()) app = (await listApps(access)).find((a) => a.id === id);
+  else {
+    const c = await client(access);
+    if (await demoMode()) {
+      const config = await settings();
+      if (!config.PLATFORM_INTERNAL_KEY) throw new Error("PLATFORM_INTERNAL_KEY is missing");
+      app = await c.action(api.platform.getDemo, {
+        appId: id,
+        serverKey: config.PLATFORM_INTERNAL_KEY,
+      });
+    } else app = await c.query(api.platform.get, { appId: id });
+  }
   if (!app) throw new Error("Application not found or access denied");
   return app;
 }
 export async function saveApp(access: Access, app: Application, expectedRevision: number | null) {
   if (app.ownerId !== access.ownerId) throw new Error("Account ownership mismatch");
-  const serialized = JSON.stringify(app);
-  if (serialized.length > 700000) throw new Error("Application exceeds prototype storage limit");
+  const { conversation: _conversation, ...applicationData } = app;
+  if (JSON.stringify(applicationData).length > 700000)
+    throw new Error("Application exceeds prototype storage limit");
   if (await localMode())
     return localStore((apps) => {
       const i = apps.findIndex((a) => a.id === app.id);
@@ -76,11 +91,13 @@ export async function saveApp(access: Access, app: Application, expectedRevision
   const config = await settings();
   if (!config.PLATFORM_INTERNAL_KEY)
     throw new Error("PLATFORM_INTERNAL_KEY is missing from hosted configuration");
+  // TanStack AI uses Date instances for message timestamps. Match the JSON
+  // persistence contract before passing values to Convex's stricter serializer.
+  const persistedApp: Application = JSON.parse(JSON.stringify(app));
   return (await client(access)).action(
     (await demoMode()) ? api.platform.saveDemo : api.platform.save,
     {
-      // Chat messages contain Date instances; persist the same JSON shape as local storage.
-      app: JSON.parse(serialized),
+      app: persistedApp,
       expectedRevision,
       serverKey: config.PLATFORM_INTERNAL_KEY,
     },
@@ -90,12 +107,34 @@ export function event(app: Application, message: string) {
   app.events = [{ at: new Date().toISOString(), message }, ...app.events].slice(0, 50);
 }
 
+export async function checkpointMessages(
+  access: Access,
+  appId: string,
+  turnId: string,
+  messages: NonNullable<Application["conversation"]>,
+) {
+  if (await localMode())
+    return mutateApp(access, appId, (app) => {
+      if (app.agentTurn?.id !== turnId || app.agentTurn.status !== "running")
+        throw new Error("Conversation turn is no longer active");
+      app.conversation = messages;
+    });
+  const config = await settings();
+  if (!config.PLATFORM_INTERNAL_KEY) throw new Error("PLATFORM_INTERNAL_KEY is missing");
+  return (await client(access)).mutation(api.platform.checkpointMessages, {
+    appId,
+    turnId,
+    messagesJson: JSON.stringify(messages),
+    serverKey: config.PLATFORM_INTERNAL_KEY,
+  });
+}
+
 // Retry field merges after another writer (title, tools, or app data) advances the revision.
 export async function mutateApp(
   access: Access,
   id: string,
   change: (app: Application) => void | Promise<void>,
-) {
+): Promise<Application> {
   for (let attempt = 0; attempt < 5; attempt++) {
     const app = await findApp(access, id);
     await change(app);
@@ -111,4 +150,29 @@ export async function mutateApp(
     }
   }
   throw new Error("Application changed during this operation.");
+}
+
+export async function deleteChat(access: Access, appId: string, expectedRevision: number) {
+  if (await localMode())
+    return localStore((apps) => {
+      const index = apps.findIndex((app) => app.id === appId && app.ownerId === access.ownerId);
+      if (index < 0) throw new Error("Application not found or access denied");
+      const app = apps[index]!;
+      if (app.revision !== expectedRevision)
+        throw new Error("Application changed. Refresh and try again.");
+      const retained = eraseConversation(app);
+      if (retained) {
+        retained.revision++;
+        apps[index] = retained;
+      } else apps.splice(index, 1);
+      return { deleted: true, retainedBuild: !!retained, appId };
+    }, true);
+  const config = await settings();
+  if (!config.PLATFORM_INTERNAL_KEY) throw new Error("PLATFORM_INTERNAL_KEY is missing");
+  return (await client(access)).action(api.platform.deleteChat, {
+    appId,
+    expectedRevision,
+    serverKey: config.PLATFORM_INTERNAL_KEY,
+    demo: await demoMode(),
+  });
 }

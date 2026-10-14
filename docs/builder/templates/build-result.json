@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "proposal-1",
+  "exampleOnly": true,
+  "contractId": "demo-company-cards-001",
+  "contractRevision": 1,
+  "contractHash": null,
+  "status": "blocked",
+  "resolvedVersions": {
+    "starter": null,
+    "theme": null,
+    "protocols": {}
+  },
+  "artifact": null,
+  "verification": {
+    "passed": false,
+    "checks": []
+  },
+  "preview": null,
+  "dataMode": "fixture",
+  "blockers": ["Template inputs have not been completed or validated"],
+  "scopeChanges": [],
+  "resolvedTheme": {
+    "id": null,
+    "version": null,
+    "overrideApplied": false
+  },
+  "customImplementations": [],
+  "activated": false
+}

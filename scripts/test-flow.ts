@@ -46,140 +46,33 @@ try {
     }
   }
   assert.ok(ready, "Test server failed to start");
-  const spec = { ...protocols[0]!.defaultSpec, name: "Lifecycle test" };
-  let app = await request({ action: "create", spec, mode: "sample" });
-  assert.ok(app.current?.verification.passed);
-  assert.equal(app.preview, null);
-  const first = app.current.id;
-  await request({
-    action: "rpc",
-    appId: app.id,
-    releaseId: first,
-    capability: "storage.write",
-    input: { key: "note", value: "active" },
-  });
-  pass("Verified generation activates immediately and can save data");
-  const inputs = { ...app.data.inputs, cash: 12345 };
-  await request({
-    action: "rpc",
-    appId: app.id,
-    releaseId: first,
-    capability: "storage.write",
-    input: { key: "inputs", value: inputs },
-  });
-  app = await request({
-    action: "update",
-    appId: app.id,
-    request: "Improve the explanation layout",
-    mode: "sample",
-  });
-  assert.notEqual(app.current.id, first);
-  assert.equal(app.preview, null);
-  assert.deepEqual(app.data.inputs, inputs);
-  assert.equal(app.history[0].id, first);
-  pass("Verified update activates atomically and retains data and previous source");
-  const result = await request({
-    action: "rpc",
-    appId: app.id,
-    releaseId: app.current.id,
-    capability: "finance.calculate",
-    input: inputs,
-  });
-  assert.ok(result.totalValue > 0);
-  pass("Updated app remains executable");
-  const provenance = await request({
-    action: "rpc",
-    appId: app.id,
-    releaseId: app.current.id,
-    capability: "storage.read",
-    input: { key: "_provenance" },
-  });
-  assert.equal(provenance.provider, "User-entered inputs");
-  await request(
-    {
-      action: "rpc",
-      appId: app.id,
-      releaseId: app.current.id,
-      capability: "storage.write",
-      input: { key: "_provenance", value: { synthetic: false, provider: "Fabricated provider" } },
-    },
-    false,
-  );
-  pass("Input edits reset provenance and app code cannot falsify platform metadata");
-  const goodId = app.current.id;
-  const broken = sampleBundle(spec);
-  broken.files["calculations.js"] =
-    "export function analyze(){return {totalValue:0,profit:0,returnPct:0,concentrationPct:0};}";
-  app = await request({ action: "import", appId: app.id, bundle: broken });
-  assert.equal(app.preview.verification.passed, false);
-  const failedPreviewId = app.preview.id;
-  await request(
-    {
-      action: "rpc",
-      appId: app.id,
-      releaseId: failedPreviewId,
-      capability: "storage.write",
-      input: { key: "note", value: "bad" },
-    },
-    false,
-  );
-  pass("Failed source cannot write to shared storage");
-  app = await request({ action: "reverify", appId: app.id, releaseId: failedPreviewId });
-  assert.equal(app.preview.id, failedPreviewId);
-  assert.equal(app.preview.verification.passed, false);
-  assert.equal(app.current.id, goodId);
-  assert.deepEqual(app.data.inputs, inputs);
-  await request({ action: "reverify", appId: app.id, releaseId: "stale-preview" }, false);
-  pass(
-    "Reverification cannot approve wrong source or a stale preview and preserves the release and data",
-  );
-  await request({ action: "accept", appId: app.id, releaseId: app.preview.id }, false);
-  assert.equal(app.current.id, goodId);
-  pass("Incorrect imported calculations block acceptance and preserve working release");
-  const custom = sampleBundle(spec);
-  custom.files["app.js"] +=
-    "\ndocument.getElementById('chart-title').textContent='Imported custom portfolio view';";
-  app = await request({ action: "import", appId: app.id, bundle: custom });
-  assert.equal(app.current.origin, "import");
-  assert.equal(app.current.verification.passed, true);
-  assert.equal(app.preview, null);
-  assert.ok(app.current.bundle.files["app.js"].includes("Imported custom portfolio view"));
-  assert.deepEqual(app.data.inputs, inputs);
-  pass("External source import verifies, releases, and retains app data");
-  await request(
-    {
-      action: "rpc",
-      appId: app.id,
-      releaseId: app.current.id,
-      capability: "secrets.read",
-      input: {},
-    },
-    false,
-  );
-  await request(
-    {
-      action: "rpc",
-      appId: "unknown-app",
-      releaseId: app.current.id,
-      capability: "storage.read",
-      input: { key: "inputs" },
-    },
-    false,
-  );
-  pass("Undeclared capability and unknown app access fail closed");
-  const r = await fetch(endpoint, {
-    method: "POST",
-    headers: { "content-type": "application/json", origin: "https://outside.invalid" },
-    body: JSON.stringify({ action: "seed" }),
-  });
-  assert.equal(r.status, 403);
-  await request({ action: "clarify", prompt: "Automatically buy stocks and place orders" }, false);
-  pass("Cross-origin writes and unsupported execution requests are rejected");
-  const docs = await fetch(`http://127.0.0.1:${port}/api/docs`);
-  assert.ok(docs.ok);
-  assert.equal(((await docs.json()) as { version: number }).version, 1);
-  pass("Public source contract and protocol documentation are available");
-  console.log(`${passed} release-lifecycle integration checks passed.`);
+  const before = await request();
+  const spec = { ...protocols[0]!.defaultSpec, name: "Bypass test" };
+  const bundle = sampleBundle(spec);
+  const attempts = [
+    { action: "create", spec, mode: "sample" },
+    { action: "seed" },
+    { action: "import", spec, bundle },
+    { action: "update", appId: "missing", request: "Build an unrelated app", mode: "model" },
+    { action: "clarify", prompt: "Build an unrelated app" },
+    { action: "test-provider", provider: "tushare" },
+    { action: "load-prices", appId: "missing", provider: "alpha-demo" },
+    { action: "accept", appId: "missing", releaseId: "missing" },
+    { action: "reverify", appId: "missing", releaseId: "missing" },
+  ];
+  for (let round = 0; round < 3; round++) {
+    for (const attempt of attempts) {
+      const rejected = await request(attempt, false);
+      assert(rejected.error.includes("internal capability contract"));
+    }
+  }
+  const after = await request();
+  assert.deepEqual(after.apps, before.apps);
+  pass("Repeated legacy API calls cannot bypass the capability contract or activate a release");
+  const unknown = await request({ action: "build-anything" }, false);
+  assert(unknown.error);
+  pass("Unknown platform actions fail closed");
+  console.log(`${passed} scoped API flow checks passed, including 27 bypass attempts.`);
 } finally {
   if (server.pid) process.kill(-server.pid, "SIGTERM");
   await new Promise((r) => setTimeout(r, 500));

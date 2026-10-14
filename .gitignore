@@ -56,3 +56,8 @@ temp
 # Self-hosted setup script runtime artifacts
 .selfhosted-web.pid
 .selfhosted-web.log
+
+# Local research scratch files
+.scratch
+
+/apps/web/starter/project/src/routeTree.gen.ts

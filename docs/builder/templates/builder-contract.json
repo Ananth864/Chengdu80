@@ -1,0 +1,170 @@
+{
+  "schemaVersion": "proposal-1",
+  "exampleOnly": true,
+  "contractId": "demo-company-cards-001",
+  "revision": 1,
+  "submission": {
+    "status": "internal-template",
+    "submittedAt": null,
+    "confirmedSpecificationReference": "Internal conversational requirement summary",
+    "contractHash": null
+  },
+  "purpose": "Daily company cards with optional company and industry research",
+  "capabilities": [
+    {
+      "id": "risk-assessment",
+      "protocolVersion": "TODO",
+      "readiness": "template"
+    },
+    {
+      "id": "industry-preference",
+      "protocolVersion": "TODO",
+      "readiness": "template"
+    },
+    {
+      "id": "risk-industry-matching",
+      "protocolVersion": "TODO",
+      "readiness": "template",
+      "moduleVersion": "company-capabilities-v1"
+    },
+    {
+      "id": "company-cards",
+      "protocolVersion": "TODO",
+      "readiness": "template",
+      "moduleVersion": "company-capabilities-v1"
+    },
+    {
+      "id": "market-research",
+      "protocolVersion": "TODO",
+      "readiness": "template"
+    },
+    {
+      "id": "news",
+      "protocolVersion": "TODO",
+      "readiness": "template"
+    }
+  ],
+  "dependencies": {
+    "risk-industry-matching": ["risk-assessment", "industry-preference"],
+    "company-cards": ["risk-industry-matching"],
+    "company-research-detail": ["market-research"],
+    "market-research": ["news"]
+  },
+  "configuration": {
+    "riskToSize": {
+      "low": "large",
+      "medium": "medium",
+      "high": "small"
+    },
+    "industrySelection": [],
+    "companyUniverseReference": "TODO",
+    "cardsPerDay": 5,
+    "timezone": "Asia/Shanghai",
+    "metricMenu": ["pe", "ps", "dividendYield", "revenueGrowth", "roe", "interestCoverage"],
+    "defaultMetrics": ["pe", "dividendYield", "roe", "interestCoverage"],
+    "selectedMetrics": null,
+    "researchMode": "company-and-industry",
+    "newsMode": "once-per-research-run",
+    "yesAction": "add-to-watchlist",
+    "noAction": "dismiss",
+    "brokerageIntegration": false
+  },
+  "starter": {
+    "id": "web-starter",
+    "version": "TODO",
+    "uiLibrary": "shadcn-base-ui",
+    "theme": "starter-default",
+    "themeVersion": "TODO",
+    "languages": ["en", "zh-CN"],
+    "requiredModules": [
+      "company-lookup",
+      "risk-assessment",
+      "industry-preference",
+      "company-matching",
+      "daily-batch",
+      "company-card",
+      "financial-metrics",
+      "research-detail",
+      "watchlist",
+      "language-switcher"
+    ],
+    "repository": "https://github.com/adityamiskin/web-starter",
+    "framework": "tanstack-start",
+    "aiIntegration": "existing-tanstack-ai",
+    "reuseExistingLibraries": true,
+    "themeOverride": null,
+    "themePolicy": "Use the default theme unless themeOverride is explicit in the internal build record",
+    "customImplementationPolicy": "Only for documented gaps in existing starter modules or libraries",
+    "platformThemeVersion": "chengdu80-platform-v2"
+  },
+  "data": {
+    "mode": "fixture",
+    "adapters": [
+      {
+        "id": "wind",
+        "product": "TODO",
+        "readiness": "template",
+        "requiredFieldsReference": "TODO"
+      }
+    ],
+    "fixturesReference": "TODO",
+    "evidenceRequired": true,
+    "missingValuePolicy": "unavailable-with-reason",
+    "officialProvider": "wind",
+    "allowAutomaticProviderFallback": false,
+    "ownership": "platform-managed",
+    "companyTableConfiguredBy": "product-team"
+  },
+  "allowedVariations": [
+    "layout",
+    "approved-copy",
+    "metric-selection",
+    "selected-industries",
+    "supported-options",
+    "explicit-contract-theme-override"
+  ],
+  "invariants": [
+    "reuse-starter-modules",
+    "preserve-protocol-calculations",
+    "no-fabricated-financial-values",
+    "no-automatic-risk-profile-change",
+    "no-brokerage-execution"
+  ],
+  "acceptanceCriteria": [
+    "dependency-closure",
+    "stable-daily-batch",
+    "risk-and-industry-filtering",
+    "watchlist-persistence",
+    "explicit-metric-selection-replaces-defaults",
+    "bilingual-figure-parity",
+    "prepared-evidence-only-chat",
+    "verified-working-link-on-success",
+    "starter-and-shadcn-library-reuse",
+    "reuse-existing-ai-integration",
+    "resolved-theme-matches-contract",
+    "requested-companies-valid-in-table",
+    "wind-production-provider",
+    "plain-language-specification-review"
+  ],
+  "feasibility": {
+    "status": "pending",
+    "blockers": ["expert-protocols", "company-csv", "provider-field-validation"],
+    "supportedAlternatives": [],
+    "companyValidation": {
+      "universeReference": "TODO",
+      "requireTableMembership": true,
+      "ambiguousIdentityPolicy": "ask-user",
+      "unknownCompanyPolicy": "unsupported-with-alternative"
+    }
+  },
+  "deployment": {
+    "approvalRequired": false,
+    "preserveExistingRelease": true,
+    "activateAfterVerification": true
+  },
+  "userReview": {
+    "level": "high-level",
+    "include": ["outcomes", "user-journey", "material-limitations"],
+    "technicalDetailsInContractOnly": true
+  }
+}

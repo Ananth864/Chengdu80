@@ -18,8 +18,10 @@ export function OverviewContent() {
   return (
     <>
       <p>
-        Use these protocols and APIs in any coding tool. Import the completed source into Chengdu80,
-        pass the release checks, and run it.
+        The conversational builder now scopes requests to supported financial capabilities and uses
+        internal build records. Synthetic demos are available; live Wind data and reusable financial
+        modules are pending. The older numerical protocols below document the transitional source
+        transport. Direct source import is pending capability validation.
       </p>
       <div className="not-prose flex flex-wrap gap-2">
         <a href="/api/docs" className={buttonVariants({ variant: "outline" })}>
@@ -43,8 +45,8 @@ export function OverviewContent() {
         Getting started
       </Heading>
       <ol>
-        <li>Review and confirm a product specification.</li>
-        <li>Build an example, generate source with the model, or import a compatible bundle.</li>
+        <li>Describe your financial app and clarify material ambiguities in the conversation.</li>
+        <li>The agent validates capabilities and prepares an internal versioned build record.</li>
         <li>Verification runs automatically before the app becomes active.</li>
         <li>Continue the conversation to change the app.</li>
       </ol>

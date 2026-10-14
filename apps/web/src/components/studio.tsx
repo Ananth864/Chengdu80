@@ -1,7 +1,9 @@
+import { useRouter } from "@tanstack/react-router";
+import { StudioSubscriptions } from "../lib/use-studio-data";
+import { BuildGallery } from "./build-gallery";
 import { AgentChat } from "./agent-chat";
 import { ConversationNavigation } from "./conversation-navigation";
-import { PluginSettings } from "./plugin-settings";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowUpRight,
   Eye,
@@ -12,6 +14,7 @@ import {
   Code2,
   RefreshCw,
   ShieldCheck,
+  LayoutGrid,
   X,
 } from "lucide-react";
 import { Button, buttonVariants } from "@web-starter/ui/components/button";
@@ -41,6 +44,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "@web-starter/ui/components/dialog";
 import {
   Empty,
@@ -51,6 +55,7 @@ import {
   EmptyMedia,
 } from "@web-starter/ui/components/empty";
 import { Separator } from "@web-starter/ui/components/separator";
+import { Skeleton } from "@web-starter/ui/components/skeleton";
 
 import { api, download } from "../lib/client";
 import {
@@ -58,7 +63,6 @@ import {
   protocolFor,
   type AppBundle,
   type Application,
-  type ProductSpec,
   type Release,
 } from "../lib/contracts";
 import { CodeWorkspace, type SourcePath } from "./code-workspace";
@@ -82,15 +86,28 @@ const workspaceTabs = [
   { value: "data", label: "Database (read-only)", Icon: Database },
 ] as const;
 export function Studio() {
+  const convexConfigured = !!useRouter().options.context.convexClient;
+  const [subscribedApps, setSubscribedApps] = useState<Application[]>();
+  const [subscribedMessages, setSubscribedMessages] = useState<{
+    appId: string;
+    messages: NonNullable<Application["conversation"]>;
+  }>();
+  const receiveMessages = useCallback(
+    (appId: string, messages: NonNullable<Application["conversation"]>) =>
+      setSubscribedMessages({ appId, messages }),
+    [],
+  );
+  const [view, setView] = useState<"studio" | "builds">("studio");
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [tab, setTab] = useState<Tab>("preview");
+  const [mobilePane, setMobilePane] = useState<"chat" | "preview">("chat");
   const [activeSourceFile, setActiveSourceFile] = useState<SourcePath>("app.js");
   const [review, setReview] = useState<"checks" | "spec" | null>(null);
   const [imported, setImported] = useState<AppBundle | null>(null);
-  const [providerResult, setProviderResult] = useState<unknown>(null);
+  const [deletingChat, setDeletingChat] = useState<Application | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatKey, setChatKey] = useState("new");
   const [agentBusy, setAgentBusy] = useState(false);
@@ -111,7 +128,14 @@ export function Studio() {
       setError("Fullscreen could not open.");
     }
   }
-  const app = snapshot?.apps.find((a) => a.id === selected) ?? null;
+  const reactive = convexConfigured && !!snapshot && !snapshot.status.local;
+  const applications = reactive && subscribedApps ? subscribedApps : (snapshot?.apps ?? []);
+  const selectedApp = applications.find((a) => a.id === selected) ?? null;
+  const app =
+    selectedApp && reactive && subscribedMessages?.appId === selected
+      ? { ...selectedApp, conversation: subscribedMessages.messages }
+      : selectedApp;
+  const messagesReady = !reactive || !selected || subscribedMessages?.appId === selected;
   const release = app && (app.current ?? app.preview);
   const workspaceBundle = app?.workspace ?? release?.bundle;
   const refreshVersion = useRef(0);
@@ -127,7 +151,9 @@ export function Studio() {
       .then((data) => {
         if (!mounted) return;
         setSnapshot(data);
-        const id = new URLSearchParams(window.location.hash.slice(1)).get("app");
+        const params = new URLSearchParams(window.location.hash.slice(1));
+        if (params.get("view") === "builds") setView("builds");
+        const id = params.get("app");
         if (id && data.apps.some((a) => a.id === id)) {
           setSelected(id);
           setChatKey(id);
@@ -139,7 +165,7 @@ export function Studio() {
     };
   }, []);
   useEffect(() => {
-    if (!app || app.chatTitle !== "New chat") return;
+    if (reactive || !app || app.chatTitle !== "New chat") return;
     let stopped = false;
     let attempts = 0;
     const timer = setInterval(() => {
@@ -155,16 +181,42 @@ export function Studio() {
       stopped = true;
       clearInterval(timer);
     };
-  }, [app?.id, app?.chatTitle]);
-  function select(id: string | null) {
+  }, [app?.id, app?.chatTitle, reactive]);
+  useEffect(() => {
+    function restoreNavigation() {
+      const params = new URLSearchParams(window.location.hash.slice(1));
+      const id = params.get("app");
+      const selectedId = id && snapshot?.apps.some((app) => app.id === id) ? id : null;
+      setView(params.get("view") === "builds" ? "builds" : "studio");
+      setSelected(selectedId);
+      setChatKey(selectedId ?? crypto.randomUUID());
+      setImported(null);
+      setReview(null);
+      setTab("preview");
+      setMobilePane("chat");
+    }
+    window.addEventListener("popstate", restoreNavigation);
+    window.addEventListener("hashchange", restoreNavigation);
+    return () => {
+      window.removeEventListener("popstate", restoreNavigation);
+      window.removeEventListener("hashchange", restoreNavigation);
+    };
+  }, [snapshot]);
+  function openGallery() {
+    setView("builds");
+    window.history.pushState(null, "", "/#view=builds");
+  }
+  function select(id: string | null, pane: "chat" | "preview" = "chat") {
+    setView("studio");
     setSelected(id);
     setImported(null);
     setError("");
     setChatKey(id ?? crypto.randomUUID());
     setTab("preview");
+    setMobilePane(pane);
     setReview(null);
     setActiveSourceFile("app.js");
-    window.history.replaceState(null, "", id ? `/#app=${id}` : "/");
+    window.history.pushState(null, "", id ? `/#app=${id}` : "/");
   }
   async function run<T>(label: string, task: () => Promise<T>) {
     if (busy || agentBusy) return;
@@ -179,12 +231,50 @@ export function Studio() {
       setBusy("");
     }
   }
-  async function createExample(spec: ProductSpec) {
-    await run("Installing example…", async () => {
-      const next = await api<Application>({ action: "create", spec, mode: "sample" });
+  async function confirmDeleteChat() {
+    if (!deletingChat) return;
+    const target = deletingChat;
+    const result = await run("Deleting chat…", async () => {
+      const result = await api<{ deleted: boolean; retainedBuild: boolean }>({
+        action: "delete-chat",
+        appId: target.id,
+        expectedRevision: target.revision,
+      });
+      setSnapshot((current) =>
+        current
+          ? {
+              ...current,
+              apps: result.retainedBuild
+                ? current.apps.map((app) =>
+                    app.id === target.id
+                      ? {
+                          ...app,
+                          conversation: [],
+                          turns: [],
+                          buildRecords: [],
+                          agentTurn: undefined,
+                          chatTitle: undefined,
+                          chatDeletedAt: new Date().toISOString(),
+                        }
+                      : app,
+                  )
+                : current.apps.filter((app) => app.id !== target.id),
+            }
+          : current,
+      );
+      setDeletingChat(null);
+      if (selected === target.id) select(null);
       await refresh();
-      select(next.id);
+      return result;
     });
+    if (!result) {
+      try {
+        const updated = await refresh();
+        setDeletingChat(updated.apps.find((app) => app.id === target.id) ?? null);
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Could not refresh the conversation.");
+      }
+    }
   }
   async function importFiles(files: FileList | null) {
     if (!files?.length) return;
@@ -226,24 +316,53 @@ export function Studio() {
   }
   return (
     <SidebarProvider
-      className="h-svh min-h-0 overflow-hidden"
-      style={{ "--sidebar-width": "16rem" } as React.CSSProperties}
+      className="studio-shell h-svh min-h-0 overflow-hidden"
+      style={{ "--sidebar-width": "15rem" } as React.CSSProperties}
     >
+      {reactive && (
+        <StudioSubscriptions
+          selected={selected}
+          demo={snapshot.status.demo}
+          onApps={setSubscribedApps}
+          onMessages={receiveMessages}
+        />
+      )}
       <ConversationNavigation
-        apps={snapshot?.apps ?? []}
+        apps={applications}
         selected={selected}
         select={select}
         busy={!!busy || agentBusy}
         openSettings={() => setSettingsOpen(true)}
+        openGallery={openGallery}
+        galleryActive={view === "builds"}
+        requestDelete={setDeletingChat}
       />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-2 px-3 py-2">
+        <header className="studio-topbar flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-2 px-4 py-2">
           <div className="flex min-w-0 items-center gap-2">
             <SidebarTrigger />
-            <h1 className="truncate font-medium">{app?.chatTitle ?? app?.name ?? "New chat"}</h1>
+            <h1
+              className={cn(
+                "studio-display truncate font-medium",
+                view === "builds" && "library-breadcrumb",
+              )}
+            >
+              {view === "builds" ? "Applications" : (app?.chatTitle ?? app?.name ?? "New chat")}
+            </h1>
           </div>
           <div className="flex items-center gap-2">
-            {release && (
+            {view === "studio" && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!!busy || agentBusy}
+                onClick={openGallery}
+              >
+                <LayoutGrid />
+                Built apps
+              </Button>
+            )}
+            {view === "studio" && release && (
               <Button
                 variant="outline"
                 size="sm"
@@ -265,21 +384,6 @@ export function Studio() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuGroup>
-                  <DropdownMenuItem disabled={!!busy} onClick={() => file.current?.click()}>
-                    Import source
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    disabled={!!busy || !snapshot}
-                    onClick={() =>
-                      void run("Installing examples…", async () => {
-                        const added = await api<Application[]>({ action: "seed" });
-                        const next = await refresh();
-                        select(added[0]?.id ?? next.apps[0]?.id);
-                      })
-                    }
-                  >
-                    Install all examples
-                  </DropdownMenuItem>
                   {release && (
                     <>
                       <DropdownMenuItem onClick={() => setReview("checks")}>
@@ -291,7 +395,7 @@ export function Studio() {
                     </>
                   )}
                   <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
-                    Connections
+                    Platform data
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>
@@ -299,226 +403,340 @@ export function Studio() {
           </div>
         </header>
         <Separator />
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
-          <aside
-            aria-label="Application chat"
-            className="flex w-full shrink-0 flex-col gap-4 p-4 md:w-120 md:overflow-hidden"
-          >
-            <AgentChat
-              key={chatKey}
-              app={app}
-              connected={!!snapshot?.status.modelConfigured}
-              disabled={!!busy}
-              modelName={snapshot?.status.model ?? "AI"}
-              onBusyChange={setAgentBusy}
-              onImport={() => file.current?.click()}
-              onExample={(spec) => void createExample(spec)}
-              onWorkspaceCreated={(next) => {
-                setSnapshot((current) =>
-                  current ? { ...current, apps: [...current.apps, next] } : current,
-                );
-                setSelected(next.id);
-                window.history.replaceState(null, "", `/#app=${next.id}`);
-              }}
-              onFinish={async () => {
-                await refresh();
-              }}
-            />
-          </aside>
-          <Separator orientation="vertical" className="hidden md:block" />
-          <Separator className="md:hidden" />
-          <main
-            ref={workspace}
-            aria-label="Application workspace"
-            className={cn(
-              "flex min-h-80 min-w-0 flex-1 flex-col md:min-h-0 [&:fullscreen]:h-svh [&:fullscreen]:bg-background",
-              app && !imported && tab !== "data" ? "overflow-hidden" : "overflow-y-auto",
-            )}
-          >
-            <input
-              ref={file}
-              type="file"
-              accept=".json,.html,.js,.css"
-              multiple
-              hidden
-              onChange={(e) => void importFiles(e.target.files)}
-            />
-            {error && (
-              <Alert variant="destructive" className="self-center w-[calc(100%-2rem)]">
-                <AlertTitle>Operation failed</AlertTitle>
-                <AlertDescription>{error}</AlertDescription>
-                <AlertAction>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label="Dismiss error"
-                    onClick={() => setError("")}
-                  >
-                    <X />
-                  </Button>
-                </AlertAction>
-              </Alert>
-            )}
-            {imported ? (
-              <section className="flex flex-col gap-5 p-4">
-                <h2>Import {imported.manifest.name}</h2>
-                <p className="text-sm">
-                  {app ? `Apply imported source to ${app.name}.` : "Create a new application."}
-                </p>
-                <Table>
-                  <TableBody>
-                    <TableRow>
-                      <TableCell>Protocol</TableCell>
-                      <TableCell>{imported.manifest.protocol}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Files</TableCell>
-                      <TableCell>{Object.keys(imported.files).join(", ")}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Capabilities</TableCell>
-                      <TableCell className="whitespace-normal">
-                        {imported.manifest.permissions.join(", ")}
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-                <div className="flex flex-wrap gap-2">
-                  <Button disabled={!!busy} onClick={() => void confirmImport()}>
-                    <ShieldCheck data-icon="inline-start" />
-                    Verify imported app
-                  </Button>
-                  <Button variant="ghost" disabled={!!busy} onClick={() => setImported(null)}>
-                    Cancel
-                  </Button>
-                </div>
-              </section>
-            ) : app ? (
-              <Tabs
-                value={tab}
-                onValueChange={(value) => {
-                  if (isTab(value)) {
-                    setTab(value);
-                    if (value === "data") void run("Refreshing shared data…", refresh);
-                  }
-                }}
-                className="min-h-0 min-w-0 flex-1 gap-0"
+        {error && (
+          <Alert variant="destructive" className="self-center w-[calc(100%-2rem)]">
+            <AlertTitle>Operation failed</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+            <AlertAction>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Dismiss error"
+                onClick={() => setError("")}
               >
-                <div className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] md:grid-cols-3 items-center gap-2 px-3 py-2">
-                  <TabsList aria-label="Workspace views">
-                    {workspaceTabs.map(({ value, label, Icon }) => (
-                      <TabsTrigger value={value} key={value} aria-label={label} title={label}>
-                        <Icon />
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                  <div className="flex min-w-0 items-center justify-center gap-2">
-                    <span
-                      className="truncate text-sm font-mono"
-                      title={tab === "source" ? activeSourceFile : app.name}
-                    >
-                      {tab === "source" ? activeSourceFile : app.name}
-                    </span>
-                    {tab !== "source" && (
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={tab === "data" ? "Refresh database" : "Refresh preview"}
-                        title={tab === "data" ? "Refresh database" : "Refresh preview"}
-                        disabled={!!busy || (tab === "preview" && !release?.verification.passed)}
-                        onClick={() => {
-                          if (tab === "data") void run("Refreshing shared data…", refresh);
-                          else setPreviewRevision((revision) => revision + 1);
-                        }}
-                      >
-                        <RefreshCw />
-                      </Button>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-end gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                      title={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                      onClick={() => void toggleFullscreen()}
-                    >
-                      {fullscreen ? <Minimize /> : <Maximize />}
-                    </Button>
-                    {app.current && (
-                      <a
-                        href={`/app/${app.id}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        aria-label="Open app"
-                        title="Open app"
-                        className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
-                      >
-                        <ArrowUpRight />
-                      </a>
-                    )}
-                  </div>
-                </div>
-                <Separator />
-                <TabsContent value="preview" className="flex min-h-0 flex-col">
-                  {release?.verification.passed ? (
-                    <AppFrame
-                      key={`${release.id}:${previewRevision}`}
-                      app={app}
-                      release={release}
-                    />
-                  ) : (
-                    <Empty>
-                      <EmptyHeader>
-                        <EmptyMedia variant="icon">
-                          <ShieldCheck />
-                        </EmptyMedia>
-                        <EmptyTitle>
-                          {release ? "Review the failed checks" : "No release yet"}
-                        </EmptyTitle>
-                        <EmptyDescription>
-                          {release
-                            ? "Execution is disabled until verification passes."
-                            : "Request a build or import source."}
-                        </EmptyDescription>
-                      </EmptyHeader>
-                      {release && (
-                        <EmptyContent>
-                          <Button variant="outline" onClick={() => setReview("checks")}>
-                            View checks
-                          </Button>
-                        </EmptyContent>
-                      )}
-                    </Empty>
-                  )}
-                </TabsContent>
-                <TabsContent value="source" className="flex min-h-0 flex-col">
-                  {workspaceBundle && (
-                    <CodeWorkspace
-                      bundle={workspaceBundle}
-                      workspaceId={`${app.id}:${app.revision}`}
-                      activeFile={activeSourceFile}
-                      onSelectFile={setActiveSourceFile}
-                    />
-                  )}
-                </TabsContent>
-                <TabsContent value="data" className="p-4">
-                  <p className="text-sm text-muted-foreground">Read-only application data.</p>
-                  <pre className="max-w-full overflow-x-auto py-4 text-xs">
-                    {JSON.stringify(app.data, null, 2)}
-                  </pre>
-                </TabsContent>
-              </Tabs>
+                <X />
+              </Button>
+            </AlertAction>
+          </Alert>
+        )}
+        {!snapshot ? (
+          <section
+            aria-label="Loading workspace"
+            aria-busy={!error}
+            className="flex flex-1 flex-col gap-4 p-8"
+          >
+            {error ? (
+              <Button
+                className="self-start"
+                disabled={!!busy}
+                onClick={() => void run("Loading workspace…", refresh)}
+              >
+                Retry loading workspace
+              </Button>
             ) : (
-              <Empty className="flex-1">
-                <EmptyHeader>
-                  <EmptyTitle>Preview</EmptyTitle>
-                </EmptyHeader>
-              </Empty>
+              <>
+                <span role="status">Loading your workspace…</span>
+                <Skeleton className="h-8 w-60" />
+                <Skeleton className="h-60 w-full" />
+              </>
             )}
-          </main>
-        </div>
+          </section>
+        ) : view === "builds" ? (
+          <BuildGallery
+            apps={applications}
+            busy={!!busy || agentBusy}
+            select={(id) => select(id, "preview")}
+            newChat={() => select(null)}
+          />
+        ) : (
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden xl:flex-row">
+            <Tabs
+              value={mobilePane}
+              onValueChange={(value) => setMobilePane(value as "chat" | "preview")}
+              className="shrink-0 px-4 py-2 xl:hidden"
+            >
+              <TabsList className="min-h-12 w-full">
+                <TabsTrigger
+                  value="chat"
+                  id="studio-chat-tab"
+                  aria-controls="studio-chat-panel"
+                  className="min-h-11 flex-1"
+                >
+                  Chat
+                </TabsTrigger>
+                <TabsTrigger
+                  value="preview"
+                  id="studio-preview-tab"
+                  aria-controls="studio-preview-panel"
+                  className="min-h-11 flex-1"
+                >
+                  Preview
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <aside
+              id="studio-chat-panel"
+              role="tabpanel"
+              aria-labelledby="studio-chat-tab"
+              aria-label="Application chat"
+              className={cn(
+                "min-h-0 w-full flex-1 flex-col gap-4 overflow-hidden p-4 xl:flex xl:w-100 xl:flex-none 2xl:w-120",
+                mobilePane === "chat" ? "flex" : "hidden",
+              )}
+            >
+              <AgentChat
+                reactive={reactive}
+                key={chatKey}
+                app={app}
+                connected={!!snapshot?.status.modelConfigured}
+                disabled={
+                  !!busy || !messagesReady || (!agentBusy && app?.agentTurn?.status === "running")
+                }
+                modelName={snapshot?.status.model ?? "AI"}
+                onBusyChange={setAgentBusy}
+                onWorkspaceCreated={(next) => {
+                  setSnapshot((current) =>
+                    current ? { ...current, apps: [...current.apps, next] } : current,
+                  );
+                  setSelected(next.id);
+                  window.history.replaceState(null, "", `/#app=${next.id}`);
+                }}
+                onFinish={async () => {
+                  await refresh();
+                }}
+              />
+            </aside>
+            <Separator orientation="vertical" className="hidden xl:block" />
+            <div
+              id="studio-preview-panel"
+              role="tabpanel"
+              aria-labelledby="studio-preview-tab"
+              className={cn(
+                "min-h-0 min-w-0 flex-1 flex-col overflow-hidden xl:flex",
+                mobilePane === "preview" ? "flex" : "hidden",
+              )}
+            >
+              <main
+                ref={workspace}
+                aria-label="Application workspace"
+                className={cn(
+                  "flex min-h-0 min-w-0 flex-1 flex-col [&:fullscreen]:h-svh [&:fullscreen]:bg-background",
+                  app && !imported && tab !== "data" ? "overflow-hidden" : "overflow-y-auto",
+                )}
+              >
+                <input
+                  ref={file}
+                  type="file"
+                  accept=".json,.html,.js,.css"
+                  multiple
+                  hidden
+                  onChange={(e) => void importFiles(e.target.files)}
+                />
+                {imported ? (
+                  <section className="flex flex-col gap-5 p-4">
+                    <h2>Import {imported.manifest.name}</h2>
+                    <p className="text-sm">
+                      {app ? `Apply imported source to ${app.name}.` : "Create a new application."}
+                    </p>
+                    <Table>
+                      <TableBody>
+                        <TableRow>
+                          <TableCell>Protocol</TableCell>
+                          <TableCell>{imported.manifest.protocol}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell>Files</TableCell>
+                          <TableCell>{Object.keys(imported.files).join(", ")}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell>Capabilities</TableCell>
+                          <TableCell className="whitespace-normal">
+                            {imported.manifest.permissions.join(", ")}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                    <div className="flex flex-wrap gap-2">
+                      <Button disabled={!!busy} onClick={() => void confirmImport()}>
+                        <ShieldCheck data-icon="inline-start" />
+                        Verify imported app
+                      </Button>
+                      <Button variant="ghost" disabled={!!busy} onClick={() => setImported(null)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </section>
+                ) : app ? (
+                  <Tabs
+                    value={tab}
+                    onValueChange={(value) => {
+                      if (isTab(value)) {
+                        setTab(value);
+                        if (value === "data") void run("Refreshing shared data…", refresh);
+                      }
+                    }}
+                    className="min-h-0 min-w-0 flex-1 gap-0"
+                  >
+                    <div className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] md:grid-cols-3 items-center gap-2 px-3 py-2">
+                      <TabsList aria-label="Workspace views">
+                        {workspaceTabs.map(({ value, label, Icon }) => (
+                          <TabsTrigger value={value} key={value} aria-label={label} title={label}>
+                            <Icon />
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+                      <div className="flex min-w-0 items-center justify-center gap-2">
+                        <span
+                          className="truncate text-sm font-mono"
+                          title={tab === "source" ? activeSourceFile : app.name}
+                        >
+                          {tab === "source" ? activeSourceFile : app.name}
+                        </span>
+                        {tab !== "source" && (
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={tab === "data" ? "Refresh database" : "Refresh preview"}
+                            title={tab === "data" ? "Refresh database" : "Refresh preview"}
+                            disabled={
+                              !!busy || (tab === "preview" && !release?.verification.passed)
+                            }
+                            onClick={() => {
+                              if (tab === "data") void run("Refreshing shared data…", refresh);
+                              else setPreviewRevision((revision) => revision + 1);
+                            }}
+                          >
+                            <RefreshCw />
+                          </Button>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                          title={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                          onClick={() => void toggleFullscreen()}
+                        >
+                          {fullscreen ? <Minimize /> : <Maximize />}
+                        </Button>
+                        {app.current && (
+                          <a
+                            href={`/app/${app.id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label="Open app"
+                            title="Open app"
+                            className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+                          >
+                            <ArrowUpRight />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    <Separator />
+                    <TabsContent value="preview" className="flex min-h-0 flex-col">
+                      {release?.verification.passed ? (
+                        <AppFrame
+                          key={`${release.id}:${previewRevision}`}
+                          app={app}
+                          release={release}
+                        />
+                      ) : (
+                        <Empty>
+                          <EmptyHeader>
+                            <EmptyMedia variant="icon">
+                              <ShieldCheck />
+                            </EmptyMedia>
+                            <EmptyTitle>
+                              {release ? "Review the failed checks" : "No release yet"}
+                            </EmptyTitle>
+                            <EmptyDescription>
+                              {release
+                                ? "Execution is disabled until verification passes."
+                                : "Describe a supported financial app in the conversation."}
+                            </EmptyDescription>
+                          </EmptyHeader>
+                          {release && (
+                            <EmptyContent>
+                              <Button variant="outline" onClick={() => setReview("checks")}>
+                                View checks
+                              </Button>
+                            </EmptyContent>
+                          )}
+                        </Empty>
+                      )}
+                    </TabsContent>
+                    <TabsContent value="source" className="flex min-h-0 flex-col">
+                      {workspaceBundle && (
+                        <CodeWorkspace
+                          bundle={workspaceBundle}
+                          workspaceId={`${app.id}:${app.revision}`}
+                          activeFile={activeSourceFile}
+                          onSelectFile={setActiveSourceFile}
+                        />
+                      )}
+                    </TabsContent>
+                    <TabsContent value="data" className="p-4">
+                      <p className="text-sm text-muted-foreground">Read-only application data.</p>
+                      <pre className="max-w-full overflow-x-auto py-4 text-xs">
+                        {JSON.stringify(app.data, null, 2)}
+                      </pre>
+                    </TabsContent>
+                  </Tabs>
+                ) : (
+                  <Empty className="flex-1">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <LayoutGrid className="text-primary" />
+                      </EmptyMedia>
+                      <EmptyTitle className="studio-display">App preview</EmptyTitle>
+                      <EmptyDescription>
+                        Your preview appears here when the build is ready.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                )}
+              </main>
+            </div>
+          </div>
+        )}
       </div>
+      <Dialog
+        open={deletingChat !== null}
+        onOpenChange={(open) => {
+          if (!open && !busy) setDeletingChat(null);
+        }}
+      >
+        <DialogContent showCloseButton={!busy}>
+          <DialogHeader>
+            <DialogTitle>Delete this chat?</DialogTitle>
+            <DialogDescription>
+              {deletingChat?.current?.verification.passed
+                ? `The conversation for "${deletingChat.chatTitle ?? deletingChat.name}" will be deleted. Its completed app and saved data will remain in Built apps.`
+                : `The conversation "${deletingChat?.chatTitle ?? deletingChat?.name}" and its unfinished workspace will be deleted.`}
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">This cannot be undone.</p>
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          <DialogFooter>
+            <Button variant="outline" disabled={!!busy} onClick={() => setDeletingChat(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!!busy || agentBusy}
+              onClick={() => void confirmDeleteChat()}
+            >
+              {busy === "Deleting chat…" ? "Deleting…" : "Delete chat"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog
         open={review !== null}
         onOpenChange={(open) => {
@@ -534,14 +752,14 @@ export function Studio() {
             (review === "checks" ? (
               <Checks release={app?.preview ?? release} />
             ) : (
-              <SpecView spec={release.spec} />
+              <SpecView release={release} />
             ))}
         </DialogContent>
       </Dialog>
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
         <DialogContent className="max-h-[85svh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Connections</DialogTitle>
+            <DialogTitle>Platform data</DialogTitle>
             <DialogDescription>
               {snapshot?.status.local
                 ? "Single-owner workspace stored on this computer."
@@ -571,59 +789,22 @@ export function Studio() {
               </TableRow>
               <TableRow>
                 <TableCell>Market data</TableCell>
-                <TableCell>
-                  {snapshot?.status.tushareConfigured ? "Tushare + fixtures" : "Synthetic fixtures"}
-                </TableCell>
+                <TableCell>Wind integration pending · synthetic demos only</TableCell>
               </TableRow>
             </TableBody>
           </Table>
-          <PluginSettings />
-          <div className="flex flex-wrap gap-2">
-            {app?.current && app.spec.protocol === "strategy" && (
-              <Button
-                variant="outline"
-                disabled={!!busy}
-                onClick={() =>
-                  void run("Loading daily prices…", async () => {
-                    await api({
-                      action: "load-prices",
-                      appId: app.id,
-                      provider: snapshot?.status.local ? "alpha-demo" : "tushare",
-                    });
-                    await refresh();
-                  })
-                }
-              >
-                Load real prices into app
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              disabled={!!busy}
-              onClick={() =>
-                void run("Testing financial API…", async () =>
-                  setProviderResult(
-                    await api<unknown>({ action: "test-provider", provider: "alpha-demo" }),
-                  ),
-                )
-              }
-            >
-              Test financial API
-            </Button>
-            <Button
-              variant="ghost"
-              disabled={!!busy}
-              onClick={() => void run("Refreshing connections…", refresh)}
-            >
-              <RefreshCw data-icon="inline-start" />
-              Refresh
-            </Button>
-          </div>
-          {providerResult != null && (
-            <pre className="max-w-full overflow-x-auto text-xs">
-              {JSON.stringify(providerResult, null, 2)}
-            </pre>
-          )}
+          <p className="text-sm text-muted-foreground">
+            The platform team manages the company table and Wind access. You do not need to upload
+            company data or configure a data API.
+          </p>
+          <Button
+            variant="ghost"
+            disabled={!!busy}
+            onClick={() => void run("Refreshing platform status…", refresh)}
+          >
+            <RefreshCw data-icon="inline-start" />
+            Refresh
+          </Button>
           {busy && <p role="status">{busy}</p>}
           {error && (
             <Alert variant="destructive">
@@ -681,7 +862,36 @@ function Checks({ release }: { release: Release }) {
   );
 }
 
-function SpecView({ spec }: { spec: ProductSpec }) {
+function SpecView({ release }: { release: Release }) {
+  const spec = release.spec;
+  const record = release.buildRecord;
+  if (record)
+    return (
+      <section className="flex flex-col gap-4">
+        <p>{record.plan.requirements}</p>
+        <section>
+          <h2 className="mb-2 font-medium">Included capabilities</h2>
+          <ul className="ml-4 list-disc">
+            {record.resolvedCapabilities.map((capability) => (
+              <li key={capability}>{capability.replaceAll("-", " ")}</li>
+            ))}
+          </ul>
+        </section>
+        <p>
+          {record.plan.mode === "fixture"
+            ? "Synthetic demo. Live market data and financial outputs are not available in this build."
+            : "Uses the platform's configured market data."}
+        </p>
+        <p>Theme: {record.theme}</p>
+        <Button
+          variant="outline"
+          className="self-start"
+          onClick={() => download("build-contract.json", JSON.stringify(record, null, 2))}
+        >
+          Export build contract
+        </Button>
+      </section>
+    );
   const protocol = protocolFor(spec.protocol);
   return (
     <section className="flex flex-col gap-5">

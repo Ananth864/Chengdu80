@@ -1,10 +1,14 @@
+import type { BuildRecord } from "./build-plan";
 import type { UIMessage } from "@tanstack/ai";
 import { z } from "zod";
+import { isProjectFile } from "./project-files";
 
 export const capabilities = [
   "market.prices",
   "market.assets",
   "finance.calculate",
+  "finance.match-companies",
+  "finance.company-cards",
   "finance.portfolio",
   "finance.screen",
   "finance.backtest",
@@ -16,6 +20,17 @@ export const capabilities = [
 export const protocolIds = ["portfolio", "screening", "strategy"] as const;
 export type ProtocolId = (typeof protocolIds)[number];
 export const capabilityContracts = {
+  "finance.match-companies": {
+    input:
+      "{risk:low|medium|high,industries:string[]} Synthetic profile only. Fixed platform mapping and table lookup.",
+    output: "{criteria,size,companies,moduleVersion,synthetic:true}",
+  },
+  "finance.company-cards": {
+    input:
+      "{action:batch,risk,industries,revisitDismissed?:boolean} | {action:decide,ticker,choice:yes|no} | {action:watchlist}. Server controls day and data.",
+    output:
+      "Stable daily companies with unavailable selected metrics, saved decisions and watchlist. Synthetic demo only.",
+  },
   "plugin.call": {
     input:
       "{pluginId:string, operationId:string, parameters:object}. Only system-registered plugins enabled for this app.",
@@ -78,22 +93,46 @@ export const bundleSchema = z
   .object({
     manifest: z
       .object({
-        schemaVersion: z.literal(1),
+        schemaVersion: z.union([z.literal(1), z.literal(3)]),
         name: z.string().min(3).max(80),
         protocol: z.enum(protocolIds),
         permissions: z.array(z.enum(capabilities)).max(10),
       })
       .strict(),
-    files: z
-      .object({
-        "index.html": z.string().min(20).max(60000),
-        "app.js": z.string().min(10).max(60000),
-        "calculations.js": z.string().min(10).max(30000),
-        "style.css": z.string().max(30000),
-      })
-      .strict(),
+    files: z.record(z.string(), z.string().max(60000)),
   })
-  .strict();
+  .strict()
+  .superRefine((bundle, ctx) => {
+    const paths = Object.keys(bundle.files);
+    const project = bundle.manifest.schemaVersion === 3;
+    const required = project
+      ? [
+          "package.json",
+          "vite.config.ts",
+          "tsconfig.json",
+          "src/App.tsx",
+          "src/lib/build-context.ts",
+        ]
+      : ["index.html", "app.js", "calculations.js", "style.css"];
+    if (
+      required.some((name) => bundle.files[name] === undefined) ||
+      (!project && paths.some((name) => !required.includes(name))) ||
+      (project && paths.some((name) => !isProjectFile(name)))
+    )
+      ctx.addIssue({ code: "custom", message: "Unsupported or incomplete application source" });
+    if (
+      paths.length > 200 ||
+      Object.values(bundle.files).reduce((size, content) => size + content.length, 0) > 200000
+    )
+      ctx.addIssue({ code: "custom", message: "Application exceeds 200 files or 200 KB" });
+    if (
+      !project &&
+      (bundle.files["index.html"]?.length < 20 ||
+        bundle.files["app.js"]?.length < 10 ||
+        bundle.files["calculations.js"]?.length < 10)
+    )
+      ctx.addIssue({ code: "custom", message: "Legacy application source is incomplete" });
+  });
 export type AppBundle = z.infer<typeof bundleSchema>;
 export type Check = { name: string; passed: boolean; detail: string };
 export type Verification = {
@@ -101,6 +140,7 @@ export type Verification = {
   checks: Check[];
   checkedAt: string;
   sourceHash: string;
+  thumbnail?: { html: string; css: string };
 };
 export type Release = {
   id: string;
@@ -110,6 +150,7 @@ export type Release = {
   createdAt: string;
   origin: "sample" | "model" | "import";
   notes: string;
+  buildRecord?: BuildRecord;
 };
 export type Application = {
   id: string;
@@ -123,7 +164,10 @@ export type Application = {
   history: Release[];
   events: { at: string; message: string }[];
   createdAt: string;
+  buildRecords?: BuildRecord[];
+  rejectedBuildTurns?: string[];
   chatTitle?: string;
+  chatDeletedAt?: string;
   conversation?: UIMessage[];
   workspace?: AppBundle;
   workspaceSpec?: ProductSpec;
@@ -137,6 +181,7 @@ export type Application = {
   }[];
   agentTurn?: {
     id: string;
+    runtimeId?: string;
     startedAt: string;
     completedAt?: string;
     status: "running" | "complete" | "stopped" | "error";

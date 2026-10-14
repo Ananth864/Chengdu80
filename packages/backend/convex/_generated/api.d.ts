@@ -9,6 +9,7 @@
  */
 
 import type * as healthCheck from "../healthCheck.js";
+import type * as lib_chat_state from "../lib/chat_state.js";
 import type * as platform from "../platform.js";
 import type * as viewer from "../viewer.js";
 
@@ -16,6 +17,7 @@ import type { ApiFromModules, FilterApi, FunctionReference } from "convex/server
 
 declare const fullApi: ApiFromModules<{
   healthCheck: typeof healthCheck;
+  "lib/chat_state": typeof lib_chat_state;
   platform: typeof platform;
   viewer: typeof viewer;
 }>;

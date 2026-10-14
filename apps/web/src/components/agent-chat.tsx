@@ -10,7 +10,7 @@ import { Markdown, type MarkdownComponents } from "@tanstack/markdown/react";
 import { streamingMarkdownExtension } from "@tanstack/markdown/extensions/streaming";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useChat, type ChatFetcher, type UIMessage } from "@tanstack/ai-react";
-import { ArrowUp, Check, ChevronRight, Copy, Square, Terminal, Upload, X } from "lucide-react";
+import { ArrowUp, Check, ChevronRight, Copy, Square, Terminal, X } from "lucide-react";
 import { Separator } from "@web-starter/ui/components/separator";
 import { Button } from "@web-starter/ui/components/button";
 import { Alert, AlertDescription, AlertTitle } from "@web-starter/ui/components/alert";
@@ -43,7 +43,7 @@ import {
   MessageScrollerButton,
 } from "@web-starter/ui/components/message-scroller";
 import { api } from "../lib/client";
-import { protocols, type Application, type ProductSpec } from "../lib/contracts";
+import { type Application } from "../lib/contracts";
 
 const streamingExtensions = [streamingMarkdownExtension()];
 const markdownComponents = {
@@ -61,14 +61,13 @@ const markdownComponents = {
 } satisfies MarkdownComponents;
 
 type AgentChatProps = {
+  reactive?: boolean;
   app: Application | null;
   connected: boolean;
   disabled: boolean;
   modelName: string;
   onWorkspaceCreated: (app: Application) => void;
   onFinish: () => Promise<void> | void;
-  onImport: () => void;
-  onExample: (spec: ProductSpec) => void;
   onBusyChange?: (busy: boolean) => void;
 };
 
@@ -408,16 +407,18 @@ export function AgentChat(props: AgentChatProps) {
         setLocalError(error instanceof Error ? error.message : "Could not send message"),
       );
   };
+  const visibleMessages =
+    props.reactive && !chat.isLoading ? (props.app?.conversation ?? chat.messages) : chat.messages;
   const results = new Map<string, Extract<Part, { type: "tool-result" }>>();
-  for (const message of chat.messages)
+  for (const message of visibleMessages)
     for (const part of message.parts)
       if (part.type === "tool-result") results.set(part.toolCallId, part);
   const error = localError ?? chat.error?.message;
-  const turns = conversationTurns(chat.messages);
+  const turns = conversationTurns(visibleMessages);
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4" aria-label="Conversation">
-      <div className="min-h-40 min-w-0 flex-1 md:min-h-0">
-        {chat.messages.length ? (
+      <div className="min-h-0 min-w-0 flex-1">
+        {visibleMessages.length ? (
           <MessageScrollerProvider autoScroll>
             <MessageScroller>
               <MessageScrollerViewport>
@@ -442,19 +443,22 @@ export function AgentChat(props: AgentChatProps) {
           <Empty className="h-full">
             <EmptyHeader>
               <EmptyTitle>
-                {props.app ? "Start a conversation" : "What would you like to build?"}
+                {props.app ? "Continue with this app" : "What would you like to research?"}
               </EmptyTitle>
             </EmptyHeader>
             {!props.app && (
               <EmptyContent>
-                {protocols.map((protocol) => (
+                {[
+                  "Build a synthetic industry research demo",
+                  "Build a synthetic daily company-card demo",
+                ].map((example) => (
                   <Button
-                    key={protocol.id}
+                    key={example}
                     variant="outline"
                     disabled={props.disabled || chat.isLoading}
-                    onClick={() => props.onExample({ ...protocol.defaultSpec })}
+                    onClick={() => setPrompt(example)}
                   >
-                    {protocol.name}
+                    {example}
                   </Button>
                 ))}
               </EmptyContent>
@@ -465,7 +469,9 @@ export function AgentChat(props: AgentChatProps) {
       {!props.connected && (
         <Alert>
           <AlertTitle>Connect a model to chat</AlertTitle>
-          <AlertDescription>Add a server model API key in Connections.</AlertDescription>
+          <AlertDescription>
+            The platform team needs to configure the model before chat is available.
+          </AlertDescription>
         </Alert>
       )}
       {error && (
@@ -484,7 +490,7 @@ export function AgentChat(props: AgentChatProps) {
             className="min-h-24 max-h-40 overflow-y-auto"
             value={prompt}
             disabled={props.disabled || !props.connected}
-            placeholder="Ask anything or describe a change…"
+            placeholder="Describe a financial app or a change…"
             onChange={(event) => setPrompt(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -494,9 +500,6 @@ export function AgentChat(props: AgentChatProps) {
             }}
           />
           <InputGroupAddon align="block-end">
-            <InputGroupButton size="icon-sm" aria-label="Import source" onClick={props.onImport}>
-              <Upload />
-            </InputGroupButton>
             <span className="min-w-0 truncate text-xs">{props.modelName}</span>
             {chat.isLoading ? (
               <InputGroupButton

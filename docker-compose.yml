@@ -42,6 +42,12 @@ services:
       - "6791:6791"
 
   web:
+    # Bubblewrap creates the inner PID/user/mount/network namespaces and drops all capabilities.
+    cap_add: [SYS_ADMIN]
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
+      - systempaths=unconfined
     build:
       context: .
       dockerfile: apps/web/Dockerfile

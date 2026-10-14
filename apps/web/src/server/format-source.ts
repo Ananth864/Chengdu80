@@ -1,12 +1,13 @@
 import { createServerFn } from "@tanstack/react-start";
+import { projectFilePathSchema } from "../lib/project-files";
 import { z } from "zod";
 
 // Format a display copy with the same Oxfmt formatter used by Vite+.
 // This never reads files or changes a release's source or verification hash.
 export const formatSource = createServerFn({ method: "POST" })
-  .inputValidator(
+  .validator(
     z.object({
-      fileName: z.enum(["app.js", "calculations.js", "index.html", "style.css", "cd80.json"]),
+      fileName: projectFilePathSchema,
       content: z.string().max(250000),
     }),
   )

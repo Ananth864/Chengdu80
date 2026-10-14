@@ -22,6 +22,10 @@ Bun monorepo:
 - Do not put secrets in public `VITE_` variables.
 - Keep Convex functions in `packages/backend/convex` and import APIs from `@web-starter/backend/convex/_generated/api`.
 - Run `bun run codegen` after adding or renaming Convex functions.
+- New generated apps use `apps/web/starter/project`. Keep its financial SDK/modules, shadcn source and build configuration protected. Regenerate `app-project-template.ts` with `bun run starter:sync` after starter changes.
+- Generated Node/Bash/SSR code must run only in the Linux Bubblewrap sandbox. On macOS use the Docker launcher; never add a host execution fallback.
+- Retain independent per-turn financial feasibility checks and server-key-protected writes. Markdown policies do not replace those gates.
+- Keep the existing gallery, retained discussion, chat-only deletion and studio UI.
 
 ## Environment
 

@@ -1,9 +1,10 @@
+import { ReactAppFrame } from "./react-app-frame";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Application, Release } from "../lib/contracts";
 import { Alert, AlertTitle, AlertDescription } from "@web-starter/ui/components/alert";
 import { api } from "../lib/client";
 
-export function AppFrame({ app, release }: { app: Application; release: Release }) {
+function LegacyAppFrame({ app, release }: { app: Application; release: Release }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
@@ -109,6 +110,14 @@ export function AppFrame({ app, release }: { app: Application; release: Release 
   }, [nonce, release.bundle]);
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {release.buildRecord?.plan.mode === "fixture" && (
+        <p
+          role="note"
+          className="shrink-0 border-b bg-accent px-4 py-2 text-xs text-accent-foreground"
+        >
+          Synthetic demo. Company identities are examples; live Wind data is not connected.
+        </p>
+      )}
       {!ready && !error && (
         <p role="status" className="text-sm text-muted-foreground">
           Loading preview…
@@ -132,5 +141,13 @@ export function AppFrame({ app, release }: { app: Application; release: Release 
         className="min-h-0 w-full flex-1 border-0"
       />
     </div>
+  );
+}
+
+export function AppFrame(props: { app: Application; release: Release }) {
+  return props.release.bundle.manifest.schemaVersion === 3 ? (
+    <ReactAppFrame {...props} />
+  ) : (
+    <LegacyAppFrame {...props} />
   );
 }

@@ -1,3 +1,15 @@
+import { managedCompanies, requireBuild, validateScopedBundle } from "./build-policy";
+import {
+  companyCardsInputSchema,
+  companyModuleVersion,
+  dailyCompanyCards,
+  decideCompanyCard,
+  emptyCardState,
+  matchCompanies,
+  shanghaiDay,
+  unavailableCardMetrics,
+  type CardState,
+} from "../lib/company-capabilities";
 import { modelConfiguration } from "./model-config";
 import { z } from "zod";
 import {
@@ -14,12 +26,28 @@ import { sampleBundle } from "../lib/samples";
 import { auth } from "../integrations/auth";
 import { clarify, explain, feasibility, generate } from "./models";
 import { assetUniverse, prices } from "./providers";
-import { event, findApp, listApps, saveApp, mutateApp, type Access } from "./repository";
+import {
+  event,
+  findApp,
+  listApps,
+  saveApp,
+  mutateApp,
+  deleteChat,
+  type Access,
+} from "./repository";
+import { projectStarterBundle } from "../lib/financial-starter";
 import { execute, sourceHash, verify } from "./runtime";
 import { demoMode, demoOwnerId, localMode, settings } from "./settings";
 
 const text = z.string().trim().min(1).max(4000);
 const requestSchema = z.discriminatedUnion("action", [
+  z
+    .object({
+      action: z.literal("delete-chat"),
+      appId: z.string(),
+      expectedRevision: z.number().int().positive(),
+    })
+    .strict(),
   z.object({ action: z.literal("clarify"), prompt: text }),
   z.object({ action: z.literal("create-workspace"), prompt: z.string().trim().min(1).max(12000) }),
   z.object({
@@ -87,7 +115,7 @@ export async function snapshot(access: Access) {
       modelConfigured: !!modelConfiguration(config).apiKey,
       tushareConfigured: !!config.TUSHARE_TOKEN,
       hostedDatabaseConfigured: !!config.VITE_CONVEX_URL,
-      runtime: "Miniflare workerd sandbox",
+      runtime: "Linux-isolated TanStack projects; legacy workerd compatibility",
     },
   };
 }
@@ -96,12 +124,14 @@ export async function makeRelease(
   bundle: AppBundle,
   origin: Release["origin"],
   notes: string,
+  record?: import("../lib/build-plan").BuildRecord,
+  signal?: AbortSignal,
 ): Promise<Release> {
   return {
     id: crypto.randomUUID(),
     bundle,
     spec,
-    verification: await verify(bundle, spec),
+    verification: await verify(bundle, spec, record, signal),
     createdAt: new Date().toISOString(),
     origin,
     notes,
@@ -124,6 +154,10 @@ function newApp(access: Access, spec: ProductSpec): Application {
 }
 // Verified source becomes active atomically; failed builds preserve the working release.
 export async function applyRelease(app: Application, release: Release) {
+  if (release.buildRecord) {
+    requireBuild(release.buildRecord, release.buildRecord.turnId);
+    validateScopedBundle(release.bundle, release.buildRecord);
+  }
   if (!release.verification.passed) {
     app.preview = release;
     return false;
@@ -167,6 +201,23 @@ async function build(
 }
 export async function dispatch(access: Access, raw: unknown) {
   const req = requestSchema.parse(raw);
+  if (
+    [
+      "create",
+      "update",
+      "import",
+      "seed",
+      "load-prices",
+      "test-provider",
+      "clarify",
+      "accept",
+      "reverify",
+    ].includes(req.action)
+  )
+    throw new Error(
+      "Use the financial-capability conversation to scope this request. Legacy direct builds, imports and provider tests are disabled until they support the internal capability contract.",
+    );
+  if (req.action === "delete-chat") return deleteChat(access, req.appId, req.expectedRevision);
   if (req.action === "create-workspace") {
     const app = newApp(access, {
       ...protocols[0]!.defaultSpec,
@@ -175,10 +226,17 @@ export async function dispatch(access: Access, raw: unknown) {
     });
     app.chatTitle = "New chat";
     app.conversation = [];
-    const scaffold = sampleBundle(app.spec);
-    scaffold.files["index.html"] = '<main id="app"></main>';
-    scaffold.files["app.js"] = "cd80.ready();";
-    scaffold.files["style.css"] = "";
+    const scaffold =
+      (await settings()).CD80_APP_FORMAT === "legacy"
+        ? sampleBundle(app.spec)
+        : projectStarterBundle(app.spec);
+    if (scaffold.manifest.schemaVersion === 1) {
+      scaffold.files["index.html"] = '<main id="app"></main>';
+      scaffold.files["app.js"] = "cd80.ready();";
+      scaffold.files["style.css"] =
+        "body{font-family:system-ui,sans-serif;color:#192638;background:#f5f7fa}main{max-width:960px;margin:auto;padding:24px}button{font:inherit}";
+      scaffold.manifest.permissions = ["finance.calculate", "storage.read", "storage.write"];
+    }
     app.workspace = scaffold;
     const saved = await saveApp(access, app, null);
     const { generateChatTitle } = await import("./chat-title");
@@ -353,6 +411,13 @@ export async function dispatch(access: Access, raw: unknown) {
     !release.bundle.manifest.permissions.includes(req.capability as any)
   )
     throw new Error("Verified release and declared capability permission required");
+  if (
+    !release.buildRecord ||
+    release.buildRecord.artifactHash !== release.verification.sourceHash ||
+    release.verification.sourceHash !== (await sourceHash(release.bundle))
+  )
+    throw new Error("A verified, unchanged financial contract is required for capability access");
+  validateScopedBundle(release.bundle, release.buildRecord);
   if (JSON.stringify(req.input ?? null).length > 150000)
     throw new Error("Capability input exceeds size limit");
   if (req.capability === "plugin.call") {
@@ -371,6 +436,61 @@ export async function dispatch(access: Access, raw: unknown) {
       input.operationId,
       input.parameters,
     );
+  }
+  if (["finance.match-companies", "finance.company-cards"].includes(req.capability)) {
+    if (!release.buildRecord || release.buildRecord.plan.mode !== "fixture")
+      throw new Error("Company modules currently support explicit synthetic builds only.");
+    const table = await managedCompanies("fixture");
+    if (req.capability === "finance.match-companies")
+      return { ...matchCompanies(table.companies, req.input), synthetic: true };
+    const input = companyCardsInputSchema.parse(req.input);
+    const day = shanghaiDay(new Date());
+    let response: unknown;
+    await mutateApp(access, app.id, (latest) => {
+      if (latest.current?.id !== release.id)
+        throw new Error("Only the active release can use company cards.");
+      let state = (latest.data._companyCards as CardState | undefined) ?? emptyCardState();
+      let exhausted = false;
+      if (input.action === "batch") {
+        const result = dailyCompanyCards(
+          table.companies,
+          { risk: input.risk, industries: input.industries },
+          state,
+          { day, appId: latest.id, revisitDismissed: input.revisitDismissed },
+        );
+        state = result.state;
+        exhausted = result.exhausted;
+      } else if (input.action === "decide")
+        state = decideCompanyCard(state, day, input.ticker, input.choice);
+      latest.data._companyCards = state;
+      if (JSON.stringify(latest.data).length > 150000)
+        throw new Error("Application data exceeds the storage limit.");
+      const tickers =
+        input.action === "watchlist"
+          ? state.watchlist
+          : state.batch?.day === day
+            ? state.batch.tickers
+            : [];
+      response = {
+        day,
+        criteria: state.batch?.day === day ? JSON.parse(state.batch.criteriaKey) : null,
+        synthetic: true,
+        moduleVersion: companyModuleVersion,
+        exhausted,
+        companies: tickers.map((ticker) => ({
+          ...table.companies.find((company) => company.ticker === ticker),
+          metrics: unavailableCardMetrics(release.buildRecord!.plan.cardMetrics),
+          choice: state.batch?.day === day ? (state.batch.decisions[ticker] ?? null) : null,
+        })),
+        watchlist: state.watchlist,
+        notice: exhausted
+          ? "No unseen eligible companies remain. You may explicitly revisit dismissed companies."
+          : tickers.length < 5 && input.action !== "watchlist"
+            ? "Fewer than five eligible companies. Your risk and industry filters were kept."
+            : null,
+      };
+    });
+    return response;
   }
   if (req.capability === "finance.calculate") return execute(release.bundle, req.input);
   if (req.capability === "finance.portfolio") return calculate("portfolio", req.input);
