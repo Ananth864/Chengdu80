@@ -486,7 +486,7 @@ export function Studio() {
               aria-labelledby="studio-chat-tab"
               aria-label="Application chat"
               className={cn(
-                "min-h-0 w-full flex-1 flex-col gap-4 overflow-hidden p-4 xl:flex xl:w-100 xl:flex-none 2xl:w-120",
+                "min-h-0 w-full flex-1 flex-col gap-4 overflow-hidden p-4 xl:flex xl:w-120 xl:flex-none 2xl:w-144",
                 mobilePane === "chat" ? "flex" : "hidden",
               )}
             >
