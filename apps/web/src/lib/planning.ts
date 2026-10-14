@@ -26,19 +26,19 @@ const capabilityLabels: Record<BusinessCapability, string> = {
 };
 const capabilityDetails: Record<BusinessCapability, string> = {
   "market-research":
-    "Industry-level research; company-card details add company-specific context before each decision.",
-  news: "Demo news is retrieved once per research run; there is no recurring monitoring.",
+    "Research about an entire industry. The daily company cards then add detail about each company before a decision.",
+  news: "News is gathered once each time the research runs — it does not refresh on its own.",
   "historical-analysis":
-    "Price chart, current price, 52-week/all-time extremes, drawdown and daily change.",
+    "Price chart, latest price, 52-week and all-time highs and lows, how far the price has fallen from its peak, and the daily change.",
   "price-target":
-    "Externally sourced target with source, date, currency and horizon; never locally predicted.",
+    "A price target published by an outside source, always shown with who published it, when, in which currency, and over what time frame. The app never predicts prices itself.",
   "risk-assessment":
-    "Expert questionnaire and scoring are pending; only explicit synthetic demo profiles exist.",
-  "industry-preference": "Industries come from the platform-managed company table.",
+    "A proper expert questionnaire is not available yet, so simple demo profiles stand in.",
+  "industry-preference": "Industries come from the platform's checked company list.",
   "risk-industry-matching":
-    "Fixed mapping: low to large, medium to medium, high to small cap, intersected with chosen industries.",
+    "Low risk is paired with larger companies, medium with mid-sized, and high with smaller ones — then narrowed to your chosen industries.",
   "company-cards":
-    "Up to five random eligible companies per China day with yes/no decisions and a watchlist.",
+    "Up to five companies per trading day, each with a simple yes/no decision and a watchlist option.",
 };
 export function capabilityLabel(id: BusinessCapability) {
   return capabilityLabels[id];
@@ -56,12 +56,16 @@ export function workflowGraph(
       kind: "data",
       label: record
         ? record.plan.mode === "fixture"
-          ? "Synthetic demo data"
+          ? "Demo sample data"
           : "Live platform data"
-        : "Application inputs",
+        : "Your inputs",
       detail: record
-        ? `Company table ${record.companyTableVersion} · provider ${record.provider}`
-        : "Inputs are confirmed when the internal build record is prepared.",
+        ? record.plan.mode === "fixture"
+          ? "Sample company data for the demo — not live market prices."
+          : `Company list ${record.companyTableVersion}, data from ${
+              record.provider === "tushare" ? "Tushare" : record.provider
+            }.`
+        : "These are confirmed when the app is built.",
       inputs: [
         spec.inputs.join("; "),
         requirements?.assumptions.length
@@ -71,18 +75,18 @@ export function workflowGraph(
         .filter(Boolean)
         .join(" · "),
       outputs: requirements?.missingInputs.length
-        ? `Normalized application inputs (missing: ${requirements.missingInputs.join("; ")})`
-        : "Normalized application inputs",
+        ? `The information the app needs (still missing: ${requirements.missingInputs.join("; ")})`
+        : "The information the app needs",
     },
   ];
   if (record?.companyIds.length)
     nodes.push({
       id: "companies",
       kind: "data",
-      label: "Requested companies",
-      detail: "Resolved against the platform-managed company table.",
+      label: "Companies you picked",
+      detail: "Matched against the platform's checked company list.",
       inputs: record.companyIds.join(", "),
-      outputs: "Table identities with industry and size category",
+      outputs: "Each company's name, industry and size",
     });
   const sourceIds = record?.companyIds.length ? ["data", "companies"] : ["data"];
   const capabilities = record?.resolvedCapabilities ?? [];
@@ -94,16 +98,16 @@ export function workflowGraph(
       detail: capabilityDetails[id],
       inputs:
         sourceIds.includes("companies") && id !== "market-research"
-          ? "Application and company-table inputs"
-          : "Application inputs",
-      outputs: "Capability results",
+          ? "Your inputs and the company list"
+          : "Your inputs",
+      outputs: "Findings passed on to your app",
     });
   nodes.push({
     id: "output",
     kind: "output",
     label: spec.name,
     detail: spec.purpose,
-    inputs: "Capability results",
+    inputs: "Findings from the steps",
     outputs: spec.outputs.join("; "),
   });
   const middle = nodes.filter((node) => node.kind === "capability");
@@ -113,10 +117,10 @@ export function workflowGraph(
     edges: middle.length
       ? [
           ...sourceIds.flatMap((from) =>
-            middle.map((node) => ({ from, to: node.id, label: "Provides inputs" })),
+            middle.map((node) => ({ from, to: node.id, label: "supplies information" })),
           ),
-          ...middle.map((node) => ({ from: node.id, to: "output", label: "Contributes results" })),
+          ...middle.map((node) => ({ from: node.id, to: "output", label: "adds its findings" })),
         ]
-      : sourceIds.map((from) => ({ from, to: "output", label: "Conceptual input" })),
+      : sourceIds.map((from) => ({ from, to: "output", label: "provides the information" })),
   };
 }

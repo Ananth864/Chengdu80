@@ -2,10 +2,10 @@ import { appProjectTemplateFiles } from "./app-project-template";
 import type { AppBundle, ProductSpec } from "./contracts";
 import type { BuildRecord } from "./build-plan";
 
-export const financialStarterVersion = "financial-react-v1";
+export const financialStarterVersion = "financial-react-v2";
 export const buildContextPath = "src/lib/build-context.ts";
 export function buildContextSource(record: BuildRecord, name: string) {
-  return `// Platform-owned contract context.\nexport const buildContext = ${JSON.stringify({ name, capabilities: record.resolvedCapabilities, companies: record.companyIds, theme: record.theme, provider: record.provider })} as const;\n`;
+  return `// Platform-owned contract context.\nexport const buildContext = ${JSON.stringify({ name, mode: record.plan.mode, capabilities: record.resolvedCapabilities, companies: record.companyIds, industries: record.companyIndustries, theme: record.theme, provider: record.provider })} as const;\n`;
 }
 export function approvedPermissions(record: BuildRecord, project: boolean) {
   const permissions: AppBundle["manifest"]["permissions"] = ["storage.read", "storage.write"];

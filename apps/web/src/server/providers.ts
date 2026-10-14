@@ -132,6 +132,138 @@ export async function sseACompanies(options?: { fetch?: typeof fetch }): Promise
     };
   }
 }
+// Market-cap sizing comes from daily_basic total_mv for the whole market in one
+// call. total_mv is reported in 万元 (10k RMB), so multiply to RMB.
+export function sizeForCap(marketCapRmb: number) {
+  return marketCapRmb >= 10_000_000_000
+    ? ("large" as const)
+    : marketCapRmb >= 3_000_000_000
+      ? ("medium" as const)
+      : ("small" as const);
+}
+export function parseDailyBasic(body: unknown): Map<string, number> {
+  if (!body || typeof body !== "object") throw new Error("Tushare returned an invalid response");
+  const payload = body as {
+    code?: number;
+    msg?: string;
+    data?: { fields?: unknown; items?: unknown };
+  };
+  const fields = payload.data?.fields;
+  const items = payload.data?.items;
+  if (payload.code !== 0 || !Array.isArray(fields) || !Array.isArray(items))
+    throw new Error(
+      `Tushare market-cap list was rejected: ${String(payload.msg || "invalid schema")}`,
+    );
+  const codeAt = fields.indexOf("ts_code");
+  const capAt = fields.indexOf("total_mv");
+  if (codeAt < 0 || capAt < 0) throw new Error("Tushare response is missing required fields");
+  const caps = new Map<string, number>();
+  for (const row of items) {
+    if (!row || typeof row !== "object" || !Array.isArray(row)) continue;
+    const ticker = cellText(row[codeAt]);
+    const raw = row[capAt];
+    const capWan = typeof raw === "number" ? raw : Number(cellText(raw));
+    if (!ticker || !Number.isFinite(capWan) || capWan <= 0) continue;
+    caps.set(ticker, capWan * 10_000);
+  }
+  if (!caps.size) throw new Error("Tushare returned no usable market-cap rows");
+  return caps;
+}
+type SizedCompanyCache = {
+  companies: (LiveCompany & { marketCapRmb: number; size: "small" | "medium" | "large" })[];
+  version: string;
+  asOf: string;
+  fetchedAt: number;
+};
+let sizedCompanyCache: SizedCompanyCache | undefined;
+export function resetSizedCompanyCache() {
+  sizedCompanyCache = undefined;
+}
+// Latest trading day's caps: walk back over weekends and holidays.
+async function dailyBasicCaps(token: string, doFetch: typeof fetch) {
+  for (let back = 0; back < 10; back++) {
+    const day = new Date(Date.now() - back * 24 * 60 * 60 * 1000);
+    const response = await doFetch("https://api.tushare.pro", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        api_name: "daily_basic",
+        token,
+        params: { trade_date: compactDay(day) },
+        fields: "ts_code,total_mv",
+      }),
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!response.ok) throw new Error(`Tushare HTTP request failed with status ${response.status}`);
+    const caps = parseDailyBasic(await response.json());
+    if (caps.size) return { caps, asOf: compactDay(day) };
+  }
+  throw new Error("Tushare returned no market-cap rows for the last ten days");
+}
+// The company-cards module needs sized companies, so live mode joins the SSE
+// Class A identity table with daily_basic market caps. Cached like stock_basic.
+export async function sizedSseCompanies(options?: { fetch?: typeof fetch }): Promise<
+  | {
+      available: true;
+      synthetic: false;
+      version: string;
+      asOf: string;
+      companies: (LiveCompany & { marketCapRmb: number; size: "small" | "medium" | "large" })[];
+    }
+  | { available: false; synthetic: false; reason: string }
+> {
+  const config = await settings();
+  if (!config.TUSHARE_TOKEN)
+    return {
+      available: false,
+      synthetic: false,
+      reason: "TUSHARE_TOKEN is not configured on the server",
+    };
+  const useCache = !options?.fetch;
+  if (
+    useCache &&
+    sizedCompanyCache &&
+    Date.now() - sizedCompanyCache.fetchedAt < STOCK_BASIC_TTL_MS
+  )
+    return { ...sizedCompanyCache, available: true, synthetic: false };
+  try {
+    const doFetch = options?.fetch ?? fetch;
+    const base = await sseACompanies(options);
+    if (!base.available) return { available: false, synthetic: false, reason: base.reason };
+    const { caps, asOf } = await dailyBasicCaps(config.TUSHARE_TOKEN, doFetch);
+    const companies = base.companies.flatMap((company) => {
+      const marketCapRmb = caps.get(company.ticker);
+      return marketCapRmb === undefined
+        ? []
+        : [{ ...company, marketCapRmb, size: sizeForCap(marketCapRmb) }];
+    });
+    if (!companies.length) throw new Error("Tushare returned no sized SSE Class A companies");
+    const fetchedAt = new Date();
+    const cache: SizedCompanyCache = {
+      companies,
+      version: `sse-a-sized:${createHash("sha256")
+        .update(JSON.stringify(companies))
+        .digest("hex")
+        .slice(0, 16)}:${compactDay(fetchedAt)}`,
+      asOf,
+      fetchedAt: fetchedAt.getTime(),
+    };
+    if (useCache) sizedCompanyCache = cache;
+    return { ...cache, available: true, synthetic: false };
+  } catch (error) {
+    if (
+      useCache &&
+      sizedCompanyCache &&
+      Date.now() - sizedCompanyCache.fetchedAt < STOCK_BASIC_STALE_MS
+    )
+      return { ...sizedCompanyCache, available: true, synthetic: false };
+    return {
+      available: false,
+      synthetic: false,
+      reason: error instanceof Error ? error.message : "Tushare request failed",
+    };
+  }
+}
 // Tushare caps rows per call; walk backwards in ~4-year windows for full history.
 async function tushareDaily(token: string, tsCode: string) {
   const rows: Array<{ date: string; close: number }> = [];

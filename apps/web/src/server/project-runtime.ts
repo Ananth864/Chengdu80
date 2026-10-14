@@ -3,6 +3,7 @@ import path from "node:path";
 import type { AppBundle, Check, ProductSpec } from "../lib/contracts";
 import type { BuildRecord } from "../lib/build-plan";
 import { validateScopedBundle } from "./build-policy";
+import { financialStarterVersion } from "../lib/financial-starter";
 import { bundleSchema } from "../lib/contracts";
 import {
   prepareProject,
@@ -66,13 +67,15 @@ export async function verifyProject(
       const preview = await startPreview(workspace);
       const response = await readPreviewResponse(preview, "/");
       const html = await response.text();
+      const live = record?.plan.mode === "live";
+      const expectedLabel = live ? "Live · Shanghai Stock Exchange" : "Synthetic demo";
       if (
         response.status !== 200 ||
-        !html.includes("Synthetic demo") ||
-        !html.includes("financial-react-v1")
+        !html.includes(expectedLabel) ||
+        !html.includes(financialStarterVersion)
       )
         throw new Error(
-          "The compiled app did not render its fixed financial modules and synthetic label.",
+          `The compiled app did not render its fixed financial modules and ${live ? "live source" : "synthetic"} label.`,
         );
       const output = await readProjectFiles(workspace);
       for (const [name, source] of Object.entries(bundle.files))

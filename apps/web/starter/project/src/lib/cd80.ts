@@ -38,7 +38,7 @@ const matchingResult = z.object({
   size: z.enum(["small", "medium", "large"]),
   companies: z.array(displayCompanySchema),
   moduleVersion: z.literal("company-capabilities-v1"),
-  synthetic: z.literal(true),
+  synthetic: z.boolean(),
 });
 const cardsInput = z.discriminatedUnion("action", [
   criteriaSchema.extend({ action: z.literal("batch"), revisitDismissed: z.boolean().optional() }),
@@ -47,7 +47,7 @@ const cardsInput = z.discriminatedUnion("action", [
 ]);
 const cardsResult = z.object({
   day: z.string(),
-  synthetic: z.literal(true),
+  synthetic: z.boolean(),
   moduleVersion: z.literal("company-capabilities-v1"),
   criteria: criteriaSchema.nullable(),
   exhausted: z.boolean(),

@@ -1,4 +1,4 @@
-import { managedCompanies, requireBuild, validateScopedBundle } from "./build-policy";
+import { fixtureCompanies, requireBuild, validateScopedBundle } from "./build-policy";
 import {
   companyCardsInputSchema,
   companyModuleVersion,
@@ -26,7 +26,7 @@ import { calculate, defaultData, fixtureMeta } from "../lib/finance";
 import { sampleBundle } from "../lib/samples";
 import { auth } from "../integrations/auth";
 import { clarify, explain, feasibility, generate } from "./models";
-import { assetUniverse, prices } from "./providers";
+import { assetUniverse, prices, sizedSseCompanies } from "./providers";
 import {
   event,
   findApp,
@@ -460,13 +460,21 @@ export async function dispatch(access: Access, raw: unknown) {
     );
   }
   if (["finance.match-companies", "finance.company-cards"].includes(req.capability)) {
-    if (!release.buildRecord || release.buildRecord.plan.mode !== "fixture")
-      throw new Error("Company modules currently support explicit synthetic builds only.");
-    const table = await managedCompanies("fixture");
-    if (!table.available || !table.synthetic)
-      throw new Error("The fixture company table is unavailable.");
+    const mode = release.buildRecord.plan.mode;
+    // Fixture builds serve the synthetic demo table; live builds serve the real
+    // SSE Class A identity table joined with daily_basic market caps.
+    const table =
+      mode === "fixture"
+        ? {
+            available: true as const,
+            synthetic: true as const,
+            version: "synthetic-companies-v1",
+            companies: fixtureCompanies,
+          }
+        : await sizedSseCompanies();
+    if (!table.available) throw new Error(`Company data is unavailable right now. ${table.reason}`);
     if (req.capability === "finance.match-companies")
-      return { ...matchCompanies(table.companies, req.input), synthetic: true };
+      return { ...matchCompanies(table.companies, req.input), synthetic: table.synthetic };
     const input = companyCardsInputSchema.parse(req.input);
     const day = shanghaiDay(new Date());
     let response: unknown;
@@ -498,7 +506,7 @@ export async function dispatch(access: Access, raw: unknown) {
       response = {
         day,
         criteria: state.batch?.day === day ? JSON.parse(state.batch.criteriaKey) : null,
-        synthetic: true,
+        synthetic: table.synthetic,
         moduleVersion: companyModuleVersion,
         exhausted,
         companies: tickers.map((ticker) => ({

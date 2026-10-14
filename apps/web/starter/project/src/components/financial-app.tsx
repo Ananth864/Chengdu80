@@ -46,21 +46,25 @@ const historyMetrics = [
 
 export function FinancialDemo() {
   const capabilities: readonly string[] = buildContext.capabilities;
+  const live = buildContext.mode === "live";
   return (
     <main
-      data-financial-module-version="financial-react-v1"
+      data-financial-module-version="financial-react-v2"
       className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-10"
     >
       <header className="space-y-3">
-        <Badge variant="secondary">Synthetic demo</Badge>
+        <Badge variant="secondary">
+          {live ? "Live · Shanghai Stock Exchange" : "Synthetic demo"}
+        </Badge>
         <h1 className="text-3xl font-semibold tracking-tight">{buildContext.name}</h1>
         <p className="text-muted-foreground">
-          Explore the confirmed financial workflow. Live data and expert assessments are
-          unavailable.
+          {live
+            ? "Explore the confirmed financial workflow with real Shanghai Stock Exchange Class A companies. Expert assessments are unavailable."
+            : "Explore the confirmed financial workflow. Live data and expert assessments are unavailable."}
         </p>
       </header>
       {capabilities.includes("risk-industry-matching") && (
-        <CompanySelection cards={capabilities.includes("company-cards")} />
+        <CompanySelection cards={capabilities.includes("company-cards")} live={live} />
       )}
       {capabilities.includes("historical-analysis") && (
         <section aria-label="Historical analysis" className="space-y-4">
@@ -97,9 +101,13 @@ export function FinancialDemo() {
   );
 }
 
-function CompanySelection({ cards }: { cards: boolean }) {
+function CompanySelection({ cards, live }: { cards: boolean; live: boolean }) {
   const client = useQueryClient();
+  const industries: readonly string[] = buildContext.industries.length
+    ? buildContext.industries
+    : ["Technology"];
   const [risk, setRisk] = useState<"low" | "medium" | "high">("low");
+  const [industry, setIndustry] = useState<string | null>(null);
   const [started, setStarted] = useState(false);
   const saved = useQuery({
     queryKey: ["company-state"],
@@ -107,7 +115,10 @@ function CompanySelection({ cards }: { cards: boolean }) {
     enabled: cards,
     retry: false,
   });
-  const criteria = saved.data?.criteria ?? { risk, industries: ["Technology"] };
+  const criteria = saved.data?.criteria ?? {
+    risk,
+    industries: [industry ?? industries[0]!],
+  };
   const today = useQuery<
     | Awaited<ReturnType<typeof cd80.finance.companyCards>>
     | Awaited<ReturnType<typeof cd80.finance.matchCompanies>>
@@ -138,13 +149,16 @@ function CompanySelection({ cards }: { cards: boolean }) {
         <CardHeader>
           <CardTitle>Find companies for your profile</CardTitle>
           <CardDescription>
-            This synthetic risk choice demonstrates the mapping. It is not an expert risk
-            assessment.
+            {live
+              ? "Your risk comfort chooses the company size band. It is not an expert risk assessment."
+              : "This synthetic risk choice demonstrates the mapping. It is not an expert risk assessment."}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <Field>
-            <FieldLabel htmlFor="risk-profile">Synthetic risk profile</FieldLabel>
+            <FieldLabel htmlFor="risk-profile">
+              {live ? "Risk profile" : "Synthetic risk profile"}
+            </FieldLabel>
             <Select
               value={criteria.risk}
               disabled={!!saved.data?.criteria || started}
@@ -170,16 +184,28 @@ function CompanySelection({ cards }: { cards: boolean }) {
           </Field>
           <Field>
             <FieldLabel htmlFor="industry">Industry</FieldLabel>
-            <Select value="Technology" disabled>
+            <Select
+              value={criteria.industries[0]}
+              disabled={!!saved.data?.criteria || started}
+              onValueChange={(value) => {
+                if (typeof value === "string" && industries.includes(value)) setIndustry(value);
+              }}
+            >
               <SelectTrigger id="industry">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Technology">Technology</SelectItem>
+                {industries.map((item) => (
+                  <SelectItem key={item} value={item}>
+                    {item}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <p className="text-sm text-muted-foreground">
-              The synthetic table contains Technology examples.
+              {live
+                ? "Industries come from the live Shanghai Stock Exchange company table."
+                : "The synthetic table contains Technology examples."}
             </p>
           </Field>
         </CardContent>

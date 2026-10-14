@@ -54,7 +54,7 @@ const draft = workflowGraph(spec, undefined, undefined);
 assert.equal(draft.basis, "draft");
 assert.deepEqual(
   draft.edges,
-  [{ from: "data", to: "output", label: "Conceptual input" }],
+  [{ from: "data", to: "output", label: "provides the information" }],
   "draft graph keeps one conceptual edge",
 );
 assert.ok(draft.nodes.some((node) => node.kind === "output" && node.label === spec.name));
@@ -81,6 +81,7 @@ const record = {
     "company-cards",
   ],
   companyIds: ["DEMO001"],
+  companyIndustries: ["Technology"],
   companyTableVersion: "synthetic-companies-v1",
   protocolHashes: {},
   provider: "tushare" as const,

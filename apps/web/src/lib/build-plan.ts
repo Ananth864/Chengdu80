@@ -33,6 +33,7 @@ export type BuildRecord = {
   plan: BuildPlan;
   resolvedCapabilities: BusinessCapability[];
   companyIds: string[];
+  companyIndustries: string[];
   companyTableVersion: string;
   protocolHashes: Record<string, string>;
   provider: "tushare";

@@ -199,6 +199,9 @@ export async function prepareBuild(
     protocolHashes,
     provider: "tushare" as const,
     moduleVersions: { companies: companyModuleVersion, starter: financialStarterVersion },
+    companyIndustries: table.available
+      ? [...new Set(table.companies.map((company) => company.industry || "Other"))].sort()
+      : [],
     theme: plan.themeOverride ?? "starter-default",
     readiness: blockers.length ? ("blocked" as const) : plan.mode,
     blockers,

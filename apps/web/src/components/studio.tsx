@@ -91,7 +91,7 @@ const workspaceTabs = [
   { value: "source", label: "Code", Icon: Code2 },
   { value: "data", label: "Database (read-only)", Icon: Database },
   { value: "requirements", label: "Requirements", Icon: ClipboardList },
-  { value: "workflow", label: "Workflow", Icon: Workflow },
+  { value: "workflow", label: "How it works", Icon: Workflow },
 ] as const;
 export function Studio() {
   const convexConfigured = !!useRouter().options.context.convexClient;

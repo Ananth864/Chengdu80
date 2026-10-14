@@ -379,10 +379,12 @@ export function DesignReview({
 }
 
 const columns = [
-  { kind: "data", title: "Data", Icon: Database },
-  { kind: "capability", title: "Capabilities", Icon: Sparkles },
-  { kind: "output", title: "Outputs", Icon: LayoutPanelLeft },
+  { kind: "data", title: "Information used", Icon: Database },
+  { kind: "capability", title: "Steps the app takes", Icon: Sparkles },
+  { kind: "output", title: "What you get", Icon: LayoutPanelLeft },
 ] as const;
+
+const kindNames = { data: "Information", capability: "Step", output: "Result" } as const;
 
 export function WorkflowView({ app }: { app: Application }) {
   const graph: WorkflowGraph = useMemo(
@@ -394,13 +396,13 @@ export function WorkflowView({ app }: { app: Application }) {
   return (
     <section className="mx-auto flex w-full max-w-5xl min-w-0 flex-col gap-6 p-4 pb-10">
       <header className="flex flex-col gap-1">
-        <h2 className="studio-display font-medium">Workflow</h2>
+        <h2 className="studio-display font-medium">How your app works</h2>
         <p className="text-sm text-muted-foreground">
           {graph.basis === "build-record"
-            ? "Derived from the latest internal build record."
-            : "Planned design; no build record yet."}{" "}
-          A conceptual explanation for review — not an executable graph, proven execution order, or
-          verified product behavior.
+            ? "Based on your app as it was last built."
+            : "Based on the plan so far — nothing has been built yet."}{" "}
+          A plain-language summary to help you review the idea. Inside the app these steps may be
+          combined or reordered, so the working app itself is always the final word.
         </p>
       </header>
       <div
@@ -439,7 +441,7 @@ export function WorkflowView({ app }: { app: Application }) {
                     ))
                 ) : (
                   <p className="px-2 py-2 text-sm text-muted-foreground">
-                    {kind === "capability" ? "Decided at build time." : "None recorded."}
+                    {kind === "capability" ? "Chosen during the build." : "Nothing yet."}
                   </p>
                 )}
               </CardContent>
@@ -447,30 +449,13 @@ export function WorkflowView({ app }: { app: Application }) {
           </div>
         ))}
       </div>
-      <section aria-label="Workflow connections" className="flex flex-col gap-2">
-        <h3 className="text-sm font-medium text-muted-foreground">Connections</h3>
-        <ul className="flex flex-col gap-1.5 text-sm">
-          {graph.edges.map((edge, index) => (
-            <li key={index} className="flex flex-wrap items-center gap-1.5">
-              <span className="font-medium">
-                {graph.nodes.find((item) => item.id === edge.from)?.label ?? edge.from}
-              </span>
-              <ArrowRight className="size-3.5 text-muted-foreground" />
-              <span className="font-medium">
-                {graph.nodes.find((item) => item.id === edge.to)?.label ?? edge.to}
-              </span>
-              <span className="text-muted-foreground">— {edge.label.toLowerCase()}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
       {node && (
         <Card>
           <CardHeader>
             <CardTitle className="flex flex-wrap items-center justify-between gap-2">
               {node.label}
               <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-normal text-muted-foreground">
-                {node.kind}
+                {kindNames[node.kind]}
               </span>
             </CardTitle>
           </CardHeader>
@@ -478,9 +463,9 @@ export function WorkflowView({ app }: { app: Application }) {
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
               {(
                 [
-                  ["Detail", node.detail || "None recorded."],
-                  ["Inputs", node.inputs || "None recorded."],
-                  ["Outputs", node.outputs || "None recorded."],
+                  ["About", node.detail || "Nothing recorded yet."],
+                  ["What it uses", node.inputs || "Nothing recorded yet."],
+                  ["What it produces", node.outputs || "Nothing recorded yet."],
                 ] as const
               ).map(([label, value]) => (
                 <div key={label} className="flex flex-col gap-0.5">
