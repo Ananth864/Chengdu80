@@ -3,18 +3,14 @@ import { StudioSubscriptions } from "../lib/use-studio-data";
 import { BuildGallery } from "./build-gallery";
 import { AgentChat } from "./agent-chat";
 import { ConversationNavigation } from "./conversation-navigation";
-import { DesignReview, WorkflowView } from "./design-review";
+import { WorkflowView } from "./design-review";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowUpRight,
   Eye,
-  Database,
   MoreHorizontal,
   Maximize,
   Minimize,
-  Code2,
-  ClipboardList,
-  MessageCircleQuestion,
   Workflow,
   RefreshCw,
   ShieldCheck,
@@ -72,7 +68,6 @@ import {
   type Release,
 } from "../lib/contracts";
 import { disclaimerText } from "../lib/disclaimer";
-import { CodeWorkspace, type SourcePath } from "./code-workspace";
 import { AppFrame } from "./app-frame";
 
 type Snapshot = {
@@ -86,12 +81,9 @@ type Snapshot = {
     runtime: string;
   };
 };
-type Tab = "preview" | "source" | "data" | "requirements" | "workflow";
+type Tab = "preview" | "workflow";
 const workspaceTabs = [
   { value: "preview", label: "Preview", Icon: Eye },
-  { value: "source", label: "Code", Icon: Code2 },
-  { value: "data", label: "Database (read-only)", Icon: Database },
-  { value: "requirements", label: "Requirements", Icon: ClipboardList },
   { value: "workflow", label: "How it works", Icon: Workflow },
 ] as const;
 export function Studio() {
@@ -113,7 +105,6 @@ export function Studio() {
   const [error, setError] = useState("");
   const [tab, setTab] = useState<Tab>("preview");
   const [mobilePane, setMobilePane] = useState<"chat" | "preview">("chat");
-  const [activeSourceFile, setActiveSourceFile] = useState<SourcePath>("app.js");
   const [review, setReview] = useState<"checks" | "spec" | null>(null);
   const [imported, setImported] = useState<AppBundle | null>(null);
   const [deletingChat, setDeletingChat] = useState<Application | null>(null);
@@ -178,7 +169,6 @@ export function Studio() {
       setTab("workflow");
     }
   }, [app?.id, app?.buildRecords]);
-  const workspaceBundle = app?.workspace ?? release?.bundle;
   const refreshVersion = useRef(0);
   async function refresh() {
     const version = ++refreshVersion.current;
@@ -264,7 +254,6 @@ export function Studio() {
     setMobilePane(pane);
     if (pane === "preview") setPreviewCollapsed(false);
     setReview(null);
-    setActiveSourceFile("app.js");
     window.history.pushState(null, "", id ? `/#app=${id}` : "/");
   }
   async function run<T>(label: string, task: () => Promise<T>) {
@@ -588,7 +577,7 @@ export function Studio() {
                 aria-label="Application workspace"
                 className={cn(
                   "flex min-h-0 min-w-0 flex-1 flex-col [&:fullscreen]:h-svh [&:fullscreen]:bg-background",
-                  app && !imported && tab !== "data" && tab !== "requirements" && tab !== "workflow"
+                  app && !imported && tab !== "workflow"
                     ? "overflow-hidden"
                     : "overflow-y-auto",
                 )}
@@ -641,8 +630,7 @@ export function Studio() {
                     onValueChange={(value) => {
                       if (isTab(value)) {
                         setTab(value);
-                        if (value !== "preview" && value !== "source")
-                          void run("Refreshing workspace…", refresh);
+                        if (value !== "preview") void run("Refreshing workspace…", refresh);
                       }
                     }}
                     className="min-h-0 min-w-0 flex-1 gap-0"
@@ -656,47 +644,22 @@ export function Studio() {
                         ))}
                       </TabsList>
                       <div className="flex min-w-0 items-center justify-center gap-2">
-                        <span
-                          className="truncate text-sm font-mono"
-                          title={tab === "source" ? activeSourceFile : app.name}
-                        >
-                          {tab === "source" ? activeSourceFile : app.name}
+                        <span className="truncate text-sm font-mono" title={app.name}>
+                          {app.name}
                         </span>
-                        {!!app.requirements?.questions.filter((question) => !question.answer.trim())
-                          .length &&
-                          tab !== "requirements" && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 gap-1.5 px-2.5 text-xs"
-                              onClick={() => setTab("requirements")}
-                            >
-                              <MessageCircleQuestion className="size-3.5" />
-                              {
-                                app.requirements.questions.filter(
-                                  (question) => !question.answer.trim(),
-                                ).length
-                              }{" "}
-                              open
-                            </Button>
-                          )}
-                        {tab !== "source" && (
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={`Refresh ${tab === "data" ? "database" : tab}`}
-                            title={`Refresh ${tab === "data" ? "database" : tab}`}
-                            disabled={
-                              !!busy || (tab === "preview" && !release?.verification.passed)
-                            }
-                            onClick={() => {
-                              if (tab === "preview") setPreviewRevision((revision) => revision + 1);
-                              else void run("Refreshing workspace…", refresh);
-                            }}
-                          >
-                            <RefreshCw />
-                          </Button>
-                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Refresh ${tab}`}
+                          title={`Refresh ${tab}`}
+                          disabled={!!busy || (tab === "preview" && !release?.verification.passed)}
+                          onClick={() => {
+                            if (tab === "preview") setPreviewRevision((revision) => revision + 1);
+                            else void run("Refreshing workspace…", refresh);
+                          }}
+                        >
+                          <RefreshCw />
+                        </Button>
                       </div>
                       <div className="flex items-center justify-end gap-2">
                         <Button
@@ -804,42 +767,6 @@ export function Studio() {
                           </EmptyContent>
                         </Empty>
                       )}
-                    </TabsContent>
-                    <TabsContent value="source" className="flex min-h-0 flex-col">
-                      {workspaceBundle && (
-                        <CodeWorkspace
-                          bundle={workspaceBundle}
-                          workspaceId={`${app.id}:${app.revision}`}
-                          activeFile={activeSourceFile}
-                          onSelectFile={setActiveSourceFile}
-                        />
-                      )}
-                    </TabsContent>
-                    <TabsContent value="data" className="p-4">
-                      <p className="text-sm text-muted-foreground">Read-only application data.</p>
-                      <pre className="max-w-full overflow-x-auto py-4 text-xs">
-                        {JSON.stringify(app.data, null, 2)}
-                      </pre>
-                    </TabsContent>
-                    <TabsContent
-                      value="requirements"
-                      className="flex min-h-0 flex-col overflow-y-auto"
-                    >
-                      <DesignReview
-                        app={app}
-                        disabled={!!busy || agentBusy}
-                        onSave={async (spec, requirements) => {
-                          await run("Saving design…", async () => {
-                            await api<Application>({
-                              action: "save-design",
-                              appId: app.id,
-                              spec,
-                              requirements,
-                            });
-                            await refresh();
-                          });
-                        }}
-                      />
                     </TabsContent>
                     <TabsContent value="workflow" className="flex min-h-0 flex-col overflow-y-auto">
                       <WorkflowView
@@ -1000,13 +927,7 @@ export function Studio() {
 }
 
 function isTab(value: unknown): value is Tab {
-  return (
-    value === "preview" ||
-    value === "source" ||
-    value === "data" ||
-    value === "requirements" ||
-    value === "workflow"
-  );
+  return value === "preview" || value === "workflow";
 }
 
 function Checks({ release }: { release: Release }) {
