@@ -1,4 +1,4 @@
-import type { BuildRecord } from "./build-plan";
+import type { BuildRecord, BusinessCapability } from "./build-plan";
 import type { UIMessage } from "@tanstack/ai";
 import { z } from "zod";
 import { isProjectFile } from "./project-files";
@@ -190,6 +190,15 @@ export type Application = {
   createdAt: string;
   buildRecords?: BuildRecord[];
   rejectedBuildTurns?: string[];
+  // A plan awaiting the user's confirmation; prepare_build consumes it.
+  buildProposal?: {
+    turnId: string;
+    createdAt: string;
+    mode: "fixture" | "live";
+    capabilities: BusinessCapability[];
+    companyQueries: string[];
+    summary: string;
+  };
   chatTitle?: string;
   chatDeletedAt?: string;
   conversation?: UIMessage[];

@@ -38,7 +38,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "Chengdu80 · Financial app studio",
+        title: "Linus · Financial app studio",
       },
     ],
     links: [

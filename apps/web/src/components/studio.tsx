@@ -142,7 +142,8 @@ export function Studio() {
       ? { ...selectedApp, conversation: subscribedMessages.messages }
       : selectedApp;
   const messagesReady = !reactive || !selected || subscribedMessages?.appId === selected;
-  const release = app && (app.current ?? app.preview);
+  const release = app && (app.preview ?? app.current);
+  const pendingPreview = app ? (app.preview?.id !== app.current?.id ? app.preview : null) : null;
   const workspaceBundle = app?.workspace ?? release?.bundle;
   const refreshVersion = useRef(0);
   async function refresh() {
@@ -663,6 +664,55 @@ export function Studio() {
                     </div>
                     <Separator />
                     <TabsContent value="preview" className="flex min-h-0 flex-col">
+                      {pendingPreview && (
+                        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-accent px-4 py-2 text-xs text-accent-foreground">
+                          <ShieldCheck className="size-4" />
+                          <span className="min-w-0 flex-1">
+                            {pendingPreview.verification.passed
+                              ? "Pending approval — review the preview, then activate it to go live."
+                              : "Verification failed. This preview cannot go live."}
+                          </span>
+                          {pendingPreview.verification.passed && (
+                            <Button
+                              size="sm"
+                              disabled={!!busy || agentBusy}
+                              onClick={() =>
+                                void run("Activating release…", async () => {
+                                  if (!pendingPreview) return;
+                                  await api({
+                                    action: "accept",
+                                    appId: app!.id,
+                                    releaseId: pendingPreview.id,
+                                  });
+                                  await refresh();
+                                })
+                              }
+                            >
+                              {busy === "Activating release…"
+                                ? "Activating…"
+                                : "Approve & activate"}
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={!!busy || agentBusy}
+                            onClick={() =>
+                              void run("Discarding preview…", async () => {
+                                if (!pendingPreview) return;
+                                await api({
+                                  action: "discard",
+                                  appId: app!.id,
+                                  releaseId: pendingPreview.id,
+                                });
+                                await refresh();
+                              })
+                            }
+                          >
+                            Discard
+                          </Button>
+                        </div>
+                      )}
                       {release?.verification.passed ? (
                         <AppFrame
                           key={`${release.id}:${previewRevision}`}

@@ -14,7 +14,7 @@ export const Route = createFileRoute("/api/docs")({
       GET: () =>
         Response.json(
           {
-            name: "Chengdu80 application contract",
+            name: "Linus application contract",
             version: 1,
             sourceBundleSchema: z.toJSONSchema(bundleSchema),
             productSpecSchema: z.toJSONSchema(specSchema),

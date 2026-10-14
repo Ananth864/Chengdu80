@@ -37,7 +37,7 @@ import {
   type ProductSpec,
 } from "../lib/contracts";
 import { findApp, saveApp, mutateApp, checkpointMessages, type Access } from "./repository";
-import { applyRelease, makeRelease } from "./platform";
+import { makeRelease } from "./platform";
 import { modelAdapter, modelOptions } from "./models";
 import { buildPlanSchema, type BuildRecord } from "../lib/build-plan";
 import {
@@ -46,6 +46,7 @@ import {
   managedCompanies,
   prepareBuild,
   requireBuild,
+  resolveCapabilities,
   selectedProtocols,
   validateScopedBundle,
 } from "./build-policy";
@@ -339,15 +340,61 @@ export async function startAgentTurn(
         };
       }),
       toolDefinition({
+        name: "propose_build",
+        description:
+          "Present the build plan for the user's confirmation before any build or edit turn: business capabilities, data mode, companies and the assumptions you would build on. End the turn immediately after this call; prepare_build only works in a later turn after the user explicitly agrees.",
+        inputSchema: buildPlanSchema.extend({ summary: z.string().min(1).max(2000) }),
+      }).server(async (proposal) => {
+        buildRecord = undefined;
+        if (proposal.mode === "fixture" && !fixtureAuthorized)
+          throw new Error(
+            "Ask whether the user wants a clearly labeled synthetic demo. Live data must not silently become fixtures.",
+          );
+        await mutateApp(access, appId, (latest) => {
+          controller.signal.throwIfAborted();
+          if (latest.agentTurn?.id !== user.id || latest.agentTurn.status !== "running")
+            throw new Error("This financial build turn is no longer active.");
+          latest.buildProposal = {
+            turnId: user.id,
+            createdAt: new Date().toISOString(),
+            mode: proposal.mode,
+            capabilities: proposal.capabilities,
+            companyQueries: proposal.companyQueries,
+            summary: proposal.summary,
+          };
+        });
+        return {
+          recorded: true,
+          next: "End your turn now with a short proposal message: what you will build, the capabilities, data mode, company and assumptions. Wait for the user's explicit confirmation; do not call prepare_build in this turn.",
+        };
+      }),
+      toolDefinition({
         name: "prepare_build",
         description:
-          "Validate requested capabilities and dependencies, resolve company-table identity, pin protocol versions and save an internal build record. Required before each build/edit turn. No user-facing submission screen. You determine request feasibility against the builder protocol before declaring a plan; the platform independently validates capabilities, company identity and data readiness, and returns blockers instead of building unsupported requests.",
+          "Validate requested capabilities and dependencies, resolve company-table identity, pin protocol versions and save an internal build record. Requires a proposal from propose_build that the user confirmed in an earlier turn; a build never starts on an unconfirmed plan. You determine request feasibility against the builder protocol before declaring a plan; the platform independently validates capabilities, company identity and data readiness, and returns blockers instead of building unsupported requests.",
         inputSchema: buildPlanSchema,
       }).server(async (plan) => {
         buildRecord = undefined;
         if (plan.mode === "fixture" && !fixtureAuthorized)
           throw new Error(
             "Ask whether the user wants a clearly labeled synthetic demo. Live data must not silently become fixtures.",
+          );
+        const proposal = (await findApp(access, appId)).buildProposal;
+        if (!proposal)
+          throw new Error(
+            "Call propose_build and end the turn first; build only after the user confirms the proposal.",
+          );
+        if (proposal.turnId === user.id)
+          throw new Error(
+            "The proposal was created in this turn. End the turn and wait for the user's confirmation before building.",
+          );
+        if (
+          proposal.mode !== plan.mode ||
+          JSON.stringify(resolveCapabilities(proposal.capabilities)) !==
+            JSON.stringify(resolveCapabilities(plan.capabilities))
+        )
+          throw new Error(
+            "The declared plan no longer matches the proposal the user confirmed. Call propose_build with the updated plan and end the turn.",
           );
         const record = await prepareBuild(
           plan,
@@ -359,6 +406,7 @@ export async function startAgentTurn(
           if (latest.agentTurn?.id !== user.id || latest.agentTurn.status !== "running")
             throw new Error("This financial build turn is no longer active.");
           latest.buildRecords = [...(latest.buildRecords ?? []), record].slice(-40);
+          latest.buildProposal = undefined;
           if (record.readiness === "blocked")
             latest.rejectedBuildTurns = [
               ...new Set([...(latest.rejectedBuildTurns ?? []), user.id]),
@@ -596,7 +644,7 @@ export async function startAgentTurn(
       toolDefinition({
         name: "deploy_preview",
         description:
-          "Verify the staged source and activate it automatically if every check passes. On failure, fix the reported checks and retry. The working site and saved data remain unchanged on failure.",
+          "Verify the staged source. When every check passes, the build is staged as a pending preview that the user reviews and activates from the Preview panel; it does not go live by itself. On failure, fix the reported checks and retry. The working site and saved data remain unchanged on failure.",
         inputSchema: z.object({ summary: z.string().min(1).max(500) }),
       }).server(async ({ summary }) => {
         const record = await requirePlan();
@@ -611,20 +659,23 @@ export async function startAgentTurn(
           controller.signal,
         );
         release.buildRecord = { ...record, artifactHash: release.verification.sourceHash };
-        await requirePlan();
-        let activated = false;
-        await mutateApp(access, appId, async (latest) => {
+        await mutateApp(access, appId, (latest) => {
           controller.signal.throwIfAborted();
           if (latest.agentTurn?.id !== user.id || latest.agentTurn.status !== "running")
             throw new Error("This financial build turn is no longer active.");
-          activated = await applyRelease(latest, release);
-          controller.signal.throwIfAborted();
+          latest.preview = release;
           latest.workspace = bundle;
         });
         return {
-          activated,
+          staged: true,
+          activated: false,
+          pendingApproval: release.verification.passed,
           checks: release.verification.checks,
-          ...(activated ? { previewUrl: `/#app=${appId}` } : {}),
+          ...(release.verification.passed
+            ? {
+                next: "Tell the user the preview is ready to review in the Preview tab, where they approve activation. The app is not live until they approve it, so provide no working link yet.",
+              }
+            : {}),
         };
       }),
     ];
@@ -641,7 +692,7 @@ export async function startAgentTurn(
         ...Object.values(agentProtocols),
         ...selected,
         `Available financial capability IDs: ${JSON.stringify(Object.keys((await import("./build-policy")).capabilityDependencies))}. Current internal build record: ${JSON.stringify(prior ?? null)}. Current draft requirements for the Requirements tab: ${JSON.stringify(app.requirements ?? null)}.`,
-        "Before fixture edits use prepare_build; read its selected protocols and apply the returned frontend design guidance (designGuidance) when writing presentation source. Preserve the Synthetic demo label. New React apps use fixed financial modules in the protected root route. Fixture apps may use storage.read and storage.write. Legacy fixtures also preserve finance.calculate. Matching builds may also use finance.match-companies; company-card builds may also use finance.company-cards. Use these fixed platform modules for matching, daily batches, decisions and watchlists; do not recreate their logic. Metric selection is pinned in prepare_build.cardMetrics, with omitted selection using defaults. Demo risk selection is an explicit synthetic profile, not a completed expert assessment. Market APIs, LLM explanations and plugins are not enabled for this first scoped flow. Keep unsupported financial outputs unavailable. Fixture company table uses synthetic DEMO001/DEMO002/DEMO003 companies. Live companies come from lookup_companies in live mode: Shanghai Stock Exchange Class A listed companies only, scored fuzzy matches. When the user writes a company name, an exact match is not required. If the top match clearly captures the user's intent (high score, one clear winner), state the assumed company and ticker and proceed with that assumption. If several companies match equally, ask the user to choose. If the company does not exist in the list, tell the user the platform currently supports only SSE Class A companies. Live company data uses the platform-managed Tushare token; users never provide API keys.",
+        "Every build or edit is two-phase and needs two user approvals: call propose_build with the plan and assumptions and end the turn; after the user confirms, call prepare_build and build; deploy_preview stages a pending preview that the user reviews and activates from the Preview panel. Never state that an app is live or provide its link before the user approves the preview. Before fixture edits use prepare_build; read its selected protocols and apply the returned frontend design guidance (designGuidance) when writing presentation source. Preserve the Synthetic demo label. New React apps use fixed financial modules in the protected root route. Fixture apps may use storage.read and storage.write. Legacy fixtures also preserve finance.calculate. Matching builds may also use finance.match-companies; company-card builds may also use finance.company-cards. Use these fixed platform modules for matching, daily batches, decisions and watchlists; do not recreate their logic. Metric selection is pinned in prepare_build.cardMetrics, with omitted selection using defaults. Demo risk selection is an explicit synthetic profile, not a completed expert assessment. Market APIs, LLM explanations and plugins are not enabled for this first scoped flow. Keep unsupported financial outputs unavailable. Fixture company table uses synthetic DEMO001/DEMO002/DEMO003 companies. Live companies come from lookup_companies in live mode: Shanghai Stock Exchange Class A listed companies only, scored fuzzy matches. When the user writes a company name, an exact match is not required. If the top match clearly captures the user's intent (high score, one clear winner), state the assumed company and ticker and proceed with that assumption. If several companies match equally, ask the user to choose. If the company does not exist in the list, tell the user the platform currently supports only SSE Class A companies. Live company data uses the platform-managed Tushare token; users never provide API keys.",
         projectFormat
           ? "This app is an actual TanStack Start React/TypeScript checkout with installed libraries and local shadcn Base UI source. Call read_starter_reference to inspect exact SDK types and toolkit imports. The platform renders confirmed financial modules in its protected root. Customize src/App.tsx and presentation components only after prepare_build approves this turn. Package/build configuration, SDK, financial modules and shadcn source are immutable. Use installed shadcn components; do not recreate controls or financial logic. Use the default theme; src/app.css changes require a recorded theme override. No direct provider/LLM/network calls, generic plugins or package installation. Permissions and src/lib/build-context.ts are derived from the contract. Keep missing financial outputs unavailable. deploy_preview uses platform-owned build/type checks and financial render checks in Linux isolation."
           : "Legacy workspace: index.html is a body fragment; app.js is self-contained JavaScript with top-level await; style.css supplies styling; calculations.js exports analyze(input); cd80.json is the manifest. Preserve the source format and pure calculation scaffold. No imports, npm, CDN, fetch or external resources. Call cd80.ready() after rendering; privileged calls use cd80.call(name,input).",

@@ -8,7 +8,7 @@ export const Route = createFileRoute("/docs/$")({
     if (!page) throw notFound();
     return { page };
   },
-  head: ({ match }) => ({ meta: [{ title: `${match.context.page.title} · Chengdu80 docs` }] }),
+  head: ({ match }) => ({ meta: [{ title: `${match.context.page.title} · Linus docs` }] }),
   component: DocumentationTopic,
 });
 

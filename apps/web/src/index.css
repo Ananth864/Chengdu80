@@ -30,7 +30,7 @@
   scrollbar-gutter: auto;
 }
 
-/* Chengdu80 studio theme. shadcn controls inherit the shared semantic tokens. */
+/* Linus studio theme. shadcn controls inherit the shared semantic tokens. */
 :root {
   --background: #f5f5f7;
   --foreground: #292531;

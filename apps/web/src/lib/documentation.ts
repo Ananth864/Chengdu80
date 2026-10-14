@@ -5,7 +5,7 @@ export const documentation = [
     slug: "",
     title: "Build an app. Bring its source.",
     navigation: "Overview",
-    description: "The Chengdu80 application contract and developer reference.",
+    description: "The Linus application contract and developer reference.",
     toc: [
       { title: "Getting started", url: "#getting-started", depth: 2 },
       { title: "Reference", url: "#reference", depth: 2 },
@@ -78,7 +78,7 @@ export function documentationUrl(slug: string) {
 }
 
 export const documentationTree: Root = {
-  name: "Chengdu80",
+  name: "Linus",
   children: documentation.map((page) => ({
     type: "page",
     name: page.navigation,

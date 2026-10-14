@@ -6,6 +6,7 @@ type ChatState = {
   turns?: unknown[];
   buildRecords?: unknown[];
   rejectedBuildTurns?: string[];
+  buildProposal?: unknown;
   chatTitle?: string;
   chatDeletedAt?: string;
 };

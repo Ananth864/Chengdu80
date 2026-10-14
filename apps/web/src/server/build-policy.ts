@@ -221,7 +221,10 @@ export function validateScopedBundle(bundle: AppBundle, record: BuildRecord) {
     throw new Error(
       "This build can use only its approved platform modules and app storage. The market-data capability, arbitrary plugins and LLM research are not wired yet.",
     );
-  if (!project && !bundle.files["index.html"].includes("Synthetic demo"))
+  if (
+    !project &&
+    record.readiness === "fixture" &&
+    !bundle.files["index.html"].includes("Synthetic demo")
+  )
     throw new Error('Fixture applications must visibly include the label "Synthetic demo".');
-  if (record.readiness !== "fixture") throw new Error("This build is not ready for activation.");
 }

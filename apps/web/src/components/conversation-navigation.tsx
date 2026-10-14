@@ -52,12 +52,8 @@ export function ConversationNavigation({
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <a href="/" aria-label="Chengdu80 home" className="studio-wordmark">
-              <span>Chengdu</span>
-              <span className="studio-wordmark-number">
-                80
-                <span className="studio-wordmark-dot" />
-              </span>
+            <a href="/" aria-label="Linus home" className="studio-wordmark">
+              <span>Linus</span>
             </a>
           </SidebarMenuItem>
           <SidebarMenuItem>
