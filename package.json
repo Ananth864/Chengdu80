@@ -60,7 +60,10 @@
     "starter:sync": "bun scripts/sync-app-starter.ts",
     "test:chat-storage": "bun scripts/test-chat-storage.ts",
     "test:financial-starter": "bun scripts/test-financial-starter.ts",
-    "dev:isolated": "bun scripts/dev-isolated.ts"
+    "dev:isolated": "bun scripts/dev-isolated.ts",
+    "provider": "bun scripts/set-provider.ts",
+    "dev:glm": "bun scripts/set-provider.ts glm && bun run dev:local",
+    "dev:openai": "bun scripts/set-provider.ts openai && bun run dev:local"
   },
   "dependencies": {
     "@web-starter/env": "workspace:*",

@@ -4,7 +4,7 @@ Use the workspace `.env`. `bun run setup:env` created it only when absent, with 
 
 ## Next local gate
 
-On 2026-10-14 the user switched the main model back to OpenAI: the workspace `.env` now sets `MODEL_PROVIDER=openai` with the existing `OPENAI_API_KEY`, `OPENAI_MODEL` and `OPENAI_BASE_URL`. Restart `bun run dev:local` after changing credentials. GLM through Gitee AI (`GLM_API_KEY`, `GLM_MODEL=GLM-5.3`, `GLM_BASE_URL=https://ai.gitee.com/v1`) remains configured as the explicit `MODEL_PROVIDER=glm` fallback. The platform manages models; there is no BYOK product UI.
+On 2026-10-14 the platform briefly switched to OpenAI, but `api.openai.com` was unreachable from the current network (requests time out; Gitee AI remains reachable), so GLM through Gitee AI stays the active provider with the existing `GLM_API_KEY`, `GLM_MODEL=GLM-5.3` and `GLM_BASE_URL=https://ai.gitee.com/v1` in the workspace `.env`. Swap providers with `bun run provider glm` or `bun run provider openai` (only the `MODEL_PROVIDER` line changes), or launch directly with `bun run dev:glm` / `bun run dev:openai`; restart `bun run dev:local` after changing credentials. The platform manages models; there is no BYOK product UI.
 
 Test specification creation, source generation, verified preview, a visible requested update, acceptance with data continuity, and an app explanation. Mock Responses and GLM Chat Completions tests prove SDK wiring only. GLM JSON mode is validated against the same specification/source schemas. Live checks are reported separately.
 
