@@ -167,6 +167,60 @@ export function compactTranscript(messages: UIMessage[], settled = false): UIMes
   return compact;
 }
 
+// Thinking models occasionally leak their reasoning stream into the content
+// channel — GLM emits raw think markers when a generation degrades mid-answer,
+// and the OpenAI-compatible adapter does not parse them. Scrub the markers
+// from streamed assistant text; a close without an open block flags the reply,
+// since the provider's parser already lost the boundary and the text around
+// the leak is unreliable.
+const thinkOpen = "<think>";
+const thinkClose = "</think>";
+function partialThinkMarker(text: string) {
+  for (let length = Math.min(text.length, thinkClose.length - 1); length > 0; length--)
+    if (thinkOpen.startsWith(text.slice(-length)) || thinkClose.startsWith(text.slice(-length)))
+      return text.slice(-length);
+  return "";
+}
+function createThinkScrubber() {
+  let inside = false;
+  let leaked = false;
+  let pending = "";
+  return {
+    get leaked() {
+      return leaked;
+    },
+    push(delta: string, emit: (text: string) => void) {
+      for (const char of delta) {
+        pending += char;
+        if (inside) {
+          if (thinkClose.startsWith(pending)) {
+            if (pending === thinkClose) {
+              inside = false;
+              pending = "";
+            }
+          } else pending = partialThinkMarker(pending);
+        } else if (thinkOpen.startsWith(pending) || thinkClose.startsWith(pending)) {
+          if (pending === thinkOpen) {
+            inside = true;
+            pending = "";
+          } else if (pending === thinkClose) {
+            leaked = true;
+            pending = "";
+          }
+        } else {
+          const keep = partialThinkMarker(pending);
+          emit(pending.slice(0, pending.length - keep.length));
+          pending = keep;
+        }
+      }
+    },
+    end(emit: (text: string) => void) {
+      if (!inside && pending) emit(pending);
+      pending = "";
+    },
+  };
+}
+
 export async function startAgentTurn(
   access: Access,
   appId: string,
@@ -778,6 +832,8 @@ export async function startAgentTurn(
       let finish: StreamChunk | undefined;
       let saveError: unknown;
       let pendingSave: Promise<void> | undefined;
+      const thinkScrubbers = new Map<string, ReturnType<typeof createThinkScrubber>>();
+      const leakedReplies = new Set<string>();
       const saveTimer = setInterval(() => {
         if (pendingSave || saveError) return;
         pendingSave = checkpointMessages(
@@ -797,6 +853,45 @@ export async function startAgentTurn(
       }, 1000);
       try {
         for await (const chunk of stream) {
+          if (chunk.type === EventType.TEXT_MESSAGE_CONTENT) {
+            let scrubber = thinkScrubbers.get(chunk.messageId);
+            if (!scrubber) {
+              scrubber = createThinkScrubber();
+              thinkScrubbers.set(chunk.messageId, scrubber);
+            }
+            let clean = "";
+            scrubber.push(chunk.delta, (text) => (clean += text));
+            if (scrubber.leaked) leakedReplies.add(chunk.messageId);
+            if (!clean) continue;
+            const scrubbed: StreamChunk = {
+              type: EventType.TEXT_MESSAGE_CONTENT,
+              messageId: chunk.messageId,
+              delta: clean,
+              timestamp: chunk.timestamp,
+            };
+            processor.processChunk(scrubbed);
+            if (saveError) throw saveError;
+            yield scrubbed;
+            continue;
+          }
+          if (chunk.type === EventType.TEXT_MESSAGE_END) {
+            const scrubber = thinkScrubbers.get(chunk.messageId);
+            if (scrubber) {
+              let tail = "";
+              scrubber.end((text) => (tail += text));
+              if (tail) {
+                const tailChunk: StreamChunk = {
+                  type: EventType.TEXT_MESSAGE_CONTENT,
+                  messageId: chunk.messageId,
+                  delta: tail,
+                  timestamp: chunk.timestamp,
+                };
+                processor.processChunk(tailChunk);
+                if (saveError) throw saveError;
+                yield tailChunk;
+              }
+            }
+          }
           processor.processChunk(chunk);
           if (saveError) throw saveError;
           if (chunk.type === "RUN_ERROR") {
@@ -832,6 +927,25 @@ export async function startAgentTurn(
             // A turn that ends without any assistant text (step-limit
             // exhaustion mid-build) otherwise looks silently abandoned.
             const last = latest.conversation.at(-1);
+            // A reasoning stream that leaked into the final reply leaves
+            // garbled text; keep the turn's completed work but never present
+            // the garbage as the answer — ask for a retry instead.
+            if (
+              status === "complete" &&
+              last?.role === "assistant" &&
+              last.id &&
+              leakedReplies.has(last.id)
+            ) {
+              last.parts = [
+                ...(last.parts ?? []).filter((part) => part.type !== "text"),
+                {
+                  type: "text" as const,
+                  content:
+                    "The model connection glitched partway through this reply and the text came back garbled. Your app and saved progress are unaffected — send the request again to continue.",
+                },
+              ];
+              status = "error";
+            }
             const hasText = last?.parts?.some(
               (part) => part.type === "text" && part.content.trim().length > 0,
             );
