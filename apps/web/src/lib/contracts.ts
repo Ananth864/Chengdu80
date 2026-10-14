@@ -7,6 +7,13 @@ export const capabilities = [
   "market.prices",
   "market.assets",
   "finance.calculate",
+  "finance.risk-profile",
+  "finance.company-discovery",
+  "finance.company-discovery.v1-3",
+  "finance.historical-analysis",
+  "finance.industry-research",
+  "finance.price-target",
+  "finance.industry-preferences",
   "finance.match-companies",
   "finance.company-cards",
   "finance.portfolio",
@@ -20,6 +27,48 @@ export const capabilities = [
 export const protocolIds = ["portfolio", "screening", "strategy"] as const;
 export type ProtocolId = (typeof protocolIds)[number];
 export const capabilityContracts = {
+  "finance.company-discovery.v1-3": {
+    input:
+      "{action:'start',risk_result,industry_preference,excluded_company_ids?:string[]} or {action:'advance',session_state,company_id}. No watchlist or card actions required.",
+    output:
+      "One supplied-CSV company per round, up to five; neutral session advancement, metric identifiers, explicit invalid/exhausted states and catalog exclusions. Session stays in memory; app-owned saving is optional.",
+  },
+  "finance.historical-analysis": {
+    input:
+      "{company_id:six-digit SSE ticker,exchange:'SSE',as_of_date?:ISO date,period?:'1m'|'6m'|'1y'|'5y'}; identity must match approved supplied CSV.",
+    output:
+      "Raw dated price series and high/low/daily metrics; adjusted selected-period drawdown only with complete verified factors. Coverage, units, sources and unavailable reasons. At most five years; never all-time.",
+  },
+  "finance.industry-research": {
+    input:
+      "{company_id:six-digit SSE ticker,exchange:'SSE',as_of_date?:ISO date,years?:1..5}; exact CSV industry cohort, no size filter.",
+    output:
+      "Annual consolidated revenue totals and separate matched-cohort YoY growth with counts, exclusions, sources and bounded-retrieval partial coverage. Historical listed-company statistics only, no national market size or forecasts.",
+  },
+  "finance.price-target": {
+    input:
+      "{company_id:six-digit SSE ticker,exchange:'SSE',as_of_date?:ISO date}; 90-day brokerage report window.",
+    output:
+      "Original brokerage opinions, evidence-mapped five-category counts, modal summary and separately verified horizon groups of target midpoints. Missing brokerage definitions/horizons remain unavailable; at least three eligible brokerages per target group.",
+  },
+  "finance.industry-preferences": {
+    input:
+      "{operation:'capture_preferences',selected_industries:string[]} or {operation:'filter_companies',companies:[{industry:string,...}],industry_labels:string[]}. Only five canonical IDs for capture; exact CSV labels for filtering.",
+    output:
+      "completed industry_preference with deduplicated selections, selected/all_supported mode and effective IDs; or completed companies filtered by exact labels; or invalid_input. Empty capture means all five supported industries; empty label filter preserves all input records. No risk or market data required.",
+  },
+  "finance.company-discovery": {
+    input:
+      "{action:'start',risk_result:completed v0-demo result,industry_preference:normalized five-industry preference,watchlist:['SSE:600000']} or {action:'advance',session_state,company_id,choice:'add'|'skip'}. Session state stays in browser memory.",
+    output:
+      "One company per ready round, up to five distinct supplied-CSV identities, metric_request_company_ids, catalog exclusions; Add emits watchlist_add and Skip does not save. Completed/exhausted/invalid states explicit. Persist watchlist through app storage, never session state.",
+  },
+  "finance.risk-profile": {
+    input:
+      "{questionnaire_version:'v0-demo',answers:{q1:1|2|3,q2:1|2|3,q3:1|2|3,q4:1|2|3,q5:1|2|3,q6:1|2|3,q7:1|2|3}}. Exactly seven answers, no extra fields.",
+    output:
+      "{status:'completed',questionnaire_version,answers,total_score,risk_profile_bucket} or {status:'invalid_input',error_code,message}. Internal provisional demo profile; never display score or bucket. Persist only completed results through app storage.",
+  },
   "finance.match-companies": {
     input:
       "{risk:low|medium|high,industries:string[]} Synthetic profile only. Fixed platform mapping and table lookup.",

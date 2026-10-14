@@ -1,4 +1,21 @@
 import { managedCompanies, requireBuild, validateScopedBundle } from "./build-policy";
+import { executeDiscoveryContract } from "../../starter/project/src/lib/discovery-contract";
+import { historicalAnalysis } from "./historical-analysis";
+import { industryResearch } from "./industry-research";
+import { priceTarget } from "./price-target";
+import { financialResultSchema } from "../../starter/project/src/lib/financial-results";
+import { runIndustryPreference } from "../../starter/project/src/lib/industry-preference";
+import { normalizedIndustryPreferenceSchema } from "../../starter/project/src/lib/company-discovery";
+import { suppliedCompanyUniverse } from "./company-universe";
+import {
+  createDiscoverySession,
+  advanceDiscoverySession,
+  discoveryRequestSchema,
+} from "../../starter/project/src/lib/company-discovery";
+import {
+  scoreRiskProfile,
+  completedRiskProfileSchema,
+} from "../../starter/project/src/lib/risk-profile";
 import {
   companyCardsInputSchema,
   companyModuleVersion,
@@ -482,6 +499,70 @@ export async function dispatch(access: Access, raw: unknown) {
   validateScopedBundle(release.bundle, release.buildRecord);
   if (JSON.stringify(req.input ?? null).length > 150000)
     throw new Error("Capability input exceeds size limit");
+  if (req.capability === "finance.risk-profile") return scoreRiskProfile(req.input);
+  if (req.capability === "finance.company-discovery.v1-3")
+    return executeDiscoveryContract(req.input, suppliedCompanyUniverse());
+  if (
+    ["finance.historical-analysis", "finance.industry-research", "finance.price-target"].includes(
+      req.capability,
+    )
+  ) {
+    const context = {
+      mode: release.buildRecord.plan.mode,
+      companyIds: release.buildRecord.companyIds.length
+        ? release.buildRecord.companyIds
+        : undefined,
+    };
+    if (req.capability === "finance.historical-analysis")
+      return historicalAnalysis(req.input, context);
+    if (req.capability === "finance.industry-research") {
+      const result = await industryResearch(req.input, context);
+      return financialResultSchema.parse({
+        ...result,
+        capability_id: "industry-research",
+        provider: "Tushare",
+        mode: context.mode,
+      });
+    }
+    const result = (await priceTarget(req.input, context)) as Record<string, unknown>;
+    const status = ["available", "partial", "insufficient_data", "invalid_input"].includes(
+      String(result.status),
+    )
+      ? result.status
+      : "unavailable";
+    return financialResultSchema.parse({
+      ...result,
+      status,
+      capability_id: "price-target",
+      provider: "Tushare",
+      mode: context.mode,
+      data_limitations: result.limitations ?? [],
+    });
+  }
+  if (req.capability === "finance.industry-preferences") return runIndustryPreference(req.input);
+  if (req.capability === "finance.company-discovery") {
+    const parsed = discoveryRequestSchema.safeParse(req.input);
+    if (!parsed.success)
+      return {
+        status: "invalid_input",
+        error_code: "INVALID_INPUT",
+        message: "Invalid discovery request.",
+      };
+    const input = parsed.data;
+    const companies = suppliedCompanyUniverse();
+    if (input.action === "start") {
+      const canonicalIds = new Set(companies.map((company) => `SSE:${company.ticker}`));
+      if (input.watchlist.some((id) => !canonicalIds.has(id)))
+        return {
+          status: "invalid_input",
+          error_code: "INVALID_INPUT",
+          message: "Watchlist identities must belong to the supplied universe.",
+        };
+      const { action: _action, ...parameters } = input;
+      return createDiscoverySession(parameters, companies);
+    }
+    return advanceDiscoverySession(input.session_state, input.company_id, input.choice, companies);
+  }
   if (req.capability === "plugin.call") {
     const input = z
       .object({
@@ -578,6 +659,27 @@ export async function dispatch(access: Access, raw: unknown) {
       .object({ key: z.string().regex(/^[a-zA-Z0-9_-]{1,50}$/), value: z.unknown() })
       .parse(req.input);
     if (key.startsWith("_")) throw new Error("Reserved platform metadata key");
+    if (key === "risk-profile") {
+      if (!release.bundle.manifest.permissions.includes("finance.risk-profile"))
+        throw new Error("Risk questionnaire permission is required to save its completion.");
+      completedRiskProfileSchema.parse(value);
+    }
+    if (key === "industry-preference") {
+      if (!release.bundle.manifest.permissions.includes("finance.industry-preferences"))
+        throw new Error("Industry preference permission is required to save preferences.");
+      normalizedIndustryPreferenceSchema.parse(value);
+    }
+    if (key === "discovery-watchlist") {
+      if (
+        !release.bundle.manifest.permissions.includes("finance.company-discovery") &&
+        !release.bundle.manifest.permissions.includes("finance.company-discovery.v1-3")
+      )
+        throw new Error("Company discovery permission is required to save its watchlist.");
+      const ids = z.array(z.string().regex(/^SSE:(?:600|601|603|605|688|689)\d{3}$/)).parse(value);
+      const allowed = new Set(suppliedCompanyUniverse().map((company) => `SSE:${company.ticker}`));
+      if (new Set(ids).size !== ids.length || ids.some((id) => !allowed.has(id)))
+        throw new Error("Watchlist requires unique canonical company identities.");
+    }
     if (key === "inputs") await execute(release.bundle, value);
     if (JSON.stringify({ ...app.data, [key]: value }).length > 150000)
       throw new Error("Shared data exceeds prototype size limit");

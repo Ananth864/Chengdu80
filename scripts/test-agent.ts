@@ -780,7 +780,7 @@ try {
   assert(builderInstructions.includes("Ordinary forms, navigation, uploads"));
   assert(builderInstructions.includes("skills/annual-report-company-metrics.md"));
   assert(
-    !builderInstructions.includes("# General Dashboard Generation"),
+    !builderInstructions.includes("# Dashboard Composition and Display"),
     "Skill bodies load on demand rather than bloating every system prompt",
   );
   assert(
@@ -788,7 +788,7 @@ try {
       request.input.some(
         (item) =>
           item.type === "function_call_output" &&
-          item.output?.includes("# General Dashboard Generation"),
+          item.output?.includes("# Dashboard Composition and Display"),
       ),
     ),
     "Requested skill content reaches the builder through the tool result",
@@ -986,7 +986,7 @@ try {
   assert.equal(latest.current?.id, activeRelease);
   assert(!requests.at(-1)?.tools?.some((tool) => tool.name === "call_plugin"));
   assert.deepEqual(providerCities, [], "No weather provider call was made");
-  assert(built.current.buildRecord?.resolvedCapabilities.includes("news"));
+  assert(!built.current.buildRecord?.resolvedCapabilities.includes("news"));
   assert(built.current.buildRecord?.protocolHashes.builder);
   assert(built.current.buildRecord?.protocolHashes["financial-expert"]);
   assert(built.current.buildRecord?.protocolHashes["financial-skill:general-dashboard-generation"]);

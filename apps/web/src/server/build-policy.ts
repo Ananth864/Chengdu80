@@ -22,11 +22,8 @@ import {
   type LiveCompany,
   rankCompanyMatches,
 } from "../lib/company-table";
-import {
-  capabilityCatalogInstructions,
-  capabilityDefinitions,
-  businessCapabilities,
-} from "../lib/capability-catalog";
+import { capabilityCatalogInstructions, capabilityDefinitions } from "../lib/capability-catalog";
+import { suppliedCompanyUniverse, suppliedCompanyUniverseVersion } from "./company-universe";
 
 export const agentProtocols = {
   communication,
@@ -38,10 +35,13 @@ export const agentProtocols = {
 export { frontendDesign };
 const protocols = { research, history, matching };
 const capabilityProtocols = Object.fromEntries(
-  businessCapabilities.map((id) => [id, protocols[capabilityDefinitions[id].protocol]]),
+  Object.entries(capabilityDefinitions).map(([id, definition]) => [
+    id,
+    protocols[definition.protocol],
+  ]),
 ) as Record<BusinessCapability, string>;
 export const capabilityDependencies = Object.fromEntries(
-  businessCapabilities.map((id) => [id, capabilityDefinitions[id].dependencies]),
+  Object.entries(capabilityDefinitions).map(([id, definition]) => [id, definition.dependencies]),
 ) as Record<BusinessCapability, BusinessCapability[]>;
 export function resolveCapabilities(selected: BusinessCapability[]) {
   const resolved = new Set(selected);
@@ -155,7 +155,28 @@ export async function prepareBuild(
 ): Promise<BuildRecord> {
   const plan = buildPlanSchema.parse(raw);
   const resolvedCapabilities = resolveCapabilities(plan.capabilities);
-  const table = await managedCompanies(plan.mode);
+  const financialScope = resolvedCapabilities.some((id) =>
+    ["historical-analysis", "price-target", "market-research"].includes(id),
+  );
+  const table = financialScope
+    ? {
+        available: true as const,
+        synthetic: false,
+        version: suppliedCompanyUniverseVersion,
+        companies: suppliedCompanyUniverse().map((company) => ({
+          ticker: `${company.ticker}.SH`,
+          name: company.name,
+          industry: company.industry,
+        })),
+      }
+    : plan.companyQueries.length
+      ? await managedCompanies(plan.mode)
+      : {
+          available: true as const,
+          synthetic: false,
+          version: suppliedCompanyUniverseVersion,
+          companies: [],
+        };
   const blockers: string[] = [...additionalBlockers];
   if (!table.available) blockers.push(`Live company lookup is unavailable: ${table.reason}`);
   const companyIds: string[] = [];
@@ -172,10 +193,22 @@ export async function prepareBuild(
         : `Company is outside the SSE Class A scope: ${query}. The platform currently supports Shanghai Stock Exchange Class A companies only.`,
     );
   }
-  if (resolvedCapabilities.includes("historical-analysis") && !plan.companyQueries.length)
-    blockers.push(
-      "Select a supported company for the historical-analysis and price-target package.",
-    );
+  if (
+    resolvedCapabilities.some((id) =>
+      ["historical-analysis", "price-target", "market-research"].includes(id),
+    ) &&
+    !plan.companyQueries.length
+  )
+    blockers.push("Select a supplied-CSV company for the requested financial analysis.");
+  const canonical = new Set(suppliedCompanyUniverse().map((company) => company.ticker));
+  if (
+    resolvedCapabilities.some((id) =>
+      ["historical-analysis", "price-target", "market-research"].includes(id),
+    )
+  )
+    for (const ticker of companyIds)
+      if (!canonical.has(ticker.replace(/\.SH$/, "")))
+        blockers.push(`Company ${ticker} is outside the supplied CSV universe.`);
   const protocolHashes = Object.fromEntries(
     [
       ...Object.entries(agentProtocols),
@@ -198,7 +231,24 @@ export async function prepareBuild(
     companyTableVersion: table.version,
     protocolHashes,
     provider: "tushare" as const,
-    moduleVersions: { companies: companyModuleVersion, starter: financialStarterVersion },
+    moduleVersions: {
+      companies: companyModuleVersion,
+      starter: financialStarterVersion,
+      ...(resolvedCapabilities.includes("risk-assessment") ? { "risk-profile": "v0-demo" } : {}),
+      ...(resolvedCapabilities.includes("industry-preference")
+        ? { "industry-preferences": "v1.4.0" }
+        : {}),
+      ...(resolvedCapabilities.includes("risk-industry-matching")
+        ? { "company-discovery": "v1.3.0" }
+        : {}),
+      ...(resolvedCapabilities.includes("historical-analysis")
+        ? { "finance.historical-analysis": "1.2.0" }
+        : {}),
+      ...(resolvedCapabilities.includes("market-research")
+        ? { "finance.industry-research": "1.2.0" }
+        : {}),
+      ...(resolvedCapabilities.includes("price-target") ? { "finance.price-target": "1.2.0" } : {}),
+    },
     theme: plan.themeOverride ?? "starter-default",
     readiness: blockers.length ? ("blocked" as const) : plan.mode,
     blockers,

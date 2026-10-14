@@ -49,6 +49,16 @@ export function inspectProject(
   return checks;
 }
 
+export function validateFinancialRender(status: number, html: string, mode: "fixture" | "live") {
+  if (status !== 200) throw new Error(`The compiled app returned HTTP ${status}.`);
+  if (!html.includes('data-financial-module-version="financial-react-v1"'))
+    throw new Error(
+      "The compiled app did not render its protected financial modules. Render FinancialModules during initial SSR, independently of browser-only storage queries.",
+    );
+  if (mode === "fixture" && !html.includes("Synthetic demo"))
+    throw new Error("The fixture app must render its visible Synthetic demo label.");
+}
+
 export async function verifyProject(
   bundle: AppBundle,
   spec: ProductSpec,
@@ -66,14 +76,7 @@ export async function verifyProject(
       const preview = await startPreview(workspace);
       const response = await readPreviewResponse(preview, "/");
       const html = await response.text();
-      if (
-        response.status !== 200 ||
-        !html.includes("Synthetic demo") ||
-        !html.includes("financial-react-v1")
-      )
-        throw new Error(
-          "The compiled app did not render its fixed financial modules and synthetic label.",
-        );
+      validateFinancialRender(response.status, html, record!.plan.mode);
       const output = await readProjectFiles(workspace);
       for (const [name, source] of Object.entries(bundle.files))
         if (name !== "src/routeTree.gen.ts" && output[name] !== source)

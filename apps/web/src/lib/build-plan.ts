@@ -9,7 +9,7 @@ export const buildPlanSchema = z
     capabilities: z.array(z.enum(businessCapabilities)).min(1).max(8),
     companyQueries: z.array(z.string().trim().min(1).max(100)).max(20),
     mode: z.enum(["fixture", "live"]),
-    themeOverride: z.string().trim().min(1).max(300).nullable(),
+    themeOverride: z.string().trim().min(1).max(300).nullable().default(null),
     cardMetrics: metricSelectionSchema.optional(),
   })
   .strict();

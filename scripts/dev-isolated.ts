@@ -66,7 +66,7 @@ await writeFile(
     .join("\n"),
   { mode: 0o600 },
 );
-const name = `chengdu80-local-${port}`;
+const name = env.CD80_ISOLATED_CONTAINER_NAME ?? `chengdu80-local-${port}`;
 console.log(`Chengdu80 · http://127.0.0.1:${port} · Linux isolated app builds`);
 const child = spawn(
   "docker",

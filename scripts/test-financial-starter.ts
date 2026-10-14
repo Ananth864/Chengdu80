@@ -7,9 +7,23 @@ import {
   buildContextPath,
   buildContextSource,
 } from "../apps/web/src/lib/financial-starter";
-import { inspectProject } from "../apps/web/src/server/project-runtime";
+import { inspectProject, validateFinancialRender } from "../apps/web/src/server/project-runtime";
 
 const spec = { ...protocols[0]!.defaultSpec, name: "Company card demo" };
+const rendered =
+  '<section data-financial-module-version="financial-react-v1">Live analysis</section>';
+validateFinancialRender(200, rendered, "live");
+validateFinancialRender(200, `${rendered}<span>Synthetic demo</span>`, "fixture");
+assert.throws(() => validateFinancialRender(200, rendered, "fixture"), /Synthetic demo label/);
+assert.throws(() => validateFinancialRender(500, rendered, "live"), /HTTP 500/);
+assert.throws(
+  () => validateFinancialRender(200, "<p>Loading companies</p>", "live"),
+  /initial SSR/,
+);
+assert.throws(
+  () => validateFinancialRender(200, "<title>financial-react-v1 Synthetic demo</title>", "fixture"),
+  /protected financial modules/,
+);
 const record = await prepareBuild(
   {
     requirements: "A synthetic daily company-card demo",
@@ -82,7 +96,8 @@ assert(
   bundle.files["src/components/financial-app.tsx"]!.includes("export function FinancialModules"),
 );
 assert(bundle.files["src/components/financial-app.tsx"]!.includes("Synthetic demo"));
-assert(bundle.files["src/components/financial-app.tsx"]!.includes("@/components/ui/card"));
+assert(bundle.files["src/components/financial-analysis.tsx"]!.includes("@/components/ui/card"));
+assert(bundle.files["src/components/financial-app.tsx"]!.includes("FinancialAnalysis"));
 const themed = await prepareBuild(
   { ...record.plan, themeOverride: "Use a warm terracotta accent" },
   "theme-turn",
