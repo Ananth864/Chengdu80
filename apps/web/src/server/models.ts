@@ -19,7 +19,9 @@ export async function modelAdapter() {
     api: config.provider === "glm" ? "chat-completions" : "responses",
     apiKey: config.apiKey,
     baseURL: config.baseURL,
-    timeout: config.provider === "glm" ? 180000 : 90000,
+    // Long streaming steps with large output budgets stay under the overall
+    // turn deadline; this only guards a stuck connection.
+    timeout: config.provider === "glm" ? 600000 : 300000,
     maxRetries: 0,
   });
 }

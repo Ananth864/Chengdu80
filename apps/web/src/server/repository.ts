@@ -16,6 +16,17 @@ async function client(access: Access) {
   if (access.accessToken) c.setAuth(access.accessToken);
   return c;
 }
+// Bind-mounted virtual filesystems occasionally fail an open or rename with
+// EPERM while a host process touches the same path; one short retry resolves it.
+async function retryTransient<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if ((error as { code?: string }).code !== "EPERM") throw error;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return fn();
+  }
+}
 async function localStore<T>(
   fn: (apps: Application[]) => Promise<T> | T,
   write = false,
@@ -28,15 +39,17 @@ async function localStore<T>(
     const file = path.join(dir, "apps.json");
     let apps: Application[] = [];
     try {
-      apps = JSON.parse(await fs.readFile(file, "utf8"));
+      apps = JSON.parse(await retryTransient(() => fs.readFile(file, "utf8")));
     } catch (e) {
       if ((e as any).code !== "ENOENT") throw e;
     }
     const result = await fn(apps);
     if (write) {
       const temp = file + ".tmp";
-      await fs.writeFile(temp, JSON.stringify(apps), { mode: 0o600 });
-      await fs.rename(temp, file);
+      await retryTransient(async () => {
+        await fs.writeFile(temp, JSON.stringify(apps), { mode: 0o600 });
+        await fs.rename(temp, file);
+      });
     }
     return result;
   });

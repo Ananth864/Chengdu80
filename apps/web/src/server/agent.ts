@@ -179,10 +179,12 @@ export async function startAgentTurn(
   const abort = () => controller.abort();
   requestSignal.addEventListener("abort", abort, { once: true });
   if (requestSignal.aborted) abort();
+  // Full builds legitimately take many steps and minutes of verification;
+  // this deadline only guards against a hung provider, not normal work.
   const deadline = setTimeout(() => {
     abort();
     activeTurns.delete(turnKey);
-  }, 240000);
+  }, 1200000);
   let processor!: StreamProcessor;
   let persisted = false;
   let project: AppWorkspace | undefined;
@@ -684,13 +686,13 @@ export async function startAgentTurn(
       }),
     ];
     const adapter = await modelAdapter();
-    const options = await modelOptions("low", 16000);
+    const options = await modelOptions("low", 32768);
     const stream = chat({
       adapter,
       abortController: controller,
       modelOptions: options,
       tools,
-      agentLoopStrategy: maxIterations(18),
+      agentLoopStrategy: maxIterations(48),
       messages: processor.getMessages(),
       systemPrompts: [
         ...Object.values(agentProtocols),
@@ -761,6 +763,21 @@ export async function startAgentTurn(
           await mutateApp(access, appId, (latest) => {
             if (latest.agentTurn?.id !== user.id) return;
             latest.conversation = compactTranscript(processor.getMessages(), true);
+            // A turn that ends without any assistant text (step-limit
+            // exhaustion mid-build) otherwise looks silently abandoned.
+            const last = latest.conversation.at(-1);
+            const hasText = last?.parts?.some(
+              (part) => part.type === "text" && part.content.trim().length > 0,
+            );
+            if (status === "complete" && last?.role === "assistant" && !hasText)
+              last.parts = [
+                ...(last.parts ?? []),
+                {
+                  type: "text" as const,
+                  content:
+                    "This turn reached its step limit before I could finish and stage a preview. Reply “continue” and I'll pick up where I left off.",
+                },
+              ];
             const settledTurn = {
               id: user.id,
               startedAt: latest.agentTurn?.startedAt ?? new Date().toISOString(),
