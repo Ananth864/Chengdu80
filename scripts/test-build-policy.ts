@@ -97,8 +97,8 @@ try {
   assert.deepEqual(valid.companyIds, ["600000.SH"]);
   assert.equal(
     valid.readiness,
-    "blocked",
-    "Company membership does not prove data-provider or module readiness",
+    "live",
+    "A verified Tushare feed (company probe succeeded) opens live builds",
   );
   const byFullName = await prepareBuild(
     { ...plan, mode: "live", companyQueries: ["上海浦东发展银行股份有限公司"] },

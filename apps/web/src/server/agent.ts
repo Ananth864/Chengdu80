@@ -232,7 +232,7 @@ export async function startAgentTurn(
     let buildRecord: BuildRecord | undefined;
     const prior =
       app.current?.buildRecord ??
-      [...(app.buildRecords ?? [])].reverse().find((record) => record.readiness === "fixture");
+      [...(app.buildRecords ?? [])].reverse().find((record) => record.readiness !== "blocked");
     const fixtureAuthorized =
       prior?.plan.mode === "fixture" ||
       (app.conversation ?? []).some(
@@ -398,7 +398,7 @@ export async function startAgentTurn(
             ];
         });
         buildRecord = record;
-        if (projectFormat && record.readiness === "fixture") {
+        if (projectFormat && record.readiness !== "blocked") {
           const manifest = JSON.parse(files["cd80.json"]);
           files["cd80.json"] = JSON.stringify({
             ...manifest,
@@ -414,14 +414,21 @@ export async function startAgentTurn(
         return {
           record,
           protocols: selectedProtocols(record.resolvedCapabilities),
-          ...(record.readiness === "fixture"
+          ...(record.readiness !== "blocked"
             ? { designGuidance: frontendDesign }
             : {
                 designNotice:
                   "The frontend design protocol loads with an approved build record, not a blocked one.",
               }),
-          fixtureNotice:
-            "Synthetic demo: approved React/shadcn starter and fixed company modules; live financial outputs remain unavailable.",
+          ...(record.readiness === "live"
+            ? {
+                liveNotice:
+                  "Live build: market data comes from the platform's verified Tushare feed (SSE Class A daily data). Sections the feed does not cover must display as unavailable (暂无数据), never estimates. No buy/sell recommendations.",
+              }
+            : {
+                fixtureNotice:
+                  "Synthetic demo: approved React/shadcn starter and fixed company modules; live financial outputs remain unavailable.",
+              }),
         };
       }),
       toolDefinition({

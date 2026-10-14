@@ -14,7 +14,6 @@ import matching from "./protocols/matching.md?raw";
 import frontendDesign from "./protocols/frontend-design.md?raw";
 import { buildPlanSchema, type BusinessCapability, type BuildRecord } from "../lib/build-plan";
 import type { AppBundle } from "../lib/contracts";
-import { settings } from "./settings";
 import { sseACompanies } from "./providers";
 import { type Company, type CompanyLookupInput, type LiveCompany } from "../lib/company-table";
 
@@ -156,14 +155,8 @@ export async function prepareBuild(
     blockers.push(
       "Select a supported company for the historical-analysis and price-target package.",
     );
-  if (plan.mode === "live") {
-    const config = await settings();
-    blockers.push(
-      config.TUSHARE_TOKEN
-        ? "Live scoped builds are not enabled yet. The platform team must verify the Tushare token and open the market-data capability."
-        : "Live builds need the platform's Tushare token. The platform team must set TUSHARE_TOKEN on the server; users never provide API keys.",
-    );
-  }
+  // Live mode is gated by the managedCompanies probe above: the same Tushare
+  // token and endpoint that serve market data verify the feed at plan time.
   const protocolHashes = Object.fromEntries(
     [
       ...Object.entries(agentProtocols),
@@ -185,7 +178,7 @@ export async function prepareBuild(
     provider: "tushare" as const,
     moduleVersions: { companies: companyModuleVersion, starter: financialStarterVersion },
     theme: plan.themeOverride ?? "starter-default",
-    readiness: blockers.length ? ("blocked" as const) : ("fixture" as const),
+    readiness: blockers.length ? ("blocked" as const) : plan.mode,
     blockers,
   };
   return { ...record, hash: recordHash(record) };

@@ -320,12 +320,16 @@ export function DesignReview({
             <CardHeader>
               <CardTitle className="flex flex-wrap items-center justify-between gap-2">
                 <span className="inline-flex items-center gap-2">
-                  {record.readiness === "fixture" ? (
+                  {record.readiness !== "blocked" ? (
                     <ShieldCheck className="text-primary" />
                   ) : (
                     <ShieldAlert className="text-destructive" />
                   )}
-                  {record.readiness === "fixture" ? "Feasible — synthetic demo build" : "Blocked"}
+                  {record.readiness === "live"
+                    ? "Feasible — live market data (Tushare)"
+                    : record.readiness === "fixture"
+                      ? "Feasible — synthetic demo build"
+                      : "Blocked"}
                 </span>
                 <span className="text-xs font-normal text-muted-foreground">
                   Record {record.revision} · {new Date(record.createdAt).toLocaleString()}

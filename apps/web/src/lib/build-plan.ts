@@ -38,7 +38,7 @@ export type BuildRecord = {
   provider: "tushare";
   moduleVersions: Record<string, string>;
   theme: string;
-  readiness: "fixture" | "blocked";
+  readiness: "fixture" | "live" | "blocked";
   blockers: string[];
   artifactHash?: string;
 };
