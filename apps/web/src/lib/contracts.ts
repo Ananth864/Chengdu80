@@ -22,14 +22,14 @@ export type ProtocolId = (typeof protocolIds)[number];
 export const capabilityContracts = {
   "finance.match-companies": {
     input:
-      "{risk:low|medium|high,industries:string[]} Synthetic profile only. Fixed platform mapping and table lookup.",
-    output: "{criteria,size,companies,moduleVersion,synthetic:true}",
+      "{risk:low|medium|high,industries:string[]} Self-selected profile. Fixed platform mapping and live SSE Class A table lookup.",
+    output: "{criteria,size,companies,moduleVersion,synthetic:false}",
   },
   "finance.company-cards": {
     input:
       "{action:batch,risk,industries,revisitDismissed?:boolean} | {action:decide,ticker,choice:yes|no} | {action:watchlist}. Server controls day and data.",
     output:
-      "Stable daily companies with unavailable selected metrics, saved decisions and watchlist. Synthetic demo only.",
+      "Stable daily companies from the live SSE Class A table with unavailable selected metrics, saved decisions and watchlist.",
   },
   "plugin.call": {
     input:

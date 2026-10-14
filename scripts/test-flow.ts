@@ -81,7 +81,7 @@ try {
     appId: workspace.id,
     requirements: {
       analysisPeriod: "Past year",
-      assumptions: ["Synthetic demo data only"],
+      assumptions: ["Live SSE Class A data only"],
       missingInputs: [],
       questions: [{ id: "q1", question: "Which industries matter to you?", answer: "" }],
     },

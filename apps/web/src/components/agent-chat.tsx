@@ -467,8 +467,8 @@ export function AgentChat(props: AgentChatProps) {
             {!props.app && (
               <EmptyContent>
                 {[
-                  "Build a synthetic industry research demo",
-                  "Build a synthetic daily company-card demo",
+                  "Build an industry research app for Shanghai-listed banks",
+                  "Build a daily company-card app for Shanghai-listed stocks",
                 ].map((example) => (
                   <Button
                     key={example}
