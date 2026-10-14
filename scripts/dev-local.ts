@@ -5,6 +5,12 @@ import { spawn } from "node:child_process";
 import { configuredEnvironment, platformRoot as root } from "./environment";
 
 const env = configuredEnvironment();
+Object.assign(env, {
+  CD80_LOCAL_MODE: "1",
+  VITE_LOCAL_MODE: "1",
+  VITE_CONVEX_URL: "",
+  CONVEX_SERVER_URL: "",
+});
 if (process.platform === "darwin" && env.CD80_APP_FORMAT !== "legacy") {
   const child = spawn("bun", ["scripts/dev-isolated.ts", ...process.argv.slice(2)], {
     cwd: root,

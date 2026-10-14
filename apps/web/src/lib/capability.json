@@ -1,0 +1,968 @@
+{
+  "library_id": "shared-financial-capabilities",
+  "version": "2.0.0",
+  "revision_notes": [
+    "Revision 2.0.0, 2026-10-14. Supersedes 1.1.0 after platform-feasibility review.",
+    "Python services removed: market_provider and card_metrics are re-specified as TypeScript server adapters in the platform server (Option A port). The platform has no Python runtime.",
+    "Browser localStorage removed: the application frame is an opaque-origin sandbox without browser storage. All persistence now goes through the app-storage bridge (storage.read/write).",
+    "New ui-open capability: external links open through a bridge method because the sandbox blocks popups and direct navigation.",
+    "Grounded-chatbot removed as a capability; dangling chatbot references deleted from result-store and metric-education.",
+    "App-profile composition removed: one application with two sections (discovery and research) and one shared storage scope replaces two applications over a shared library.",
+    "Multi-file library layout removed: one four-file bundle (index.html, app.js, calculations.js, style.css; 250 KB limit). The company universe is served through a bridge capability, not bundled.",
+    "Endpoint access verified live on 2026-10-14 for all ten required Tushare endpoints using the configured workspace token.",
+    "All capability contract versions aligned to 2.0.0."
+  ],
+  "capabilities": [
+    {
+      "id": "industry-research",
+      "name": "Listed-company industry analysis",
+      "purpose": "Describe historical annual revenue trends and comparable growth for supplied-universe SSE A-share companies sharing the selected company's exact CSV industry label, using Tushare only.",
+      "inputs": [
+        "Selected SSE company validated against the supplied CSV, including exact industry label",
+        "Supplied CSV SSE A-share universe",
+        "Tushare annual consolidated total_revenue statements with currency, financial year, publication date and source metadata",
+        "Analysis as_of_date and up to five completed financial years"
+      ],
+      "specifications": [
+        "Select all validated SSE A-share companies in the supplied CSV sharing the selected company's exact industry label, without a market-cap size filter. Use Tushare exclusively.",
+        "Label results as listed-company statistics for the supplied SSE universe. Never describe aggregate revenue as mainland-China market size, total industry revenue, or demand/supply evidence. The bundled CSV market-cap snapshot is undated and must not be used as revenue.",
+        "Retrieve up to five completed financial years of published annual consolidated total_revenue statements. Verify endpoint fields, permissions, reporting scope, units and currency; use only statements published by the analysis as_of_date. Normalize units and do not mix parent-only and consolidated observations.",
+        "For each year, sum valid comparable annual revenue observations and report financial year, aggregate revenue, included-company count, total universe count, exclusions, coverage and sources. Missing values are excluded rather than replaced with zero; incomplete sums must be labeled partial coverage.",
+        "Calculate YoY growth only for a matched cohort having comparable observations in both consecutive years: (sum current-year cohort revenue / sum preceding-year cohort revenue - 1) * 100. Require a positive preceding aggregate and record the matched-company count, coverage, years and source basis. Do not calculate growth directly from yearly totals whose membership differs.",
+        "Distinguish yearly available-universe revenue totals from matched-cohort growth. Clearly disclose that cohort membership can differ between growth comparisons; do not imply that a changing-coverage chart is a fixed-cohort trend.",
+        "Return explicit available, partial, unavailable or insufficient_data statuses with limitations for each section. Preserve source, reporting period, retrieval time and as_of_date. Fixture data must be clearly labeled and never represented as actual observations.",
+        "Demo scope excludes broader mainland-China market size, narrative demand/supply research and material events. The demo includes historical trends only: omit the five-year outlook, projections and industry forecasting from generated UI and outputs; do not add extrapolated values.",
+        "Verify industry membership, annual scope, publication-date filtering, unit conversion, aggregate coverage, matched-cohort growth and missing-data behavior with expected-result fixtures; verify authenticated Tushare retrieval once a token is provided.",
+        "Update dependent dashboard, chart and education sections to reflect the historical-only listed-company scope. Remove stale market-size and industry-outlook promises rather than leaving misleading forecast placeholders."
+      ],
+      "outputs": [
+        "Status, selected_company, exact industry_label, universe_scope, analysis as_of_date and retrieved_at",
+        "Annual revenue totals with years, normalized units, coverage counts, exclusions and source records",
+        "Matched-cohort YoY growth in percentage points with consecutive years, cohort counts and calculation basis",
+        "Section statuses and data_limitations; no whole-China market-size or unsupported demand/supply claims",
+        "Historical results only; no industry forecast or five-year outlook section"
+      ],
+      "asset_scope": [
+        "Listed-company industry statistics for the supplied SSE A-share universe only"
+      ],
+      "contract_version": "2.0.0",
+      "implementation_status": "typescript_port_pending",
+      "configuration_required": [
+        "Validated supplied SSE universe and exact CSV industry labels",
+        "Tushare token; income endpoint verified 2026-10-14"
+      ],
+      "implementation": "app bundle app.js (rendering) + platform server income adapter (TypeScript)",
+      "demo_configuration": {
+        "historical_years_max": 5,
+        "industry_forecast_enabled": false
+      },
+      "implementation_note": "v2 architecture: data retrieval as TypeScript adapters in the platform server following the existing providers.ts pattern; rendering in the single application bundle."
+    },
+    {
+      "id": "company-industry-news",
+      "name": "Company and industry news tracker",
+      "purpose": "Retrieve a small, recent, traceable news feed for a selected SSE A-share company and its CSV-assigned industry.",
+      "inputs": [
+        "Selected company record: company_id (ticker symbol), company_name, exchange=SSE, and exact industry_label from the supplied CSV",
+        "Tushare news access and credentials managed by the local backend",
+        "Optional feed settings: lookback_days (proposed default 7), max_company_items (proposed default 5), max_industry_items (proposed default 5), and language selection (all provider-supported languages; proposed default zh)"
+      ],
+      "specifications": [
+        "Validate ticker, company name, exchange, and exact industry label against the supplied CSV. CSV market-cap values are irrelevant to news matching and ranking.",
+        "Search company stories by ticker and exchange where supported, using company name as an additional query aid. Search industry stories using the exact CSV label or an explicit, reviewed provider mapping.",
+        "Until a provider is configured and its SSE/A-share and Chinese-language coverage, credentials, cost, freshness, and display/summarization rights are checked, return provider_not_configured. Do not assume access or scrape websites.",
+        "Support any language returned by the configured provider. Preserve original headline and publisher; translations, if offered, must be labeled as translations.",
+        "Keep provider title, publisher, publication time, direct URL when supplied or a verifiable provider reference, and provider identity. Include a summary only when supplied or derived from content the provider permits the application to use.",
+        "Use the proposed rolling seven-day window and up to five company and five industry items as configurable defaults. Return fewer when fewer relevant stories exist; sort newest first and deduplicate repeated URLs where feasible.",
+        "Label each item company or industry. If an item matches both, include it once as company and optionally set also_matches_industry=true. Do not imply an industry story concerns the selected company.",
+        "Return explicit status: available, partial, no_results, stale, provider_not_configured, or error. Use no_results only after a successful query. Do not present stale or failed queries as a current empty feed.",
+        "Do not infer that a story caused a stock-price movement or imply inclusion verifies every claim. Do not expose credentials, secrets, or internal errors.",
+        "Keep company and industry news enabled for the demo, with Tushare as the sole external source. Verify documented news endpoints, fields, date-window support, account permissions, and SSE company and industry coverage before selecting an integration. Do not invent an endpoint or assume token access.",
+        "Implement actual backend retrieval and normalized news records rather than retaining an unconfigured-provider placeholder. Keep credentials on the backend; batch and cache requests according to verified provider limits.",
+        "Distinguish missing credentials, permission denied, unsupported coverage, retrieval errors, and a successful query with no matching items. A failed or unsupported query must not be labeled no news found.",
+        "Use the validated ticker and company name for company matching and the exact CSV industry label for industry matching. Record matching evidence; reject ambiguous names or unsupported industry mappings rather than presenting unrelated headlines.",
+        "Preserve source publisher, title, publication timestamp with documented timezone, URL or provider reference, match type, retrieval time, and query coverage. Do not invent source links or summarize content unavailable from the source.",
+        "Retain the existing default seven-day lookback and maximum five company plus five industry items, deduplicate articles, and show newest first. If source records lack required display metadata, exclude them and explain the limitation.",
+        "Verify company/industry matching, date-window boundaries, timezone handling, duplicate removal, item limits, provenance and error-versus-empty states with fixtures. Verify authenticated retrieval once the token is supplied.",
+        "Use one internally consistent schema for source references. Render a link only for a verified URL. Update existing filters that require URLs so valid source-reference-only items are not silently discarded.",
+        "Open source links through the ui-open bridge capability; the sandboxed application frame cannot open links itself."
+      ],
+      "outputs": [
+        "Overall status, selected_company, query_window, feed, retrieved_at, provider, and optional coverage_note or safe error code",
+        "Each feed item includes match_type, title, publisher, published_at, source reference (url when supplied), provider_id, and optional permitted summary, language, or also_matches_industry"
+      ],
+      "asset_scope": [
+        "SSE A-share companies and their exact CSV-assigned industries; read-only news feed"
+      ],
+      "contract_version": "2.0.0",
+      "implementation_status": "typescript_port_pending",
+      "configuration_required": [
+        "Tushare token; news endpoint verified 2026-10-14 (src=sina)",
+        "Documented company and industry coverage and matching fields"
+      ],
+      "implementation": "app bundle app.js (timeline) + platform server news adapter (TypeScript)",
+      "implementation_note": "v2 architecture: news retrieval as a TypeScript adapter in the platform server; timeline rendering in the single application bundle; links through ui-open."
+    },
+    {
+      "id": "historical-analysis",
+      "name": "Historical stock data analysis",
+      "purpose": "Analyze historical prices for user-selected SSE A-share stocks and return the requested chart and price metrics.",
+      "inputs": [
+        "Selected company record: company_id (ticker symbol), company_name, exchange=SSE, validated against the supplied CSV",
+        "Configured and licensed SSE historical price and corporate-action data source",
+        "Requested historical period; demo chart choices are 1 month, 6 months, 1 year, and 5 years. Retrieve at most five years of price history",
+        "Price basis and currency settings where supported",
+        "Optional dated annual financial statements: period, revenue, net_profit, currency, source; values must use consistent accounting and reporting scope"
+      ],
+      "specifications": [
+        "Fetch and normalize dated daily price data for the validated SSE stock. Record provider, retrieval time, currency, and whether prices are raw, split-adjusted, or adjusted for dividends.",
+        "Calculate current price, 52-week high, 52-week low, available-period high, available-period low, maximum drawdown, distance from 52-week high and low, and daily price change in amount and percentage.",
+        "Define the 52-week window and actual retrieved coverage from available trading records. Calculate available-period high and low over the retrieved history, up to five years; label the actual start and end dates and never label these values all-time.",
+        "Define distance from high/low as both price amount and percentage where possible; percentage distance uses (current_price / reference_price) - 1.",
+        "Define daily price change against the previous trading session's close: amount = current_close - previous_close; percentage = amount / previous_close. Label intraday versus latest-close values clearly.",
+        "Calculate maximum drawdown from the selected historical price series as the largest peak-to-subsequent-trough percentage decline. State the selected period and adjustment basis.",
+        "Return missing or unavailable metrics as unavailable with a reason. Do not substitute estimates for observed historical data.",
+        "Preserve optional licensed financial statement observations for financial-visualizations; do not derive financial performance from price history or the market-cap CSV.",
+        "Demo scope excludes all-time metrics and complete listing-history retrieval. If less than five years is available, show the actual coverage and do not label the values five-year highs or lows.",
+        "Calculate maximum drawdown only from a documented adjusted closing-price series constructed from Tushare daily prices and adjustment factors. Verify the documented factor convention, join by ticker and trading date, and normalize all factors to one common reference date. Record the formula, reference date, source, and actual calculation period.",
+        "For adjusted closes P_t, calculate running_peak_t = max(P_0,...,P_t) and max_drawdown = min(P_t / running_peak_t - 1). Store a non-positive fraction and display it as a percentage; a series with no decline has zero drawdown.",
+        "If adjustment factors are inaccessible, invalid, or missing for required price dates, return max_drawdown as null with an explicit unavailable reason. Continue displaying supported raw-price metrics; do not calculate drawdown from raw prices.",
+        "Keep latest-close and daily-change displays on the documented raw quote basis. Label adjusted drawdown separately and identify the basis of each chart or metric; do not mix raw and adjusted observations in one calculation.",
+        "Define 52-week metrics over the 364 calendar days ending on the latest quote date, inclusively, using dated raw daily highs/lows. If coverage starts later than the window, mark these metrics partial and show actual coverage. Available-period highs/lows also use raw daily highs/lows. Support selected-period charts; drawdown uses the adjusted closes within the selected period and needs at least two valid observations."
+      ],
+      "outputs": [
+        "Status, selected_company, requested_period, actual_coverage_period, retrieved_at, provider, currency, and adjustment_basis",
+        "Historical price-chart series with dates and the documented price basis",
+        "Metric object containing current_price, 52_week_high, 52_week_low, available_period_high, available_period_low, max_drawdown, distance_from_52_week_high, distance_from_52_week_low, daily_change_amount, and daily_change_percentage",
+        "Data limitations and calculation definitions",
+        "Optional financials series for financial-performance visualization, with source, period, currency, and reporting scope"
+      ],
+      "asset_scope": ["Historical price analysis for SSE A-share stocks only"],
+      "contract_version": "2.0.0",
+      "implementation_status": "typescript_port_pending",
+      "configuration_required": [
+        "Tushare token; daily and adj_factor endpoints verified 2026-10-14",
+        "Documented per-metric price basis and five-year coverage"
+      ],
+      "implementation": "app bundle app.js (charts) + platform server daily and adj_factor adapters (TypeScript)",
+      "implementation_note": "v2 architecture: price and adjustment-factor retrieval as TypeScript adapters in the platform server; charts and metrics rendering in the single application bundle."
+    },
+    {
+      "id": "price-target",
+      "name": "Analyst ratings and price-target summary",
+      "purpose": "Retrieve and summarize Tushare broker research ratings and supported price targets for a selected SSE stock, following the user-provided analyst-summary reference.",
+      "inputs": [
+        "Validated SSE company",
+        "Tushare report_rc access and dated broker research records",
+        "Latest dated raw closing price from Tushare",
+        "Agreed report freshness window, deduplication, rating mapping and target aggregation rules"
+      ],
+      "specifications": [
+        "Replace the previously proposed local forecasting model with sourced broker research summaries. Do not generate analyst opinions or targets from a statistical price model.",
+        "Use documented Tushare report_rc fields including org_name, author_name, report_date, report_title, quarter, rating, max_price and min_price. Verify permissions and actual field completeness with authenticated retrieval.",
+        "Deduplicate forecast-period rows from the same research report before counting reports or aggregating ratings. Never describe institution or report counts as unique analyst counts unless author identities are verifiably deduplicated.",
+        "Display supported rating distribution, consensus methodology, target summary, source dates and counts. Define rating mappings and aggregation before implementation; preserve original ratings and exclude unmappable values with reasons.",
+        "Treat max_price and min_price as source target bounds. The agreed demo summary is a calculated midpoint aggregation, not a provider-supplied consensus target.",
+        "Do not label targets 12-month unless their price-target horizons are verified. quarter identifies a financial forecast period and must not be assumed to establish a target-price horizon.",
+        "When a comparable target is supported, calculate implied upside/downside as (target / latest raw closing price - 1) * 100; show quote date, currency, target basis and source coverage. This is implied price difference, not a guaranteed return.",
+        "Show ratings independently when target data or horizons are missing. Distinguish missing credentials, permission denial, missing fields, insufficient coverage and retrieval errors. No invented ratings, targets, counts or horizons.",
+        "Verify report deduplication, counting units, rating mapping, target semantics, horizon verification and upside calculation with fixtures; verify authenticated retrieval when credentials become available.",
+        "Include only research reports dated within the 90 calendar days ending on the analysis as_of_date (inclusive start date = as_of_date minus 89 days). Exclude future-dated and older reports. Preserve the query start/end dates. The report freshness window is not the target forecast horizon; never infer a 90-day or 12-month target horizon from report age.",
+        "Within the agreed 90-day window, select one latest distinct report per brokerage for the selected stock. Deduplicate multiple forecast-period rows belonging to the same report before selection. Normalize brokerage identifiers using documented rules without merging unrelated institutions; exclude missing or unresolved institution identities with an explicit reason.",
+        "Use selected reports for rating and supported target summaries, with at most one contribution per brokerage for each summary. Do not backfill missing ratings or targets from an older report silently. Show separate eligible brokerage counts for ratings and targets, plus exclusions.",
+        "Label counts as brokerages, not analysts or reports. Resolve same-date report ties using documented publication timestamps or stable report identifiers; if conflicting opinions cannot be ordered reliably, exclude that brokerage from the affected summary and explain why.",
+        "Record selected report dates and sources; verify duplicate forecast rows, repeated publications, institution identity, same-date conflicts, and differing rating/target coverage with fixtures.",
+        "Display rating distribution in the ordered categories Strong Sell, Sell, Hold, Buy, Strong Buy. Map original Tushare ratings using an explicit versioned mapping table supported by documented brokerage rating definitions. Do not infer equivalence from translation or wording alone, or assume all brokerages use the same scale.",
+        "Preserve original rating, brokerage, normalized category, mapping source and mapping version for each included opinion. Exclude unmappable or ambiguous ratings from the normalized distribution and consensus, show the excluded count and reasons, and retain originals for inspection.",
+        "Count each eligible brokerage once in the normalized chart. Show category counts including zeros, total mapped brokerage count, report window and data date. Do not treat missing ratings as Hold.",
+        "Calculate the summary rating as the unique most frequent normalized category among eligible brokerages. Label it Most common brokerage rating and show the category count and total mapped brokerage count; do not claim a majority unless its count exceeds half of the total. If two or more categories tie for the largest positive count, display Mixed and identify tied categories. If no mapped opinions exist, return unavailable rather than Mixed. Do not average category scores or derive ratings from target upside. Verify unique modes, ties, zero opinions and count consistency with fixtures.",
+        "For each eligible brokerage latest report, require finite positive minimum and maximum target prices in CNY on a comparable per-share basis with minimum <= maximum. Compute brokerage midpoint = (minimum + maximum) / 2. Exclude records missing either bound, invalid bounds, incompatible share bases or unverified/non-comparable horizons with explicit reasons; do not silently substitute one bound or an older report.",
+        "Calculate the arithmetic mean of eligible brokerage midpoints, equally weighted with one contribution per brokerage. Label the prominent value Average brokerage target midpoint. Display contributing brokerage count, source dates, verified common horizon and calculation method; retain individual bounds and midpoints for inspection.",
+        "Calculate implied upside/downside = (average brokerage target midpoint / latest valid raw closing price - 1) * 100. Require compatible quote and target share bases, show closing-price date and CNY units, and distinguish a negative percentage from upside. This is a price comparison, not a measured forecast return.",
+        "Present this panel as a sourced summary of brokerage recommendations. Attribute Buy/Sell labels to brokerage opinions and do not generate personalized recommendations or infer a rating from target upside. Do not describe the calculated midpoint as an official analyst consensus or guaranteed future price.",
+        "Apply the agreed verified-horizon grouping and minimum of three eligible brokerages per group. Verify bound validation, equal-weight averaging, single contribution per brokerage, exclusions, quote compatibility and percentage calculation with expected-result fixtures.",
+        "Accept any explicitly verified target-price horizon, preserving its source evidence and reference convention. Normalize equivalent horizon descriptions only when equivalence is documented. Group target contributions by matching horizon and compatible reference convention; never average six-month and twelve-month targets together.",
+        "Show a separate average brokerage target midpoint, eligible brokerage count and implied percentage difference for each supported horizon group. Display its actual horizon prominently. Distinguish a duration measured from each report date from a fixed target date; do not merge these conventions or imply that differing report-date targets share one exact forecast date.",
+        "If a target horizon cannot be verified from documented source fields or accessible source report evidence, exclude it from target averages with reason unverified_target_horizon. Retain separately supported rating information. Neither the 90-day report window nor the financial forecast quarter establishes the target-price horizon.",
+        "Require at least three eligible brokerages per verified-horizon group to display an average midpoint and its implied upside/downside. Below three, return that aggregate as null with reason insufficient_brokerage_coverage; individual validated source targets may still be displayed with their dates, bounds and horizons, explicitly labeled insufficient coverage for an average. This threshold does not suppress independently supported rating distributions."
+      ],
+      "outputs": [
+        "Status, company, source, query window, retrieved_at and limitations",
+        "Rating distribution and explicitly defined consensus with count unit and provenance",
+        "Supported target bounds or agreed target summary, currency, source dates and verified horizon when available",
+        "Implied percentage difference from latest dated close when supported"
+      ],
+      "asset_scope": ["Forecast price target for SSE A-share stocks only"],
+      "contract_version": "2.0.0",
+      "implementation_status": "typescript_port_pending",
+      "configuration_required": [
+        "Tushare token; report_rc verified 2026-10-14 (rating, max_price, min_price present)",
+        "Documented rating mappings and verifiable target-horizon evidence"
+      ],
+      "implementation": "app bundle app.js (panel) + platform server report_rc adapter (TypeScript)",
+      "source_documentation": "https://tushare.pro/document/2?doc_id=292",
+      "demo_configuration": {
+        "report_lookback_calendar_days": 90,
+        "contribution_unit": "brokerage",
+        "report_selection": "latest report per brokerage within 90-day window",
+        "rating_categories": ["Strong Sell", "Sell", "Hold", "Buy", "Strong Buy"],
+        "rating_summary_method": "mode; ties = Mixed; zero mapped opinions = unavailable",
+        "target_summary_method": "arithmetic mean of each eligible brokerage target-range midpoint",
+        "target_display_label": "Average brokerage target midpoint",
+        "target_horizon_policy": "any verified horizon; separate aggregation per matching horizon and reference convention",
+        "minimum_brokerages_per_target_group": 3
+      },
+      "implementation_note": "v2 architecture: report_rc retrieval, deduplication and aggregation as TypeScript in the platform server; panel rendering in the single application bundle."
+    },
+    {
+      "id": "result-store",
+      "name": "Dashboard data store and provenance",
+      "purpose": "Store capability outputs and their provenance so dashboards and refreshes use the same traceable records.",
+      "inputs": [
+        "Validated company records and user watchlists",
+        "Outputs from market research, news tracking, historical analysis, and price target capabilities",
+        "Provider, source, retrieval, publication, coverage, calculation, and status metadata"
+      ],
+      "specifications": [
+        "Store structured records with capability_id, company_id, exchange, industry_label where relevant, as_of/retrieved timestamps, provider/source, status, data limitations, and schema version.",
+        "Store source facts and computed metrics separately so calculated values can be traced to the input observations and calculation definition.",
+        "Retain source URLs or references for research and news where licensing permits. Follow provider retention, caching, and display restrictions; do not store data beyond licensed rights.",
+        "Keep historical snapshots or versioned updates where permitted so the app can distinguish current data from stale results and show change over time.",
+        "For this single-user demo, use the app-storage bridge (storage.read/storage.write) through the cd80 bridge; production accounts and multi-user access control are out of scope. Never persist tokens in storage or result records.",
+        "Version schemas for revised financial records, industry aggregates and brokerage summaries. Migrate compatible records or explicitly invalidate obsolete schemas; do not interpret old price_target or all_time fields as the revised outputs. Store rating and target eligibility, source records, horizons and computed provenance separately."
+      ],
+      "outputs": [
+        "Queryable app-scoped records for dashboard rendering and refreshes",
+        "Provenance, freshness, status, and calculation metadata for every stored result",
+        "Data-retention and licensing metadata where applicable"
+      ],
+      "asset_scope": [
+        "Stored data for SSE A-share watchlists and their associated research, news, prices, and forecasts"
+      ],
+      "depends_on": [
+        "industry-research",
+        "company-industry-news",
+        "historical-analysis",
+        "price-target"
+      ],
+      "contract_version": "2.0.0",
+      "implementation_status": "app_bundle_pending",
+      "configuration_required": ["Validated stock universe and exact industry taxonomy"],
+      "implementation": "app-storage bridge (storage.read/storage.write) with schema versioning in app bundle app.js",
+      "implementation_note": "v2 architecture: the application frame has no browser storage; all records persist through the platform storage bridge and are shared by the discovery and research sections of the single application."
+    },
+    {
+      "id": "metric-education",
+      "contract_version": "2.0.0",
+      "name": "Metric education and benchmark context",
+      "purpose": "Explain financial metrics in plain language for investors with little financial background or limited research time.",
+      "inputs": [
+        "Metric identifier and curated metric-definition catalog",
+        "Optional sourced industry benchmark with peer universe, metric definition, observation date, period, unit and calculation basis"
+      ],
+      "specifications": [
+        "For each metric provide what it means, how it is useful, and how to interpret an industry comparison.",
+        "Distinguish a calculation convention from an industry benchmark. Never invent a universal good/bad threshold.",
+        "If no universal threshold exists, say so. If a numeric industry benchmark is unavailable, report unavailable and describe what a valid comparison requires.",
+        "Share price, high/low prices, and price targets do not have universal industry standard levels. Comparisons require consistent definitions and periods.",
+        "Use accessible click and keyboard interactions for explanations. The reference dialog supports keyboard focus and Escape to close.",
+        "Keep curated explanations independent of stored-data retrieval.",
+        "Update definitions for raw retrieved-period highs/lows, adjusted drawdown, TTM P/E and P/S, TTM paid-cash dividend yield, annual revenue growth/ROE/interest coverage, supplied-universe peer medians, matched-cohort industry growth, modal brokerage ratings and calculated target midpoints. Explain actual bases and coverage; source Buy/Sell labels to brokerages."
+      ],
+      "outputs": [
+        "metric_id, meaning, usefulness, comparison_context",
+        "benchmark_status and optional sourced benchmark record",
+        "Plain-language explanation suitable for a dialog, tooltip, or dedicated help page"
+      ],
+      "asset_scope": [
+        "Metric definitions reusable across stock dashboards; benchmarks restricted to verified peer coverage"
+      ],
+      "depends_on": [],
+      "optional_dependencies": ["result-store"],
+      "implementation_status": "app_bundle_pending",
+      "configuration_required": [
+        "Curated definitions for supported metrics; sourced benchmark dataset if numeric peer standards are required"
+      ],
+      "implementation": "app bundle app.js (dialogs and tooltips)",
+      "implementation_note": "v2 architecture: curated static content shipped inside the single application bundle; no retrieval dependency."
+    },
+    {
+      "id": "financial-visualizations",
+      "contract_version": "2.0.0",
+      "name": "Financial dashboard visualizations",
+      "purpose": "Turn supported stored observations into beginner-friendly financial charts and dated event timelines.",
+      "inputs": [
+        "historical-analysis series of date/close records and price-range metrics",
+        "Optional financials rows: period, revenue, net_profit, currency=CNY, source",
+        "company-industry-news news feed and optional dated sourced research events",
+        "price-target normalized brokerage rating counts and validated midpoint groups, each with horizon, contributing count and provenance",
+        "industry-research sourced annual revenue totals and matched-cohort growth with coverage metadata"
+      ],
+      "specifications": [
+        "Render a price-history line chart. Show analyst target summaries separately; add a future marker only for a verified explicit target date on a compatible price basis.",
+        "Render annual revenue and net-profit grouped bars only from sourced, matched financial reporting periods; support negative profit values.",
+        "Render a dated major-event/news timeline with publisher and permitted direct source links. Timing alone does not establish causation.",
+        "Expose chart values in hover titles and include accessible chart names, legends, units, and sources where available.",
+        "Show a clear empty state for unavailable data. Do not draw fabricated stock prices, financial bars, targets, market sizes or event stories.",
+        "The sandbox forbids external chart libraries and remote resources; hand-render SVG charts and timeline HTML inside the bundle.",
+        "Render sourced annual industry revenue history only; omit forecasts and market-size claims. Show yearly coverage and matched-cohort growth separately so changing coverage does not imply like-for-like growth.",
+        "Render the five brokerage rating categories with accurate counts, including zeros; each target horizon has its own midpoint summary. Do not plot horizon durations as exact dates."
+      ],
+      "outputs": [
+        "Historical price chart and separately labeled analyst-summary panel",
+        "Sourced annual revenue/profit grouped bars",
+        "Historical listed-company industry revenue and matched-cohort growth charts",
+        "Dated news timeline with source references",
+        "Independent chart availability and limitations"
+      ],
+      "asset_scope": [
+        "Stored financial observations in the app-configured stock universe; SSE A-shares in the current reference implementation"
+      ],
+      "depends_on": ["result-store"],
+      "optional_dependencies": [
+        "industry-research",
+        "company-industry-news",
+        "historical-analysis",
+        "price-target"
+      ],
+      "implementation_status": "app_bundle_pending",
+      "configuration_required": [
+        "Applicable source data and verified display rights for each chart"
+      ],
+      "implementation": "app bundle app.js (hand-rendered SVG charts and timeline HTML)",
+      "implementation_note": "v2 architecture: all charts render inside the single application bundle; no external chart library, no remote resources."
+    },
+    {
+      "id": "risk-profile",
+      "name": "Behavioral analysis",
+      "purpose": "Capture seven questionnaire responses and calculate the internal demo risk profile used to select company size.",
+      "inputs": [
+        "questionnaire_version: v0-demo",
+        "answers: object with exactly q1 through q7; each value is an integer 1, 2 or 3"
+      ],
+      "specifications": [
+        "Use the seven questions and three scored choices in questionnaire_definition. All questions have equal weight; no reverse scoring.",
+        "Reject incomplete submissions, unknown question keys, non-integer answers, unsupported versions and scores outside 1–3. Do not calculate a partial result.",
+        "Do not persist incomplete attempts. Discard partial answers when the questionnaire is exited or refreshed.",
+        "Sum all seven answers. Inclusive bands: 7–11=low, 12–16=medium, 17–21=high.",
+        "Keep numeric score and bucket hidden from the user. Store only completed results through the app-storage bridge for the MVP.",
+        "The total combines stated risk willingness, capacity indicators and return expectations. It is a provisional demo score, not a validated assessment; stated expected return is not a forecast or promise."
+      ],
+      "outputs": [
+        "On success: status=completed, questionnaire_version, answers, total_score and risk_profile_bucket.",
+        "On invalid input: status=invalid_input, error_code and message; no score or bucket."
+      ],
+      "asset_scope": ["Local user behavioral profile"],
+      "questionnaire_definition": {
+        "version": "v0-demo",
+        "questions": [
+          {
+            "id": "q1",
+            "text": "How comfortable are you with the value of an investment moving up and down over time?",
+            "choices": [
+              {
+                "label": "Low",
+                "score": 1,
+                "text": "I prefer small changes in value, even if potential growth may be lower."
+              },
+              {
+                "label": "Medium",
+                "score": 2,
+                "text": "I can accept some ups and downs for potential long-term growth."
+              },
+              {
+                "label": "High",
+                "score": 3,
+                "text": "I can accept large ups and downs for potential long-term growth."
+              }
+            ]
+          },
+          {
+            "id": "q2",
+            "text": "Imagine you invest RMB 10,000 and its value falls to RMB 8,000 for a time. What would you most likely do?",
+            "choices": [
+              {
+                "label": "Low",
+                "score": 1,
+                "text": "Sell all or most of it to prevent further losses."
+              },
+              {
+                "label": "Medium",
+                "score": 2,
+                "text": "Hold it for now and review the situation before deciding."
+              },
+              {
+                "label": "High",
+                "score": 3,
+                "text": "Stay with my plan, or add more if that was already part of my plan."
+              }
+            ]
+          },
+          {
+            "id": "q3",
+            "text": "What temporary fall in the value of your investments could you tolerate without changing your plan?",
+            "choices": [
+              {
+                "label": "Low",
+                "score": 1,
+                "text": "Up to 5%."
+              },
+              {
+                "label": "Medium",
+                "score": 2,
+                "text": "More than 5% and up to 20%."
+              },
+              {
+                "label": "High",
+                "score": 3,
+                "text": "More than 20%."
+              }
+            ]
+          },
+          {
+            "id": "q4",
+            "text": "Which investment trade-off feels closest to you?",
+            "choices": [
+              {
+                "label": "Low",
+                "score": 1,
+                "text": "Lower ups and downs, even if the potential for growth is more limited."
+              },
+              {
+                "label": "Medium",
+                "score": 2,
+                "text": "A balance between ups and downs and potential long-term growth."
+              },
+              {
+                "label": "High",
+                "score": 3,
+                "text": "More ups and downs in exchange for the possibility of higher long-term growth."
+              }
+            ]
+          },
+          {
+            "id": "q5",
+            "text": "When might you need to use the money you are considering investing?",
+            "choices": [
+              {
+                "label": "Low",
+                "score": 1,
+                "text": "Within 1 year."
+              },
+              {
+                "label": "Medium",
+                "score": 2,
+                "text": "In 1 to 3 years."
+              },
+              {
+                "label": "High",
+                "score": 3,
+                "text": "More than 3 years from now."
+              }
+            ]
+          },
+          {
+            "id": "q6",
+            "text": "If your income stopped, how long could your savings cover essential expenses?",
+            "choices": [
+              {
+                "label": "Low",
+                "score": 1,
+                "text": "Less than 1 month."
+              },
+              {
+                "label": "Medium",
+                "score": 2,
+                "text": "From 1 month to 6 months."
+              },
+              {
+                "label": "High",
+                "score": 3,
+                "text": "More than 6 months."
+              }
+            ]
+          },
+          {
+            "id": "q7",
+            "text": "What return do you expect your investment portfolio to achieve over the next year?",
+            "choices": [
+              {
+                "label": "Low",
+                "score": 1,
+                "text": "Less than 10%."
+              },
+              {
+                "label": "Medium",
+                "score": 2,
+                "text": "10% to 20%."
+              },
+              {
+                "label": "High",
+                "score": 3,
+                "text": "More than 20%."
+              }
+            ]
+          }
+        ],
+        "scoring_bands": [
+          {
+            "min": 7,
+            "max": 11,
+            "bucket": "low"
+          },
+          {
+            "min": 12,
+            "max": 16,
+            "bucket": "medium"
+          },
+          {
+            "min": 17,
+            "max": 21,
+            "bucket": "high"
+          }
+        ]
+      },
+      "output_example": {
+        "status": "completed",
+        "questionnaire_version": "v0-demo",
+        "answers": {
+          "q1": 3,
+          "q2": 2,
+          "q3": 3,
+          "q4": 2,
+          "q5": 1,
+          "q6": 2,
+          "q7": 2
+        },
+        "total_score": 15,
+        "risk_profile_bucket": "medium"
+      },
+      "contract_version": "2.0.0",
+      "implementation_status": "app_bundle_pending",
+      "implementation": "app bundle: calculations.js (scoring in the verified isolate) + app.js (questionnaire UI)",
+      "implementation_note": "v2 architecture: pure scoring runs in the calculations.js isolate; completed results persist through the app-storage bridge."
+    },
+    {
+      "id": "industry-preferences",
+      "name": "Industry preferences",
+      "purpose": "Capture the user's selected industries and normalize them for company filtering.",
+      "inputs": [
+        "selected_industries: required array of supported canonical industry IDs; an empty array is valid"
+      ],
+      "specifications": [
+        "Offer exactly the five supported industries. Allow all, some or none to be selected.",
+        "Use supported_industries to translate CSV industry labels into canonical IDs. Do not substitute broader sector labels.",
+        "Remove duplicate selections while preserving order. Reject absent input, non-array input and unsupported IDs.",
+        "For a non-empty array return selection_mode=selected. For an empty array return selection_mode=all_supported and effective_industries containing all five IDs.",
+        "No selection means random company discovery across the five industries subject to the risk-based company-size filter. It does not require equal representation of each industry.",
+        "Do not infer preferences from questionnaire responses. Save normalized preferences through the app-storage bridge."
+      ],
+      "outputs": [
+        "On success: status=completed and industry_preference with selection_mode, selected_industries and effective_industries.",
+        "On invalid input: status=invalid_input, error_code and message; no normalized preference."
+      ],
+      "asset_scope": ["User industry preferences for Shanghai Stock Exchange A-share discovery"],
+      "supported_industries": [
+        {
+          "id": "manufacturing",
+          "label": "Manufacturing",
+          "csv_value": "制造业"
+        },
+        {
+          "id": "information_software_it",
+          "label": "Information transmission, software and IT services",
+          "csv_value": "信息传输、软件和信息技术服务业"
+        },
+        {
+          "id": "utilities",
+          "label": "Electricity, heat, gas and water production and supply",
+          "csv_value": "电力、热力、燃气及水生产和供应业"
+        },
+        {
+          "id": "financial_services",
+          "label": "Financial services",
+          "csv_value": "金融业"
+        },
+        {
+          "id": "wholesale_retail",
+          "label": "Wholesale and retail",
+          "csv_value": "批发和零售业"
+        }
+      ],
+      "output_example": {
+        "status": "completed",
+        "industry_preference": {
+          "selection_mode": "all_supported",
+          "selected_industries": [],
+          "effective_industries": [
+            "manufacturing",
+            "information_software_it",
+            "utilities",
+            "financial_services",
+            "wholesale_retail"
+          ]
+        }
+      },
+      "contract_version": "2.0.0",
+      "implementation_status": "app_bundle_pending",
+      "implementation": "app bundle app.js",
+      "implementation_note": "v2 architecture: normalization in the single application bundle; preferences persist through the app-storage bridge."
+    },
+    {
+      "id": "company-discovery",
+      "name": "Risk and industry mapping",
+      "purpose": "Combine the behavioral profile and industry preferences to select up to five companies, displayed one per round.",
+      "inputs": [
+        "risk_result: completed risk-profile result",
+        "industry_preference: normalized industry-preferences preference",
+        "companies: supplied company catalog with company name, ticker, industry, market capitalization and assigned size category",
+        "watchlist: saved company identifiers in app storage",
+        "session_state: current session ID, ordered company identifiers, round index and exposed company identifiers; absent when creating a session"
+      ],
+      "specifications": [
+        "Validate questionnaire version, score and risk bucket consistency against risk-profile. Reject invalid or incomplete upstream results.",
+        "Validate industry preferences against the five canonical IDs from industry-preferences. Do not widen a selected industry filter if there are no matches.",
+        "Risk determines company size, not an industry risk classification: low→Large cap, medium→Mid cap, high→Small cap. Independently apply the effective industry filter.",
+        "Use assigned CSV Size Category values. Do not calculate new capitalization thresholds or reclassify the supplied companies. Preserve ticker symbols as strings and use exchange+ticker as a stable identifier.",
+        "Eligible companies must match BOTH the size bucket and an effective industry, and must not already be saved to the watchlist. Exclude industries outside the five supported categories.",
+        "Validate catalog records and report invalid records separately; missing or unsupported industry/size values must not enter the selection pool. Deduplicate by exchange+ticker; conflicting duplicate records must be reported.",
+        "Shuffle eligible companies once when creating a session. Select at most five distinct companies for five rounds, displaying exactly one company per round. Random ordering is not a financial ranking.",
+        "Each round contains one card with Add to watchlist and Skip actions. Use fewer than five rounds if fewer eligible companies are available; do not repeat companies to fill a session.",
+        "Add to watchlist emits one watchlist-add action and advances to the next company. Skip emits no save action and advances. The application persists watchlist additions through the app-storage bridge and prevents duplicate saves.",
+        "Neither company repeats within a session. Unchosen and skipped companies become eligible again in a later session. Saved companies remain excluded until removed from the watchlist.",
+        "A completed session with remaining eligible unsaved companies offers a new session. If none remain, return exhausted and show: You have seen all matching companies. Come back later for new companies. Do not imply that merely waiting refreshes the supplied dataset.",
+        "Active session state is in memory for the MVP; a refresh abandons that session. Completed questionnaire, preferences and watchlist remain in app storage through the app-storage bridge.",
+        "Return company identifiers for the separate metrics API. Financial metric retrieval and metric calculations are not responsibilities of this capability.",
+        "The mapping is the supplied demo discovery rule. It does not establish investment suitability, predict returns or perform brokerage actions."
+      ],
+      "outputs": [
+        "On success: status=ready, target_size_category, eligible_company_count, session_id, ordered_company_ids, total_rounds, current_round and metric_request_company_ids.",
+        "On a selection: watchlist_add with exchange+ticker, updated session_state and next round or session_completed.",
+        "When no matches remain: status=exhausted, companies=[] and user_message.",
+        "On invalid input: status=invalid_input, error_code and message; no selected companies.",
+        "Catalog validation report: excluded_record_count and record-level errors."
+      ],
+      "asset_scope": [
+        "Supplied Shanghai Stock Exchange A-share companies in the five supported industries"
+      ],
+      "depends_on": ["risk-profile", "industry-preferences"],
+      "risk_to_size_mapping": {
+        "low": "Large cap",
+        "medium": "Mid cap",
+        "high": "Small cap"
+      },
+      "csv_column_mapping": {
+        "company_name": "Company Name",
+        "ticker": "Ticker Symbol",
+        "industry": "Industry",
+        "market_cap_rmb": "A-share Market Capitalisation (RMB)",
+        "size_category": "Size Category"
+      },
+      "session_policy": {
+        "max_rounds": 5,
+        "companies_per_round": 1,
+        "max_unique_companies": 5,
+        "repeat_within_session": false,
+        "unchosen_eligible_next_session": true,
+        "exclude_saved_companies": true
+      },
+      "contract_version": "2.0.0",
+      "implementation_status": "app_bundle_pending",
+      "implementation": "app bundle: calculations.js (session shuffle in the verified isolate) + app.js (rounds and cards)",
+      "implementation_note": "v2 architecture: the company catalog is served through a bridge capability, not bundled; the discovery section shares app storage with the research section of the single application."
+    },
+    {
+      "id": "company-universe",
+      "name": "Company universe service and validation",
+      "purpose": "Serve the supplied SSE company universe to the application and validate company identifiers, names and exact source industry labels.",
+      "contract_version": "2.0.0",
+      "inputs": ["Company record and canonical supplied company universe"],
+      "outputs": [
+        "Supplied universe with five industries, exact CSV labels and size categories; canonical matching company or validation error"
+      ],
+      "implementation_status": "platform_bridge_pending",
+      "implementation": "platform server company table + bridge capability",
+      "specifications": [
+        "Serve the supplied universe through a platform bridge capability; do not bundle the CSV inside the application.",
+        "Preserve six-digit string tickers.",
+        "Validate ticker, name and industry against canonical records.",
+        "CSV is the supplied source; exact CSV industry labels are canonical for all industry matching. Tushare industry values are finer-grained and must not replace CSV labels."
+      ]
+    },
+    {
+      "id": "industry-filter",
+      "name": "Industry filtering",
+      "purpose": "Filter a company universe using explicit industry labels; an empty filter permits the configured universe.",
+      "contract_version": "2.0.0",
+      "inputs": ["Company records and exact industry-label array"],
+      "outputs": [
+        "Companies matching any selected label; all input companies when selection is empty"
+      ],
+      "implementation_status": "app_bundle_pending",
+      "implementation": "app bundle app.js"
+    },
+    {
+      "id": "watchlist",
+      "name": "Watchlist management",
+      "purpose": "Normalize, add and remove unique company identifiers with app-scoped persistence through the storage bridge.",
+      "contract_version": "2.0.0",
+      "inputs": ["Identifier array and company ID to add/remove"],
+      "outputs": ["Unique identifier array"],
+      "implementation_status": "app_bundle_pending",
+      "implementation": "app bundle app.js via app-storage bridge",
+      "specifications": [
+        "Caller validates identifiers against the app universe.",
+        "Persistence is app-scoped through the app-storage bridge; the demo is one application, so the discovery and research sections share one storage scope."
+      ]
+    },
+    {
+      "id": "app-storage",
+      "name": "Platform storage bridge",
+      "purpose": "Read and write JSON values under the application's platform storage scope through the cd80 bridge. Replaces browser localStorage, which the sandboxed opaque-origin application frame cannot access.",
+      "contract_version": "2.0.0",
+      "inputs": ["App-scoped key, JSON value or read fallback"],
+      "outputs": ["Parsed stored value or fallback; write errors propagate to caller"],
+      "implementation_status": "existing_bridge_capability",
+      "implementation": "platform bridge: storage.read / storage.write",
+      "specifications": [
+        "All application persistence goes through this bridge; the application frame has no direct browser storage access.",
+        "Stored data is app-scoped and survives accepted application updates. Single-user demo scope.",
+        "Tokens and secrets are never written to storage.",
+        "Caller validates identifiers against the app universe."
+      ]
+    },
+    {
+      "id": "ui-open",
+      "name": "External link opener",
+      "purpose": "Open verified http and https URLs in a new browser tab from the host page. The sandboxed application frame cannot open links itself.",
+      "contract_version": "2.0.0",
+      "inputs": ["Absolute http or https URL"],
+      "outputs": ["status opened, or rejected with reason"],
+      "implementation_status": "bridge_capability_pending",
+      "implementation": "platform bridge: ui.open",
+      "specifications": [
+        "Accept absolute http and https URLs only; reject every other scheme.",
+        "The host page opens the URL, not the sandboxed iframe; a per-app permission is required.",
+        "Used by news and research panels; never used for navigation inside the application."
+      ],
+      "asset_scope": ["External source links for news and research records"]
+    },
+    {
+      "id": "market-data-provider",
+      "name": "Market data provider",
+      "purpose": "Retrieve documented Tushare price, adjustment, statement, ratio, dividend, news and broker-report data needed by enabled demo capabilities, using backend-only credentials.",
+      "contract_version": "2.0.0",
+      "inputs": [
+        "Validated SSE ticker",
+        "Server-memory Tushare token and optional financial-statements flag"
+      ],
+      "outputs": [
+        "Normalized dated source observations for enabled capabilities, with endpoint and field provenance, units, coverage, access/error statuses and retrieval time"
+      ],
+      "implementation_status": "typescript_port_pending",
+      "implementation": "platform/apps/web/src/server/providers.ts (TypeScript adapters)",
+      "verified_endpoints": {
+        "verified_at": "2026-10-14",
+        "result": "All endpoints returned code 0 with required fields using the configured workspace token.",
+        "endpoints": [
+          "stock_basic",
+          "daily",
+          "adj_factor",
+          "daily_basic",
+          "fina_indicator",
+          "income",
+          "balancesheet",
+          "dividend",
+          "report_rc",
+          "news"
+        ],
+        "notes": [
+          "fina_indicator returns at most 100 rows per request; paginate by period.",
+          "income returns multiple rows per period including restatements; deduplicate by end_date keeping the latest announcement.",
+          "report_rc returns large result sets; the 90-day window and per-brokerage deduplication are mandatory."
+        ]
+      },
+      "specifications": [
+        "Implement as TypeScript adapters in the platform server following the existing providers.ts pattern; the platform has no Python runtime.",
+        "Credentials stay in process memory.",
+        "Use HTTPS without credential-bearing redirects.",
+        "Cache responses for 15 minutes.",
+        "Unadjusted price data does not support adjusted maximum drawdown.",
+        "For this demo, use Tushare as the sole external financial data provider. Do not add fallback providers. Unsupported features must return unavailable with an explicit reason.",
+        "Implement actual retrieval using documented Tushare endpoints. Verify fields, SSE A-share coverage, and account permissions required by each dependent capability; do not assume a token grants every permission.",
+        "Provide backend token configuration and distinguish missing credentials, insufficient permissions, unsupported data, empty results, and retrieval failures.",
+        "Before a token is available, verify integrations using clearly labeled test fixtures. Fixtures are development data and must not appear as real financial observations. After a token is supplied, verify authenticated retrieval before claiming live integration works.",
+        "For historical maximum drawdown, retrieve documented Tushare adjustment factors alongside daily prices. Verify endpoint access and return explicit adjustment-data availability and source metadata; never silently replace an adjusted series with raw prices.",
+        "Provide adapters for every enabled dependent capability; a single historical-price endpoint is not sufficient. Validate upstream payloads, paginate where documented, enforce timeouts, handle rate limits and safe retries, and preserve source units and timestamps. Display dates in Asia/Shanghai and treat financial-year periods separately from publication dates."
+      ],
+      "implementation_note": "v2 architecture: replaces the former library/python/market_provider.py specification; endpoint access verified live on 2026-10-14."
+    },
+    {
+      "id": "company-card-metrics",
+      "name": "Company card metrics",
+      "purpose": "Provide all six company-card financial metrics using documented Tushare ratios first, with explicitly defined calculations from Tushare observations when sufficient comparable inputs exist.",
+      "contract_version": "2.0.0",
+      "inputs": [
+        "Validated exchange+ticker identifiers",
+        "Requested metric IDs: pe, ps, dividend_yield, revenue_growth, roe, interest_coverage",
+        "Price and financial observations from market-data-provider"
+      ],
+      "outputs": [
+        "Company quote and requested metric records with units, source, reporting basis, statuses and optional peer metadata"
+      ],
+      "implementation_status": "typescript_port_pending",
+      "implementation": "platform/apps/web/src/server/metrics.ts (pure TypeScript functions) + finance.company-metrics bridge capability",
+      "provider_contract": {
+        "status": "tushare_first_endpoints_verified_implementation_pending",
+        "purpose": "Supply all six financial metrics using Tushare ratios first and documented Tushare-only calculation fallbacks.",
+        "provider": "Tushare",
+        "base_url": "https://api.tushare.pro",
+        "endpoint": [
+          "daily_basic",
+          "fina_indicator",
+          "income",
+          "balancesheet",
+          "dividend",
+          "daily"
+        ],
+        "authentication": "Server-side TUSHARE_TOKEN from workspace settings; never exposed to the application frame.",
+        "request_contract": {
+          "companies": [
+            {
+              "exchange": "SSE",
+              "ticker": "600000"
+            }
+          ],
+          "metric_ids": ["pe", "dividend_yield", "roe", "interest_coverage"]
+        },
+        "response_contract_example": {
+          "companies": [
+            {
+              "exchange": "SSE",
+              "ticker": "600000",
+              "metrics": [
+                {
+                  "id": "pe",
+                  "value": null,
+                  "unit": "ratio",
+                  "status": "unavailable",
+                  "reporting_period": null,
+                  "as_of": null,
+                  "source": null,
+                  "calculation_basis": null,
+                  "industry_median": null,
+                  "peer_count": null,
+                  "benchmark_period": null,
+                  "benchmark_calculation_basis": null,
+                  "display_range": null
+                }
+              ],
+              "currency": "CNY",
+              "current_price": null,
+              "quote_as_of": null,
+              "business_description": null
+            }
+          ],
+          "example_only": true
+        },
+        "requirements": [
+          "Confirm support for SSE A-shares and all six metrics. Endpoint access is verified; field mappings are defined in this capability.",
+          "Join results by exchange+ticker; never rely on response order or company name. Reject unsolicited company IDs and unsupported metric IDs.",
+          "Keep percentage values in percentage points: a value of 5 means 5%, not 0.05. Normalize provider units in the adapter.",
+          "Define valuation and reporting bases with the provider: P/E earnings basis, P/S sales basis, dividend yield basis, revenue growth comparison period, ROE reporting period and interest coverage calculation.",
+          "Use null for missing or inapplicable values. Render N/A for unavailable values and show explicit loading/error states; do not invent values or replace missing values with zero.",
+          "Preserve as_of, reporting_period, source and calculation_basis metadata. Values must not be labeled live without a confirmed freshness contract.",
+          "Metric API failures must not prevent questionnaire completion, company discovery or watchlist saving.",
+          "If the provider requires a private API secret, keep it in a server-side proxy; do not embed it in the browser application. No-account local storage does not remove this requirement.",
+          "Optional card enrichment: currency, current_price, quote_as_of and business_description. Return null when unavailable.",
+          "For benchmark visuals, optionally provide industry_median, peer_count, benchmark_period, benchmark_calculation_basis and display_range {min,max}. Metric and benchmark must use the same units and reporting/calculation basis. Do not position median markers for incomparable periods or bases.",
+          "Tushare is the sole external source for this demo. Use the agreed reporting bases in this capability; field mappings must be verified against authenticated responses rather than assumed."
+        ],
+        "open_questions": [
+          "Endpoint access is verified (2026-10-14). Confirm exact field-level mappings per report type (for example income and fina_indicator field availability per statement period) against authenticated responses during implementation."
+        ]
+      },
+      "specifications": [
+        "Latest close is end-of-day, not a live quote.",
+        "Calculate revenue growth only from consecutive comparable annual consolidated total_revenue statements.",
+        "For pe, ps, dividend_yield, revenue_growth, roe, and interest_coverage, retrieve documented ready-made Tushare ratios first. Verify actual endpoint fields, units, reporting basis, publication dates, and account permissions from official documentation before implementing an adapter; do not invent endpoint or field names.",
+        "If a ready-made ratio is absent, calculate it only from sufficient Tushare observations using an explicitly documented formula and comparable accounting scope and periods. Preserve whether each value was retrieved or calculated and record source fields, formula, units, reporting period, and as_of date.",
+        "Missing inputs, inaccessible endpoints, unsupported ratios, non-comparable periods, and undefined denominators must produce null with a specific reason. Never substitute zero, fabricated observations, or another provider.",
+        "The generation task includes implementing all six retrieval/calculation paths rather than retaining the existing unsupported-ratio placeholders. Verify each path with meaningful fixture checks, then authenticated retrieval when the token is supplied.",
+        "Use trailing-twelve-month (TTM) reporting bases for P/E and P/S. Prefer documented Tushare TTM ratios. Never silently substitute annual or other ratio bases; if TTM data is unavailable, return null with an explicit reason.",
+        "For a calculated P/E TTM, divide total company equity market capitalization by trailing-twelve-month net profit attributable to parent-company ordinary shareholders on a comparable consolidated basis. For P/S TTM, divide total company equity market capitalization by trailing-twelve-month consolidated revenue. Use dated Tushare market capitalization with documented units and consistent share coverage; do not use the undated bundled CSV snapshot.",
+        "When constructing TTM totals from cumulative financial statements, use latest published year-to-date value + preceding full-year value - preceding comparable year-to-date value, or four verified standalone quarters. Do not sum cumulative quarterly values. Require consistent accounting scope and only statements published by the quote as_of date.",
+        "Record the quote date, financial coverage end date, statement publication dates, numerator and denominator units, source fields, and retrieved-versus-calculated provenance. Normalize units before division. Return null with a reason for non-positive TTM earnings or revenue rather than displaying a misleading valuation ratio.",
+        "Use the latest published completed financial year for revenue_growth, roe, and interest_coverage. Label each card with its financial year and source publication date. Do not silently substitute quarterly, year-to-date, or TTM values.",
+        "Revenue growth: (current annual consolidated total_revenue / preceding annual consolidated total_revenue - 1) * 100. Require consecutive financial years, consistent accounting scope and currency, and a positive prior-year denominator.",
+        "ROE: prefer a documented Tushare full-year ROE field and preserve its exact definition, including weighted-average versus simple-average basis. If unavailable, calculate annual net profit attributable to parent-company shareholders / average opening and closing equity attributable to parent-company shareholders * 100. Label this fallback as simple-average ROE; do not present it as weighted-average ROE. Require positive comparable opening and closing equity and preserve legitimate negative profit values.",
+        "Interest coverage: prefer a documented Tushare annual interest-coverage ratio and preserve its definition. If unavailable, calculate annual EBIT / annual interest expense using verified comparable statement fields. Derive EBIT as annual profit before tax + annual interest expense only when those fields are documented and comparable. Do not substitute net finance costs, interest paid in cash flows, or net profit for the required inputs. If positive interest expense or required fields are absent, return null with an explicit reason; preserve negative EBIT results.",
+        "Return revenue_growth and roe in percentage points (5 means 5%); return interest_coverage as a multiple (5 means 5x). Record retrieved or calculated provenance and the exact formula or provider basis. Company values and later peer benchmarks must use the same definition and period.",
+        "Verify annual-period selection, revenue-growth comparability, ROE basis labeling, interest-expense field suitability, unit normalization, and zero or missing denominators with explicit expected-result fixtures.",
+        "Use trailing-twelve-month cash dividend yield: total gross cash dividends per share actually paid during the twelve calendar months ending on the latest close date / that raw closing price * 100. Label the metric TTM cash dividend yield, with quote date and dividend coverage dates.",
+        "Prefer a documented Tushare supplied dividend-yield ratio only if its payment-date basis, trailing window, gross-versus-net treatment, and units match this definition. Otherwise calculate from verified Tushare dividend records; never silently substitute a financial-year or announced-dividend yield.",
+        "For the fallback, include only implemented cash dividends whose payment dates fall within the window, exclude proposals and unpaid declarations, deduplicate distribution events, verify per-share units, and normalize past per-share dividends to the quote-date share basis after splits or bonus issues using documented corporate-action data. If the payment dates or comparable per-share basis cannot be established, return null with an explicit reason.",
+        "Return zero dividend yield only when complete source coverage verifies no eligible payments in the window. Missing records or incomplete coverage must return null, not zero. Require a positive finite closing price; store percentage points and preserve source and calculation provenance.",
+        "Verify dividend-window boundaries, duplicate events, exclusion of unpaid dividends, per-share unit conversion, corporate-action comparability, and confirmed-zero versus missing-data behavior with expected-result fixtures.",
+        "Define the industry benchmark universe as all validated SSE A-share companies in the supplied CSV with the selected company's exact industry label, including the selected company when eligible. Do not filter by market-cap size or substitute a different taxonomy. Label this as a supplied-universe SSE industry median, not a whole-China industry benchmark.",
+        "Retrieve peer observations exclusively from Tushare using the agreed company-metric retrieval and fallback rules. For each metric, include only finite values with comparable definitions, accounting scope, units, reporting periods, and valuation quote dates. Do not pool weighted-average and simple-average ROE or different interest-coverage definitions.",
+        "For valuation and dividend-yield benchmarks, require a common quote date and the agreed TTM basis; for annual metrics require the same financial year as the selected company. Preserve actual TTM financial coverage dates and explain any differences. Exclude missing, inaccessible, invalid, and non-comparable observations; never replace them with zero.",
+        "Calculate the median of eligible sorted values: middle observation for an odd count, arithmetic mean of the two middle observations for an even count. Report peer_count, total industry universe count, exclusions and coverage, benchmark_period, quote date where applicable, calculation basis, sources, and retrieval time.",
+        "Batch and cache peer retrieval according to verified Tushare rate limits. Show benchmark loading and partial-coverage states; never claim complete coverage before retrieval finishes. Verify universe selection, comparability filtering, odd/even medians, coverage counts, and insufficient-peer behavior with expected-result fixtures.",
+        "Require at least five eligible company observations for each industry metric median, including the selected company if eligible. Apply this threshold separately per metric after comparability filtering. Below five, return industry_median as null with reason insufficient_comparable_peers and show the actual eligible count; preserve the company metric."
+      ],
+      "configuration_required": [
+        "Tushare token; endpoints verified 2026-10-14",
+        "Documented field mapping consistent with agreed metric definitions"
+      ],
+      "benchmark_configuration": {
+        "universe": "Supplied CSV SSE A-share companies with exact matching industry label",
+        "include_selected_company": true,
+        "minimum_eligible_observations_per_metric": 5
+      },
+      "implementation_note": "v2 architecture: replaces the former library/python/card_metrics.py specification; pure metric functions in TypeScript on the platform server, exposed to the application through the finance.company-metrics bridge capability."
+    }
+  ],
+  "legacy_id_maps": {
+    "finmatch": {
+      "CAP-005": "risk-profile",
+      "CAP-006": "industry-preferences",
+      "CAP-007": "company-discovery"
+    },
+    "investlense": {
+      "CAP-001": "industry-research",
+      "CAP-002": "company-industry-news",
+      "CAP-003": "historical-analysis",
+      "CAP-004": "price-target",
+      "CAP-005": "result-store",
+      "CAP-006": "grounded-chatbot",
+      "CAP-007": "dashboard",
+      "CAP-008": "metric-education",
+      "CAP-009": "financial-visualizations"
+    },
+    "v2_removals": {
+      "investlense CAP-006 (grounded-chatbot)": "removed in 2.0.0; no replacement capability",
+      "library/browser/local-storage (browser persistence)": "replaced by app-storage bridge capability",
+      "library/python/market_provider.py": "replaced by TypeScript adapters in the platform server",
+      "library/python/card_metrics.py": "replaced by TypeScript metric functions in the platform server"
+    }
+  },
+  "limitations": [
+    "Endpoint access verified live on 2026-10-14 with the configured workspace token: stock_basic, daily, adj_factor, daily_basic, fina_indicator, income, balancesheet, dividend, report_rc and news all returned code 0 with required fields. Row caps and rate limits still apply (fina_indicator: 100 rows per request; report_rc: large result sets).",
+    "Unknown analyst target horizons or inaccessible source data may legitimately prevent some summaries. Never fabricate values to make a feature appear complete.",
+    "The application frame is a sandboxed opaque-origin iframe: no direct network access, no browser localStorage, no popup navigation. All data, persistence and external links go through the permission-checked cd80 bridge.",
+    "Single-application demo: discovery and research are two sections of one application sharing one platform storage scope. Production accounts and multi-user persistence are outside demo scope."
+  ],
+  "composition": "This catalog is the authoritative requirements guide for LLM prototype generation. One generated application implements all capabilities as two sections (discovery and research). Shared data access and metric calculations live in the platform TypeScript server and reach the application only through permission-checked bridge capabilities; the application ships as one four-file bundle.",
+  "prototype_generation_instructions": [
+    "Implement these contracts as the authoritative requirements. v2 architecture: TypeScript server adapters in the platform (no Python), one application bundle with two sections, all data through the cd80 bridge.",
+    "Tushare is the only external financial source. The workspace token is configured and all required endpoints are verified (2026-10-14). Respect row caps and rate limits; cache responses for 15 minutes per market-data-provider.",
+    "Never use browser localStorage and never fetch from the application frame; both are blocked by the sandbox. Persist through storage.read/storage.write; open external links only through ui.open.",
+    "Ship exactly index.html, app.js, calculations.js and style.css within the 250 KB bundle limit. Hand-render SVG charts; external chart libraries and remote resources are forbidden. Pure decisions (risk scoring, session shuffle) run in calculations.js inside the verified isolate.",
+    "Keep FinMatch discovery and watchlist behavior; implement its six metrics and peer medians. Keep Investlense stock selection and implement historical analysis, listed-company industry history, Tushare news and brokerage summaries. Historical results only; no forecasts and no local price-prediction model.",
+    "Use one consistent machine-readable result schema with status, capability_id, exchange, ticker/company identity, retrieved_at, source dates, units and limitations. Preserve metric-specific provenance and never conflate unknown and zero.",
+    "Test calculations against explicit expected fixture results and error handling before using credentials. Fixture mode must be explicit and clearly labeled; never present fixture financial observations as actual data.",
+    "When the token is available, validate at least one representative authenticated retrieval per enabled data family. Report feature-by-feature working, permission-blocked, source-unsupported and unverified outcomes. Passing mocked tests is not evidence of live access.",
+    "Inspect both sections in a browser for populated and unavailable states, charts, counts, dates and sources. Do not claim all features work unless the required live paths have been verified."
+  ]
+}

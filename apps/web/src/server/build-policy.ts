@@ -12,6 +12,7 @@ import research from "./protocols/research.md?raw";
 import history from "./protocols/history.md?raw";
 import matching from "./protocols/matching.md?raw";
 import frontendDesign from "./protocols/frontend-design.md?raw";
+import { financialExpertInstructions, financialSkills } from "./financial-expert";
 import { buildPlanSchema, type BusinessCapability, type BuildRecord } from "../lib/build-plan";
 import type { AppBundle } from "../lib/contracts";
 import { sseACompanies } from "./providers";
@@ -20,29 +21,27 @@ import {
   type LiveCompany,
   rankCompanyMatches,
 } from "../lib/company-table";
+import {
+  capabilityCatalogInstructions,
+  capabilityDefinitions,
+  businessCapabilities,
+} from "../lib/capability-catalog";
 
-export const agentProtocols = { communication, builder, "application-llm": applicationLlm };
+export const agentProtocols = {
+  communication,
+  builder,
+  "application-llm": applicationLlm,
+  "financial-expert": financialExpertInstructions,
+  "capability-catalog": capabilityCatalogInstructions,
+};
 export { frontendDesign };
-const capabilityProtocols: Record<BusinessCapability, string> = {
-  "market-research": research,
-  news: research,
-  "historical-analysis": history,
-  "price-target": history,
-  "risk-assessment": matching,
-  "industry-preference": matching,
-  "risk-industry-matching": matching,
-  "company-cards": matching,
-};
-export const capabilityDependencies: Record<BusinessCapability, BusinessCapability[]> = {
-  "market-research": ["news"],
-  news: ["market-research"],
-  "historical-analysis": ["price-target"],
-  "price-target": ["historical-analysis"],
-  "risk-assessment": ["risk-industry-matching"],
-  "industry-preference": ["risk-industry-matching"],
-  "risk-industry-matching": ["risk-assessment", "industry-preference"],
-  "company-cards": ["risk-industry-matching"],
-};
+const protocols = { research, history, matching };
+const capabilityProtocols = Object.fromEntries(
+  businessCapabilities.map((id) => [id, protocols[capabilityDefinitions[id].protocol]]),
+) as Record<BusinessCapability, string>;
+export const capabilityDependencies = Object.fromEntries(
+  businessCapabilities.map((id) => [id, capabilityDefinitions[id].dependencies]),
+) as Record<BusinessCapability, BusinessCapability[]>;
 export function resolveCapabilities(selected: BusinessCapability[]) {
   const resolved = new Set(selected);
   for (const id of resolved)
@@ -146,11 +145,12 @@ export async function prepareBuild(
     blockers.push(
       "Select a supported company for the historical-analysis and price-target package.",
     );
-  // Live mode is gated by the managedCompanies probe above: the same Tushare
-  // token and endpoint that serve market data verify the feed at plan time.
   const protocolHashes = Object.fromEntries(
     [
       ...Object.entries(agentProtocols),
+      ...Object.entries(financialSkills).map(
+        ([id, content]) => [`financial-skill:${id}`, content] as const,
+      ),
       ["frontend-design", frontendDesign] as const,
       ...resolvedCapabilities.map((id) => [id, capabilityProtocols[id]] as const),
     ].map(([id, content]) => [id, hash(content)]),

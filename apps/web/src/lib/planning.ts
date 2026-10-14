@@ -1,8 +1,9 @@
-import type { BuildRecord, BusinessCapability } from "./build-plan";
-import type { ProductSpec, Requirements } from "./contracts";
+import type { BuildPlan, BuildRecord, BusinessCapability } from "./build-plan";
+import type { Application, ProductSpec, Requirements } from "./contracts";
+import { capabilityDefinitions } from "./capability-catalog";
 
 export type WorkflowGraph = {
-  basis: "draft" | "build-record";
+  basis: "draft" | "build-record" | "active-release" | "proposal";
   nodes: {
     id: string;
     kind: "data" | "capability" | "output";
@@ -14,34 +15,32 @@ export type WorkflowGraph = {
   edges: { from: string; to: string; label: string }[];
 };
 
-const capabilityLabels: Record<BusinessCapability, string> = {
-  "market-research": "Market research",
-  news: "News retrieval",
-  "historical-analysis": "Historical analysis",
-  "price-target": "Sourced price target",
-  "risk-assessment": "Risk appetite assessment",
-  "industry-preference": "Industry preference",
-  "risk-industry-matching": "Risk/industry matching",
-  "company-cards": "Daily company cards",
-};
-const capabilityDetails: Record<BusinessCapability, string> = {
-  "market-research":
-    "Research about an entire industry. The daily company cards then add detail about each company before a decision.",
-  news: "News is gathered once each time the research runs — it does not refresh on its own.",
-  "historical-analysis":
-    "Price chart, latest price, 52-week and all-time highs and lows, how far the price has fallen from its peak, and the daily change.",
-  "price-target":
-    "A price target published by an outside source, always shown with who published it, when, in which currency, and over what time frame. The app never predicts prices itself.",
-  "risk-assessment":
-    "A proper expert questionnaire is not available yet; the risk profile is your own comfort choice, not an expert assessment.",
-  "industry-preference": "Industries come from the platform's checked company list.",
-  "risk-industry-matching":
-    "Low risk is paired with larger companies, medium with mid-sized, and high with smaller ones — then narrowed to your chosen industries.",
-  "company-cards":
-    "Up to five companies per trading day, each with a simple yes/no decision and a watchlist option.",
-};
 export function capabilityLabel(id: BusinessCapability) {
-  return capabilityLabels[id];
+  return capabilityDefinitions[id].label;
+}
+
+export function applicationWorkflow(app: Application): WorkflowGraph {
+  if (app.buildProposal?.specification && app.buildProposal.plan)
+    return {
+      ...workflowGraph(
+        app.buildProposal.specification,
+        app.requirements,
+        undefined,
+        app.buildProposal.plan,
+      ),
+      basis: "proposal",
+    };
+  if (app.current)
+    return {
+      ...workflowGraph(app.current.spec, undefined, app.current.buildRecord),
+      basis: "active-release",
+    };
+  const record = app.buildRecords?.at(-1);
+  return workflowGraph(
+    app.workspaceSpec ?? app.spec,
+    app.requirements,
+    record?.readiness === "blocked" ? undefined : record,
+  );
 }
 
 // Conceptual explanation for review; not an executable graph or proven execution order.
@@ -49,6 +48,7 @@ export function workflowGraph(
   spec: ProductSpec,
   requirements: Requirements | undefined,
   record: BuildRecord | undefined,
+  proposal?: BuildPlan,
 ): WorkflowGraph {
   const nodes: WorkflowGraph["nodes"] = [
     {
@@ -73,6 +73,22 @@ export function workflowGraph(
         : "The information the app needs",
     },
   ];
+  if (proposal && spec.inputs.length) {
+    nodes[0] = {
+      ...nodes[0]!,
+      label: spec.inputs[0]!,
+      detail: "Proposed application input; not verified runtime data.",
+    };
+    for (const [index, input] of spec.inputs.slice(1).entries())
+      nodes.push({
+        id: `input-${index + 1}`,
+        kind: "data",
+        label: input,
+        detail: "Proposed application input; not verified runtime data.",
+        inputs: input,
+        outputs: "Application input",
+      });
+  }
   if (record?.companyIds.length)
     nodes.push({
       id: "companies",
@@ -83,28 +99,49 @@ export function workflowGraph(
       outputs: "Each company's name, industry and size",
     });
   const sourceIds = record?.companyIds.length ? ["data", "companies"] : ["data"];
-  const capabilities = record?.resolvedCapabilities ?? [];
+  const capabilities = proposal
+    ? [...new Set(proposal.capabilities)]
+    : record
+      ? [...new Set(record.plan.capabilities)].filter((id) =>
+          record.resolvedCapabilities.includes(id),
+        )
+      : [];
+  const dependencies =
+    record?.resolvedCapabilities.filter((id) => !capabilities.includes(id)) ?? [];
   for (const id of capabilities)
     nodes.push({
       id,
       kind: "capability",
-      label: capabilityLabels[id],
-      detail: capabilityDetails[id],
+      label: capabilityLabel(id),
+      detail: [
+        capabilityDefinitions[id].description,
+        capabilityDefinitions[id].availability,
+        dependencies.length
+          ? `Build supporting dependencies: ${dependencies.map(capabilityLabel).join(", ")}.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
       inputs:
         sourceIds.includes("companies") && id !== "market-research"
           ? "Your inputs and the company list"
           : "Your inputs",
       outputs: "Findings passed on to your app",
     });
-  nodes.push({
-    id: "output",
-    kind: "output",
-    label: spec.name,
-    detail: spec.purpose,
-    inputs: "Findings from the steps",
-    outputs: spec.outputs.join("; "),
-  });
+  const outputs = spec.outputs.map((output) => output.trim()).filter(Boolean);
+  for (const [index, output] of (outputs.length ? outputs : ["No outputs specified yet"]).entries())
+    nodes.push({
+      id: `output-${index}`,
+      kind: "output",
+      label: output,
+      detail: outputs.length
+        ? (spec.outputDetails?.[output] ?? "No additional detail recorded for this output.")
+        : "The application specification has not defined any outputs yet.",
+      inputs: "As defined by the application specification; not verified runtime results",
+      outputs: outputs.length ? output : "None recorded.",
+    });
   const middle = nodes.filter((node) => node.kind === "capability");
+  const outputNodes = nodes.filter((node) => node.kind === "output");
   return {
     basis: record ? "build-record" : "draft",
     nodes,
@@ -113,8 +150,16 @@ export function workflowGraph(
           ...sourceIds.flatMap((from) =>
             middle.map((node) => ({ from, to: node.id, label: "supplies information" })),
           ),
-          ...middle.map((node) => ({ from: node.id, to: "output", label: "adds its findings" })),
+          ...middle.flatMap((node) =>
+            outputNodes.map((output) => ({
+              from: node.id,
+              to: output.id,
+              label: "Contributes results",
+            })),
+          ),
         ]
-      : sourceIds.map((from) => ({ from, to: "output", label: "provides the information" })),
+      : sourceIds.flatMap((from) =>
+          outputNodes.map((output) => ({ from, to: output.id, label: "Conceptual input" })),
+        ),
   };
 }

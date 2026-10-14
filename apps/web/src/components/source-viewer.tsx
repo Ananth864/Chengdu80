@@ -38,13 +38,25 @@ export function SourceViewer({
   }, [path, fileName, content]);
   return (
     <div aria-label="Read-only code editor" className="relative min-h-0 min-w-0 flex-1">
-      {error && (
-        <Alert variant="destructive">
-          <AlertTitle>Code could not load</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+      {error ? (
+        <div className="absolute inset-0 flex min-h-0 flex-col gap-3 p-3">
+          <Alert>
+            <AlertTitle>Showing plain-text source</AlertTitle>
+            <AlertDescription>
+              The enhanced editor could not load. Your saved code is available below. Refresh the
+              page to retry the editor. {error}
+            </AlertDescription>
+          </Alert>
+          <pre
+            aria-label={`${fileName} source (read-only)`}
+            className="min-h-0 flex-1 overflow-auto rounded-md border bg-muted p-3 text-xs"
+          >
+            <code>{content}</code>
+          </pre>
+        </div>
+      ) : (
+        <div ref={container} className="absolute inset-0" />
       )}
-      <div ref={container} className="absolute inset-0" />
     </div>
   );
 }

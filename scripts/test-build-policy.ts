@@ -1,5 +1,6 @@
 import { importCompanyCsv } from "../apps/web/src/lib/company-table";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { parseStockBasic, resetSseCompanyCache } from "../apps/web/src/server/providers";
 import {
@@ -8,7 +9,9 @@ import {
   resolveCapabilities,
   managedCompanies,
   validateScopedBundle,
+  agentProtocols,
 } from "../apps/web/src/server/build-policy";
+import { financialSkills, readFinancialSkill } from "../apps/web/src/server/financial-expert";
 import { protocols } from "../apps/web/src/lib/contracts";
 import { sampleBundle } from "../apps/web/src/lib/samples";
 const plan = {
@@ -38,7 +41,40 @@ try {
   globalThis.fetch = (async () => new Response(JSON.stringify(sample))) as typeof fetch;
   resetSseCompanyCache();
   const record = await prepareBuild(plan, "turn-1", 1);
-  assert.deepEqual(record.resolvedCapabilities, ["market-research", "news"]);
+  assert(agentProtocols["financial-expert"].includes("# Financial Expert Agent"));
+  assert(agentProtocols["financial-expert"].includes("read_financial_skill"));
+  assert.equal(Object.keys(financialSkills).length, 8);
+  const chatbotSkill = readFinancialSkill("database-grounded-chatbot").content;
+  assert(chatbotSkill.includes("component-id: grounded-chatbot"));
+  assert(chatbotSkill.includes("not a registered financial capability"));
+  assert(
+    agentProtocols["capability-catalog"].includes(
+      "removed grounded-chatbot catalog entry does not prohibit",
+    ),
+  );
+  assert(chatbotSkill.includes("convex database within the application is the sole factual source"));
+  assert(chatbotSkill.includes("conversational"));
+  assert(chatbotSkill.includes("clarification_needed"));
+  assert(chatbotSkill.includes("Do not require a selected company for a greeting"));
+  assert(chatbotSkill.includes("Never let conversational routing bypass factual"));
+  assert(chatbotSkill.includes("answering makes no external network calls or database mutations"));
+  assert(agentProtocols["financial-expert"].includes("First route basic conversation"));
+  for (const [id, content] of Object.entries(financialSkills)) {
+    assert.deepEqual(readFinancialSkill(id), { path: `skills/${id}.md`, content });
+    assert.equal(
+      record.protocolHashes[`financial-skill:${id}`],
+      createHash("sha256").update(content).digest("hex"),
+    );
+    assert(content.startsWith("# ") || content.startsWith("---\n"));
+  }
+  assert.equal(
+    record.protocolHashes["financial-expert"],
+    createHash("sha256").update(agentProtocols["financial-expert"]).digest("hex"),
+  );
+  assert.throws(() => readFinancialSkill("../../settings"));
+  assert.throws(() => readFinancialSkill("unknown-skill"));
+  console.log("PASS bundled financial expert, allowlisted skill loading and build provenance");
+  assert.deepEqual(record.resolvedCapabilities, ["market-research"]);
   assert.equal(record.theme, "starter-default");
   requireBuild(record, "turn-1");
   assert.throws(() => requireBuild({ ...record, provider: "wind" } as never, "turn-1"));

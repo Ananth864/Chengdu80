@@ -1,17 +1,8 @@
 import { z } from "zod";
 import { metricSelectionSchema } from "./company-capabilities";
+import { businessCapabilities, type BusinessCapability } from "./capability-catalog";
 
-export const businessCapabilities = [
-  "market-research",
-  "news",
-  "historical-analysis",
-  "price-target",
-  "risk-assessment",
-  "industry-preference",
-  "risk-industry-matching",
-  "company-cards",
-] as const;
-export type BusinessCapability = (typeof businessCapabilities)[number];
+export { businessCapabilities, type BusinessCapability } from "./capability-catalog";
 export const buildPlanSchema = z
   .object({
     requirements: z.string().trim().min(10).max(4000),

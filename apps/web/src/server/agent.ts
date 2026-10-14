@@ -53,6 +53,7 @@ import {
 import { companyMatchLimit, companyMatchThreshold, rankCompanyMatches } from "../lib/company-table";
 import { defaultData } from "../lib/finance";
 import { localMode, settings } from "./settings";
+import { financialSkillSchema, readFinancialSkill } from "./financial-expert";
 
 const filePath = z
   .string()
@@ -171,29 +172,52 @@ export async function startAgentTurn(
   appId: string,
   user: { id: string; content: string },
   requestSignal: AbortSignal,
+  approvalProposalId?: string,
 ) {
   const turnKey = `${access.ownerId}:${appId}`;
   if (activeTurns.has(turnKey)) throw new Error("This conversation is already replying.");
   activeTurns.add(turnKey);
   const controller = new AbortController();
+  let deadlineReached = false;
+  const timeoutMessage =
+    "The build turn reached its time limit. Saved source changes were retained, but a preview is available only if verification and staging completed. Review the saved progress before retrying; nothing was activated automatically.";
   const abort = () => controller.abort();
   requestSignal.addEventListener("abort", abort, { once: true });
   if (requestSignal.aborted) abort();
   // Full builds legitimately take many steps and many minutes of verification;
   // this deadline only guards against a hung provider, not normal work.
-  const deadline = setTimeout(() => {
+  const expireTurn = () => {
+    deadlineReached = true;
     abort();
     activeTurns.delete(turnKey);
-  }, 3600000);
+  };
+  let deadline = setTimeout(expireTurn, 3600000);
   let processor!: StreamProcessor;
   let persisted = false;
   let project: AppWorkspace | undefined;
   try {
     const singleOwnerLocal = await localMode();
     const app = await mutateApp(access, appId, (latest) => {
+      if (approvalProposalId) {
+        if (latest.workflowApproval?.proposalId === approvalProposalId)
+          throw new Error("This workflow approval has already started a build turn.");
+        const proposal = latest.buildProposal;
+        if (
+          !proposal ||
+          proposal.id !== approvalProposalId ||
+          !proposal.plan ||
+          !specSchema.safeParse(proposal.specification).success
+        )
+          throw new Error("Workflow proposal changed. Refresh and review the latest plan.");
+        if (latest.agentTurn?.status === "running")
+          throw new Error("Wait for the active reply to finish before approving the workflow.");
+        const approvedAt = new Date().toISOString();
+        proposal.approvedAt = approvedAt;
+        latest.workflowApproval = { proposalId: approvalProposalId, turnId: user.id, approvedAt };
+      }
       if (latest.agentTurn?.status === "running") {
         const interruptedLocal = singleOwnerLocal && latest.agentTurn.runtimeId !== agentRuntime.id;
-        if (!interruptedLocal && Date.now() - Date.parse(latest.agentTurn.startedAt) < 300000)
+        if (!interruptedLocal && Date.now() - Date.parse(latest.agentTurn.startedAt) < 660000)
           throw new Error("This conversation is already replying.");
         const previousId = latest.agentTurn.id;
         latest.conversation = compactTranscript(latest.conversation ?? [], true);
@@ -232,6 +256,16 @@ export async function startAgentTurn(
     });
     let spec = app.workspaceSpec ?? app.spec;
     let buildRecord: BuildRecord | undefined;
+    let approvedSpecification: ProductSpec | undefined;
+    const specificationMatches = (value: ProductSpec) => {
+      const canonical = (item: unknown): string =>
+        JSON.stringify(item, (_key, entry) =>
+          entry && typeof entry === "object" && !Array.isArray(entry)
+            ? Object.fromEntries(Object.entries(entry).sort(([a], [b]) => a.localeCompare(b)))
+            : entry,
+        );
+      return canonical(value) === canonical(approvedSpecification);
+    };
     const prior =
       app.current?.buildRecord ??
       [...(app.buildRecords ?? [])].reverse().find((record) => record.readiness !== "blocked");
@@ -307,6 +341,12 @@ export async function startAgentTurn(
     }
     const tools = [
       toolDefinition({
+        name: "read_financial_skill",
+        description:
+          "Load a bundled financial expert skill before working on its task. Use the agent routing table; skill IDs are filenames without skills/ or .md. Load linked skills as needed. Guidance does not grant financial capabilities or bypass prepare_build, protected files or sandbox controls.",
+        inputSchema: z.object({ skill: financialSkillSchema }),
+      }).server(async ({ skill }) => readFinancialSkill(skill)),
+      toolDefinition({
         name: "lookup_companies",
         description:
           "Fuzzy-search real Shanghai Stock Exchange Class A listed companies by ticker, name, full registered name, English name or industry, through the platform-managed Tushare token. Returns scored matches only. There is no demo or synthetic company table. If the company the user named has no convincing match, treat it as unsupported: reject it, then search again with related terms (industry, alternative spelling, parent company) and propose the closest real companies as alternatives.",
@@ -334,15 +374,30 @@ export async function startAgentTurn(
       toolDefinition({
         name: "propose_build",
         description:
-          "Present the build plan for the user's confirmation before any build or edit turn: business capabilities, companies and the assumptions you would build on. Every build uses live mode on real Shanghai Stock Exchange Class A data; never propose demo or synthetic data. End the turn immediately after this call; prepare_build only works in a later turn after the user explicitly agrees.",
-        inputSchema: buildPlanSchema.extend({ summary: z.string().min(1).max(2000) }),
+          "Generate the full Input -> Capabilities -> Output workflow before requesting approval: include an application-specific specification with inputs, outputs, constraints and a distinct outputDetails entry for each output, plus business capabilities, companies and the assumptions you would build on. Every build uses live mode on real Shanghai Stock Exchange Class A data; never propose demo or synthetic data. The Workflow tab renders this proposal before its approval button. End the turn immediately after this call; prepare_build requires Workflow-stage approval in a later turn.",
+        inputSchema: buildPlanSchema.extend({
+          summary: z.string().min(1).max(2000),
+          specification: specSchema,
+        }),
       }).server(async (proposal) => {
         buildRecord = undefined;
+        const { summary: _summary, specification, ...proposedPlan } = proposal;
+        if (specification.protocol !== app.spec.protocol)
+          throw new Error(
+            "Retain the application's transport protocol in the proposed specification.",
+          );
+        if (specification.outputs.some((output) => !specification.outputDetails?.[output]?.trim()))
+          throw new Error(
+            "Generate an outputDetails entry for every proposed output before requesting Workflow approval.",
+          );
         await mutateApp(access, appId, (latest) => {
           controller.signal.throwIfAborted();
           if (latest.agentTurn?.id !== user.id || latest.agentTurn.status !== "running")
             throw new Error("This financial build turn is no longer active.");
           latest.buildProposal = {
+            id: crypto.randomUUID(),
+            plan: proposedPlan,
+            specification,
             turnId: user.id,
             createdAt: new Date().toISOString(),
             mode: proposal.mode,
@@ -353,7 +408,7 @@ export async function startAgentTurn(
         });
         return {
           recorded: true,
-          next: "End your turn now with a short proposal message: what you will build, the capabilities, data mode, company and assumptions. Wait for the user's explicit confirmation; do not call prepare_build in this turn.",
+          next: "End your turn now. Ask the user to review and approve the workflow through the Workflow tab or CLI. Approval automatically starts the build; no additional chat message is required. Do not call prepare_build in this turn.",
         };
       }),
       toolDefinition({
@@ -372,7 +427,15 @@ export async function startAgentTurn(
           throw new Error(
             "The proposal was created in this turn. End the turn and wait for the user's confirmation before building.",
           );
+        if (!proposal.approvedAt)
+          throw new Error("Approve the proposed workflow in the Workflow tab before building.");
+        if (!specSchema.safeParse(proposal.specification).success)
+          throw new Error(
+            "Generate a complete Input, Capabilities and Output workflow and propose it again before approval.",
+          );
         if (
+          !proposal.plan ||
+          JSON.stringify(proposal.plan) !== JSON.stringify(plan) ||
           proposal.mode !== plan.mode ||
           JSON.stringify(resolveCapabilities(proposal.capabilities)) !==
             JSON.stringify(resolveCapabilities(plan.capabilities))
@@ -401,6 +464,11 @@ export async function startAgentTurn(
             ];
         });
         buildRecord = record;
+        if (!approvalProposalId && record.readiness !== "blocked") {
+          clearTimeout(deadline);
+          deadline = setTimeout(expireTurn, 600000);
+        }
+        approvedSpecification = proposal.specification;
         if (projectFormat && record.readiness !== "blocked") {
           const manifest = JSON.parse(files["cd80.json"]);
           files["cd80.json"] = JSON.stringify({
@@ -594,10 +662,14 @@ export async function startAgentTurn(
       toolDefinition({
         name: "set_specification",
         description:
-          "Set the site name, purpose and supported calculation protocol. Requires prepare_build earlier in the same turn; a specification change is a modifying turn like any other. Keep the existing protocol when editing an active app.",
+          "Set the application-specific name, purpose, inputs, outputs and constraints before deploying a new site. Requires prepare_build earlier in the same turn after a confirmed proposal. Include outputDetails keyed by output label with each output's content, source and availability requirements; do not repeat the overall prompt or inherit sample outputs. Keep the existing protocol when editing an active app.",
         inputSchema: specSchema,
       }).server(async (next) => {
         await requirePlan();
+        if (!specificationMatches(next))
+          throw new Error(
+            "The specification must match the approved workflow. Propose and approve changes before building.",
+          );
         if (next.protocol !== app.spec.protocol)
           throw new Error(
             "Retain the current transport scaffold. Business capabilities belong in prepare_build.",
@@ -617,6 +689,7 @@ export async function startAgentTurn(
         spec = next;
         const manifest = JSON.parse(files["cd80.json"]);
         files["cd80.json"] = JSON.stringify({ ...manifest, name: next.name });
+        if (!projectFormat) await shell.fs.writeFile("/app/cd80.json", files["cd80.json"]);
         if (projectFormat)
           files[buildContextPath] = buildContextSource(await requirePlan(), next.name);
         if (project) {
@@ -633,6 +706,14 @@ export async function startAgentTurn(
         inputSchema: z.object({ summary: z.string().min(1).max(500) }),
       }).server(async ({ summary }) => {
         const record = await requirePlan();
+        if (!specSchema.safeParse(spec).success)
+          throw new Error(
+            "Call set_specification with this application's actual inputs, outputs and constraints before deployment.",
+          );
+        if (!specificationMatches(spec))
+          throw new Error(
+            "Call set_specification with the approved workflow specification before deployment.",
+          );
         const bundle = fileBundle(files);
         validateScopedBundle(bundle, record);
         const release = await makeRelease(
@@ -674,6 +755,13 @@ export async function startAgentTurn(
       agentLoopStrategy: maxIterations(120),
       messages: processor.getMessages(),
       systemPrompts: [
+        "Compose exactly one requested application in src/App.tsx. The protected root no longer renders a starter page. Import FinancialDemo from @/components/financial-app and render it within your layout when the plan requests the fixed financial modules; do not stack a generic page above the user's requested app. Reuse the protected financial SDK and algorithms unchanged. Never add demo or synthetic labels: every build runs live on real Shanghai Stock Exchange Class A data.",
+        ...(approvalProposalId
+          ? [
+              `The user approved workflow ${approvalProposalId} through the UI or CLI. Continue building now using this exact approved proposal, without another approval request: ${JSON.stringify(app.buildProposal)}. Call prepare_build, then set_specification with its specification and build. Preview activation still requires separate approval.`,
+            ]
+          : []),
+        "Workflow approval is an executable gate through the Workflow tab or workflow CLI. Approval automatically starts a new build turn. A chat reply alone cannot approve a plan; do not ask the user to send another message after approval. Changed plan fields require a new proposal and approval. Preview activation remains separate.",
         ...Object.values(agentProtocols),
         ...selected,
         `Available financial capability IDs: ${JSON.stringify(Object.keys((await import("./build-policy")).capabilityDependencies))}. Current internal build record: ${JSON.stringify(prior ?? null)}. Current draft requirements for the Requirements tab: ${JSON.stringify(app.requirements ?? null)}.`,
@@ -723,12 +811,12 @@ export async function startAgentTurn(
           else yield chunk;
         }
       } catch (error) {
-        status = controller.signal.aborted ? "stopped" : "error";
+        status = deadlineReached ? "error" : controller.signal.aborted ? "stopped" : "error";
         if (status === "error")
           yield {
             type: EventType.RUN_ERROR,
             timestamp: Date.now(),
-            message: await safeAgentError(error),
+            message: deadlineReached ? timeoutMessage : await safeAgentError(error),
           };
       } finally {
         clearInterval(saveTimer);
@@ -737,7 +825,7 @@ export async function startAgentTurn(
           project = undefined;
         }
         await pendingSave;
-        if (controller.signal.aborted) status = "stopped";
+        if (controller.signal.aborted) status = deadlineReached ? "error" : "stopped";
         try {
           await mutateApp(access, appId, (latest) => {
             if (latest.agentTurn?.id !== user.id) return;

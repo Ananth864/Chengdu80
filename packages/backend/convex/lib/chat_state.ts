@@ -13,7 +13,7 @@ type ChatState = {
 export function eraseConversation<T extends ChatState>(app: T, now = new Date()): T | null {
   if (
     app.agentTurn?.status === "running" &&
-    now.getTime() - Date.parse(app.agentTurn.startedAt) < 300000
+    now.getTime() - Date.parse(app.agentTurn.startedAt) < 660000
   )
     throw new Error("Stop the active reply before deleting this chat.");
   if (!app.current?.verification?.passed) return null;
@@ -22,6 +22,7 @@ export function eraseConversation<T extends ChatState>(app: T, now = new Date())
   next.turns = [];
   next.buildRecords = [];
   delete next.rejectedBuildTurns;
+  delete next.buildProposal;
   next.chatDeletedAt = now.toISOString();
   delete next.agentTurn;
   delete next.chatTitle;

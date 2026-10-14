@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   ArrowRight,
   CircleHelp,
@@ -24,11 +24,13 @@ import { cn } from "@web-starter/ui/lib/utils";
 import {
   initialRequirements,
   specSchema,
+  draftSpecSchema,
   type Application,
   type ProductSpec,
   type Requirements,
 } from "../lib/contracts";
-import { workflowGraph, type WorkflowGraph } from "../lib/planning";
+import { applicationWorkflow } from "../lib/planning";
+import { capabilityLabel } from "../lib/planning";
 
 function lines(text: string) {
   return text
@@ -76,7 +78,8 @@ export function DesignReview({
   }
   const record = app.buildRecords?.at(-1);
   const dirty = JSON.stringify(form) !== savedKey;
-  const specResult = specSchema.safeParse({
+  const draft = !app.current;
+  const specResult = (draft ? draftSpecSchema : specSchema).safeParse({
     ...savedSpec,
     name: form.name,
     purpose: form.purpose,
@@ -116,6 +119,19 @@ export function DesignReview({
           Answers and edits here are yours; the agent records questions but never answers for you.
         </p>
       </header>
+      {draft &&
+        (!lines(form.inputs).length ||
+          !lines(form.outputs).length ||
+          !lines(form.constraints).length) && (
+          <Alert>
+            <ClipboardList />
+            <AlertTitle>Specification not configured yet</AlertTitle>
+            <AlertDescription>
+              Inputs, outputs and constraints can remain empty while discussing requirements. Save
+              partial edits now; these fields must be completed before deployment.
+            </AlertDescription>
+          </Alert>
+        )}
       {dirty ? (
         <Alert>
           <ClipboardList />
@@ -381,11 +397,17 @@ const columns = [
 
 const kindNames = { data: "Information", capability: "Step", output: "Result" } as const;
 
-export function WorkflowView({ app }: { app: Application }) {
-  const graph: WorkflowGraph = useMemo(
-    () => workflowGraph(app.workspaceSpec ?? app.spec, app.requirements, app.buildRecords?.at(-1)),
-    [app.spec, app.workspaceSpec, app.requirements, app.buildRecords],
-  );
+export function WorkflowView({
+  app,
+  disabled,
+  onApprove,
+}: {
+  app: Application;
+  disabled: boolean;
+  onApprove: (proposalId: string) => Promise<void>;
+}) {
+  const graph = applicationWorkflow(app);
+  const proposal = app.buildProposal;
   const [selected, setSelected] = useState<string | null>(null);
   const node = graph.nodes.find((item) => item.id === selected) ?? graph.nodes[0];
   return (
@@ -393,9 +415,13 @@ export function WorkflowView({ app }: { app: Application }) {
       <header className="flex flex-col gap-1">
         <h2 className="studio-display font-medium">How your app works</h2>
         <p className="text-sm text-muted-foreground">
-          {graph.basis === "build-record"
-            ? "Based on your app as it was last built."
-            : "Based on the plan so far — nothing has been built yet."}{" "}
+          {graph.basis === "proposal"
+            ? "This workflow is waiting for your approval — nothing is built until you approve it."
+            : graph.basis === "active-release"
+              ? "Based on your app as it is running right now."
+              : graph.basis === "build-record"
+                ? "Based on your app as it was last built."
+                : "Based on the plan so far — nothing has been built yet."}{" "}
           A plain-language summary to help you review the idea. Inside the app these steps may be
           combined or reordered, so the working app itself is always the final word. Select any item
           to see what it does.
@@ -475,6 +501,43 @@ export function WorkflowView({ app }: { app: Application }) {
                 </div>
               ))}
             </dl>
+          </CardContent>
+        </Card>
+      )}
+      {proposal && (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              {proposal.approvedAt ? "Workflow approved" : "Workflow approval required"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 text-sm">
+            <p className="whitespace-pre-wrap">{proposal.summary}</p>
+            {proposal.plan && (
+              <>
+                <p className="whitespace-pre-wrap">Requirements: {proposal.plan.requirements}</p>
+                <p>Theme: {proposal.plan.themeOverride || "Default platform theme"}</p>
+                <p>Card metrics: {proposal.plan.cardMetrics?.join(", ") || "Platform defaults"}</p>
+              </>
+            )}
+            <p>Capabilities: {proposal.capabilities.map(capabilityLabel).join(", ")}</p>
+            <p>Companies: {proposal.companyQueries.join(", ") || "None specified"}</p>
+            <p>Data mode: Live — real Shanghai Stock Exchange Class A data</p>
+            {proposal.approvedAt ? (
+              <p>
+                The builder continues automatically after approval. Feasibility checks still apply;
+                Preview activation is a separate approval.
+              </p>
+            ) : proposal.id && proposal.specification && proposal.plan ? (
+              <Button
+                disabled={disabled || app.agentTurn?.status === "running"}
+                onClick={() => void onApprove(proposal.id)}
+              >
+                Approve workflow
+              </Button>
+            ) : (
+              <p>Ask the builder to propose this workflow again before approval.</p>
+            )}
           </CardContent>
         </Card>
       )}

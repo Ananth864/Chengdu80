@@ -425,8 +425,9 @@ export function AgentChat(props: AgentChatProps) {
         setLocalError(error instanceof Error ? error.message : "Could not send message"),
       );
   };
-  const visibleMessages =
-    props.reactive && !chat.isLoading ? (props.app?.conversation ?? chat.messages) : chat.messages;
+  const visibleMessages = !chat.isLoading
+    ? (props.app?.conversation ?? chat.messages)
+    : chat.messages;
   const results = new Map<string, Extract<Part, { type: "tool-result" }>>();
   for (const message of visibleMessages)
     for (const part of message.parts)
@@ -445,7 +446,10 @@ export function AgentChat(props: AgentChatProps) {
                     <MessageScrollerItem key={turn.user.id} messageId={turn.user.id} scrollAnchor>
                       <ConversationTurn
                         turn={turn}
-                        active={chat.isLoading && index === turns.length - 1}
+                        active={
+                          (chat.isLoading || props.app?.agentTurn?.status === "running") &&
+                          index === turns.length - 1
+                        }
                         timing={props.app?.turns?.find((run) => run.id === turn.user.id)}
                         results={results}
                         stopped={turn.user.id === stoppedTurn}
