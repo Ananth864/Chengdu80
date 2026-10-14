@@ -388,3 +388,317 @@ export async function prices(input: unknown) {
 export function assetUniverse() {
   return { assets, meta: fixtureMeta };
 }
+
+// ---- Market research (verified Tushare sources; see the platform audit) ----
+// Every section fails independently: one missing source never blocks the rest,
+// and unsupported claims (market size, five-year outlook, news) are never sent.
+type TushareRow = Record<string, string>;
+function tushareRows(body: unknown, label: string): TushareRow[] {
+  if (!body || typeof body !== "object") throw new Error("Tushare returned an invalid response");
+  const payload = body as {
+    code?: number;
+    msg?: string;
+    data?: { fields?: unknown; items?: unknown };
+  };
+  const fields = payload.data?.fields;
+  const items = payload.data?.items;
+  if (payload.code !== 0 || !Array.isArray(fields) || !Array.isArray(items))
+    throw new Error(
+      `Tushare ${label} request was rejected: ${String(payload.msg || "invalid schema")}`,
+    );
+  return items
+    .filter((row): row is unknown[] => Array.isArray(row))
+    .map((row) => Object.fromEntries(fields.map((field, index) => [field, cellText(row[index])])));
+}
+const researchCaches = new Map<string, { value: unknown; at: number }>();
+async function cachedResearch<T>(key: string, load: () => Promise<T>): Promise<T> {
+  const hit = researchCaches.get(key);
+  if (hit && Date.now() - hit.at < STOCK_BASIC_TTL_MS) return hit.value as T;
+  const value = await load();
+  researchCaches.set(key, { value, at: Date.now() });
+  return value;
+}
+async function researchCall<T>(
+  options: { fetch?: typeof fetch } | undefined,
+  label: string,
+  load: (token: string, doFetch: typeof fetch) => Promise<T>,
+): Promise<T | { error: string }> {
+  const config = await settings();
+  if (!config.TUSHARE_TOKEN) return { error: "TUSHARE_TOKEN is not configured on the server" };
+  try {
+    return await load(config.TUSHARE_TOKEN, options?.fetch ?? fetch);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : `Tushare ${label} failed` };
+  }
+}
+async function callTushare(
+  token: string,
+  doFetch: typeof fetch,
+  api: string,
+  params: Record<string, unknown>,
+  fields: string,
+  label: string,
+) {
+  const response = await doFetch("https://api.tushare.pro", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(
+      fields ? { api_name: api, token, params, fields } : { api_name: api, token, params },
+    ),
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!response.ok) throw new Error(`Tushare HTTP request failed with status ${response.status}`);
+  return tushareRows(await response.json(), label);
+}
+export type ResearchPeer = { tsCode: string; name: string; sse: boolean };
+export type ResearchDossier =
+  | {
+      available: true;
+      asOf: string;
+      company: {
+        tsCode: string;
+        name: string | null;
+        indicators: null | {
+          endDate: string;
+          announced: string | null;
+          revenueYoy: number | null;
+          profitYoy: number | null;
+          roe: number | null;
+          grossMargin: number | null;
+        };
+      };
+      industry: null | {
+        path: string;
+        l3Code: string | null;
+        peers: ResearchPeer[];
+        valuation: null | {
+          totalMvRmb: number;
+          pe: number | null;
+          pb: number | null;
+          asOf: string;
+        };
+        reports: { date: string; title: string; inst: string; url: string }[];
+      };
+      macro: null | {
+        gdp: { quarter: string; yoy: number }[];
+        pmi: { month: string; pmi: number; production: number; newOrders: number }[];
+      };
+      unavailable: string[];
+    }
+  | { available: false; reason: string };
+const num = (value: string | undefined): number | null => {
+  const parsed = Number(value);
+  return value !== "" && Number.isFinite(parsed) ? parsed : null;
+};
+type SwMember = {
+  tsCode: string;
+  name: string;
+  l1: string;
+  l2: string;
+  l3: string;
+  l1Code: string;
+  l2Code: string;
+  l3Code: string;
+};
+async function swMembers(token: string, doFetch: typeof fetch): Promise<SwMember[]> {
+  return cachedResearch("sw-members", async () => {
+    const rows = await callTushare(
+      token,
+      doFetch,
+      "index_member_all",
+      {},
+      "ts_code,name,l1_name,l2_name,l3_name,l1_code,l2_code,l3_code,is_new",
+      "industry members",
+    );
+    const members = rows
+      .filter((row) => (row.is_new === "Y" || row.is_new === "1") && row.ts_code && row.l3_name)
+      .map((row) => ({
+        tsCode: row.ts_code!,
+        name: row.name ?? "",
+        l1: row.l1_name ?? "",
+        l2: row.l2_name ?? "",
+        l3: row.l3_name!,
+        l3Code: row.l3_code ?? "",
+        l1Code: row.l1_code ?? "",
+        l2Code: row.l2_code ?? "",
+      }));
+    if (!members.length) throw new Error("Tushare returned no industry members");
+    return members;
+  });
+}
+export async function financeResearch(
+  tsCode: string,
+  options?: { fetch?: typeof fetch },
+): Promise<ResearchDossier> {
+  const today = new Date().toISOString().slice(0, 10);
+  const members = await researchCall(options, "industry members", (token, doFetch) =>
+    swMembers(token, doFetch),
+  );
+  if ("error" in members) return { available: false, reason: members.error };
+  const mine = members.find((member) => member.tsCode === tsCode) ?? null;
+  const scope = mine ? members.filter((member) => member.l3 === mine.l3) : [];
+  const indicators = await researchCall(options, "company indicators", (token, doFetch) =>
+    cachedResearch(`fina:${tsCode}:${today}`, async () => {
+      const rows = await callTushare(
+        token,
+        doFetch,
+        "fina_indicator",
+        { ts_code: tsCode },
+        "ts_code,ann_date,end_date,or_yoy,netprofit_yoy,grossprofit_margin,roe",
+        "company indicators",
+      );
+      const row = rows[0];
+      return row
+        ? {
+            endDate: row.end_date ?? "",
+            announced: row.ann_date || null,
+            revenueYoy: num(row.or_yoy),
+            profitYoy: num(row.netprofit_yoy),
+            roe: num(row.roe),
+            grossMargin: num(row.grossprofit_margin),
+          }
+        : null;
+    }),
+  );
+  const valuation = mine
+    ? await researchCall(options, "industry valuation", (token, doFetch) =>
+        cachedResearch(`sw-daily:${mine.l3Code}:${today}`, async () => {
+          // L3 series can be discontinued or stale; fall back to L2, then L1.
+          for (const code of [mine!.l3Code, mine!.l2Code, mine!.l1Code]) {
+            if (!code) continue;
+            const rows = await callTushare(
+              token,
+              doFetch,
+              "sw_daily",
+              { ts_code: code, start_date: recentDay(30), end_date: compactDay(new Date()) },
+              "ts_code,trade_date,total_mv,pe,pb",
+              "industry valuation",
+            );
+            const row = [...rows]
+              .sort((a, b) => (a.trade_date ?? "").localeCompare(b.trade_date ?? ""))
+              .at(-1);
+            if (row && num(row.total_mv) !== null)
+              return {
+                totalMvRmb: (num(row.total_mv) ?? 0) * 10_000,
+                pe: num(row.pe),
+                pb: num(row.pb),
+                asOf: row.trade_date ?? "",
+              };
+          }
+          return null;
+        }),
+      )
+    : { error: "Company is not in the industry membership table" };
+  const reports = mine
+    ? await researchCall(options, "research reports", (token, doFetch) =>
+        cachedResearch(`reports:${mine!.l3Code}:${today}`, async () => {
+          // Report tags use L2-style names ("银行Ⅱ"); normalize and match
+          // against the company's L3/L2/L1 names without the Roman suffixes.
+          const rows = await callTushare(
+            token,
+            doFetch,
+            "research_report",
+            { start_date: recentDay(14), end_date: compactDay(new Date()) },
+            "trade_date,title,inst_csname,ind_name,url",
+            "research reports",
+          );
+          const strip = (name: string) => name.replace(/[ⅠⅡⅢ]$/, "");
+          const industryNames = [mine!.l3, mine!.l2, mine!.l1].map(strip).filter(Boolean);
+          const matches = (tag: string) => {
+            const clean = strip(tag);
+            return (
+              clean !== "" &&
+              industryNames.some(
+                (part) => part === clean || part.includes(clean) || clean.includes(part),
+              )
+            );
+          };
+          return rows
+            .filter((row) => row.url && row.title && row.ind_name && matches(row.ind_name))
+            .sort((a, b) => (b.trade_date ?? "").localeCompare(a.trade_date ?? ""))
+            .slice(0, 10)
+            .map((row) => ({
+              date: row.trade_date ?? "",
+              title: row.title!,
+              inst: row.inst_csname ?? "",
+              url: row.url!,
+            }));
+        }),
+      )
+    : { error: "Company is not in the industry membership table" };
+  const macro = await researchCall(options, "macro context", (token, doFetch) =>
+    cachedResearch(`macro:${today}`, async () => {
+      const gdpRows = await callTushare(
+        token,
+        doFetch,
+        "cn_gdp",
+        {},
+        "quarter,gdp_yoy",
+        "GDP series",
+      );
+      const pmiRows = await callTushare(token, doFetch, "cn_pmi", {}, "", "PMI series");
+      return {
+        gdp: gdpRows
+          .slice(0, 4)
+          .map((row) => ({ quarter: row.quarter ?? "", yoy: num(row.gdp_yoy) }))
+          .filter((row): row is { quarter: string; yoy: number } => row.yoy !== null)
+          .sort((a, b) => {
+            const key = (quarter: string) => {
+              const [year, q] = quarter.split("Q");
+              return Number(`${year ?? 0}${(Number(q) || 0) - 1}`);
+            };
+            return key(a.quarter) - key(b.quarter);
+          }),
+        pmi: pmiRows
+          .slice(0, 6)
+          .map((row) => ({
+            month: row.MONTH ?? row.month ?? "",
+            pmi: num(row.PMI010000),
+            production: num(row.PMI010400),
+            newOrders: num(row.PMI010500),
+          }))
+          .filter(
+            (row): row is { month: string; pmi: number; production: number; newOrders: number } =>
+              row.pmi !== null,
+          )
+          .sort((a, b) => a.month.localeCompare(b.month)),
+      };
+    }),
+  );
+  const unavailable: string[] = [];
+  if (!mine) unavailable.push("The company is not in the SW industry membership table.");
+  if (indicators !== null && "error" in indicators)
+    unavailable.push(`Company fundamentals: ${indicators.error}`);
+  if (valuation !== null && "error" in valuation)
+    unavailable.push(`Industry valuation: ${valuation.error}`);
+  if ("error" in reports) unavailable.push(`Research reports: ${reports.error}`);
+  if ("error" in macro) unavailable.push(`Macro context: ${macro.error}`);
+  return {
+    available: true,
+    asOf: today,
+    company: {
+      tsCode,
+      name: mine?.name ?? null,
+      indicators: indicators === null || "error" in indicators ? null : indicators,
+    },
+    industry:
+      mine === null
+        ? null
+        : {
+            path: [mine.l1, mine.l2, mine.l3].filter(Boolean).join(" › "),
+            l3Code: mine.l3Code || null,
+            peers: scope.slice(0, 40).map((member) => ({
+              tsCode: member.tsCode,
+              name: member.name,
+              sse: isSseATicker(member.tsCode),
+            })),
+            valuation: valuation === null || "error" in valuation ? null : valuation,
+            reports: "error" in reports ? [] : reports,
+          },
+    macro: "error" in macro ? null : macro,
+    unavailable,
+  };
+}
+function recentDay(backDays: number) {
+  return compactDay(new Date(Date.now() - backDays * 24 * 60 * 60 * 1000));
+}

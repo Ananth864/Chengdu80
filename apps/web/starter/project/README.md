@@ -49,9 +49,11 @@ call server-owned modules. `useStoredValue(key, schema)` supplies validated
 ordinary app storage. Reserved financial state cannot be changed through it.
 
 Wind and the company table belong to the platform team. Live builds serve real
-Shanghai Stock Exchange Class A company identity and market-cap sizing through
-the fixed modules; approved research, price-target sources, per-metric financial
-fields and expert assessment content remain pending. Do not call data providers,
+Shanghai Stock Exchange Class A company identity, market-cap sizing and verified
+research facts (industry peers, industry valuation, report listings, company
+fundamentals, macro context) through the fixed modules; news, price-target
+sources, per-metric financial fields and expert assessment content remain
+pending. Do not call data providers,
 install dependencies, enable plugins, expose LLM explanations or invent
 financial outputs. The SDK deliberately omits these APIs.
 

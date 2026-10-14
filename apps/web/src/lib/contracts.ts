@@ -7,6 +7,7 @@ export const capabilities = [
   "market.prices",
   "market.assets",
   "finance.calculate",
+  "finance.research",
   "finance.match-companies",
   "finance.company-cards",
   "finance.portfolio",

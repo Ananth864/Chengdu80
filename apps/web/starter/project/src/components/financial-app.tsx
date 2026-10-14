@@ -79,19 +79,7 @@ export function FinancialDemo() {
         </section>
       )}
       {capabilities.includes("market-research") && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Company and industry research</CardTitle>
-            <CardDescription>
-              {buildContext.companies.length
-                ? `Company research with industry context: ${buildContext.companies.join(", ")}`
-                : "Standalone industry research"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            Research and news sources are pending. No financial conclusions have been generated.
-          </CardContent>
-        </Card>
+        <CompanyResearch companies={buildContext.companies} />
       )}
     </main>
   );
@@ -298,6 +286,204 @@ function CompanySelection({ cards }: { cards: boolean }) {
           </CardContent>
         </Card>
       )}
+    </section>
+  );
+}
+const pct = (value: number | null | undefined) =>
+  value === null || value === undefined ? "Unavailable" : `${value.toFixed(1)}%`;
+const compactRmb = new Intl.NumberFormat("zh-CN", {
+  style: "currency",
+  currency: "CNY",
+  notation: "compact",
+  maximumFractionDigits: 2,
+});
+const day = (value: string | null | undefined) =>
+  value && value.length === 8
+    ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`
+    : (value ?? "—");
+
+function CompanyResearch({ companies }: { companies: readonly string[] }) {
+  const [tsCode, setTsCode] = useState<string | null>(companies[0] ?? null);
+  const research = useQuery({
+    queryKey: ["research", tsCode],
+    queryFn: () => cd80.finance.research(tsCode!),
+    enabled: !!tsCode,
+    retry: false,
+  });
+  if (!companies.length)
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Company and industry research</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground">
+            Pin at least one company in the build plan to enable research. Standalone industry
+            research is pending.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  const data = research.data;
+  return (
+    <section className="space-y-5" aria-label="Company and industry research">
+      <Card>
+        <CardHeader>
+          <CardTitle>Company and industry research</CardTitle>
+          <CardDescription>
+            Live facts from the platform's market sources. This is reference information, not an
+            expert assessment or a recommendation.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Field>
+            <FieldLabel htmlFor="research-company">Company</FieldLabel>
+            <Select value={tsCode ?? undefined} onValueChange={(value) => setTsCode(value)}>
+              <SelectTrigger id="research-company">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {companies.map((ticker) => (
+                  <SelectItem key={ticker} value={ticker}>
+                    {ticker}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          {research.isFetching && <p role="status">Loading research…</p>}
+          {research.error && (
+            <Alert variant="destructive">
+              <AlertTitle>Research could not load</AlertTitle>
+              <AlertDescription>{research.error.message}</AlertDescription>
+            </Alert>
+          )}
+          {data && (
+            <div className="space-y-5">
+              <div>
+                <h3 className="text-sm font-semibold">
+                  {data.company.name ?? data.company.tsCode}
+                  <span className="ml-2 font-normal text-muted-foreground">
+                    {data.company.tsCode}
+                  </span>
+                </h3>
+                {data.industry && (
+                  <p className="text-sm text-muted-foreground">{data.industry.path}</p>
+                )}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <MetricCard
+                  label="Revenue growth (YoY)"
+                  value={pct(data.company.indicators?.revenueYoy)}
+                />
+                <MetricCard
+                  label="Net profit growth (YoY)"
+                  value={pct(data.company.indicators?.profitYoy)}
+                />
+                <MetricCard label="ROE" value={pct(data.company.indicators?.roe)} />
+                <MetricCard
+                  label="Gross margin"
+                  value={pct(data.company.indicators?.grossMargin)}
+                />
+              </div>
+              {data.company.indicators && (
+                <p className="text-xs text-muted-foreground">
+                  Report period {day(data.company.indicators.endDate)}
+                  {data.company.indicators.announced
+                    ? ` · announced ${day(data.company.indicators.announced)}`
+                    : ""}
+                </p>
+              )}
+              {data.industry?.valuation && (
+                <div className="rounded-xl border p-4 text-sm">
+                  <p className="font-medium">
+                    Industry snapshot · as of {day(data.industry.valuation.asOf)}
+                  </p>
+                  <p className="text-muted-foreground">
+                    Total market value {compactRmb.format(data.industry.valuation.totalMvRmb)} · P/E{" "}
+                    {data.industry.valuation.pe ?? "unavailable"} · P/B{" "}
+                    {data.industry.valuation.pb ?? "unavailable"}
+                  </p>
+                </div>
+              )}
+              {data.industry && data.industry.peers.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold">
+                    Industry peers ({data.industry.peers.length})
+                  </h3>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    {data.industry.peers.map((peer, index) => (
+                      <span key={peer.tsCode}>
+                        {index > 0 && " · "}
+                        {peer.name}
+                        <span className="text-xs"> {peer.tsCode}</span>
+                        {!peer.sse && <span className="text-xs"> (non-SSE)</span>}
+                      </span>
+                    ))}
+                  </p>
+                </div>
+              )}
+              {data.industry && data.industry.reports.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold">Recent industry research reports</h3>
+                  <ul className="mt-1 space-y-1 text-sm">
+                    {data.industry.reports.map((report) => (
+                      <li key={report.url}>
+                        <a
+                          className="underline underline-offset-4"
+                          href={report.url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {report.title}
+                        </a>
+                        <span className="ml-2 text-muted-foreground">
+                          {report.inst} · {day(report.date)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {data.macro && (data.macro.gdp.length > 0 || data.macro.pmi.length > 0) && (
+                <div className="rounded-xl border p-4 text-sm">
+                  <p className="font-medium">Macro context</p>
+                  {data.macro.gdp.length > 0 && (
+                    <p className="text-muted-foreground">
+                      GDP YoY ·{" "}
+                      {data.macro.gdp
+                        .map((row) => `${row.quarter}: ${row.yoy.toFixed(1)}%`)
+                        .join(" · ")}
+                    </p>
+                  )}
+                  {data.macro.pmi.length > 0 && (
+                    <p className="text-muted-foreground">
+                      Manufacturing PMI ·{" "}
+                      {data.macro.pmi
+                        .map(
+                          (row) =>
+                            `${row.month}: ${row.pmi.toFixed(1)} (production ${row.production.toFixed(1)}, new orders ${row.newOrders.toFixed(1)})`,
+                        )
+                        .join(" · ")}
+                    </p>
+                  )}
+                </div>
+              )}
+              {data.unavailable.length > 0 && (
+                <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+                  {data.unavailable.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Not available from current sources: industry market size, five-year outlooks and
+                news tracking. Sources as of {day(data.asOf)}.
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </section>
   );
 }

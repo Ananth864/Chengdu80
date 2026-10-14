@@ -26,7 +26,7 @@ import { calculate, defaultData, fixtureMeta } from "../lib/finance";
 import { sampleBundle } from "../lib/samples";
 import { auth } from "../integrations/auth";
 import { clarify, explain, feasibility, generate } from "./models";
-import { assetUniverse, prices, sizedSseCompanies } from "./providers";
+import { assetUniverse, financeResearch, prices, sizedSseCompanies } from "./providers";
 import {
   event,
   findApp,
@@ -514,6 +514,21 @@ export async function dispatch(access: Access, raw: unknown) {
       };
     });
     return response;
+  }
+  if (req.capability === "finance.research") {
+    const input = z
+      .object({
+        tsCode: z
+          .string()
+          .trim()
+          .regex(/^[0-9]{6}\.(SH|SZ)$/),
+      })
+      .strict()
+      .parse(req.input);
+    const dossier = await financeResearch(input.tsCode);
+    if (!dossier.available)
+      throw new Error(`Research data is unavailable right now. ${dossier.reason}`);
+    return dossier;
   }
   if (req.capability === "finance.calculate") return execute(release.bundle, req.input);
   if (req.capability === "finance.portfolio") return calculate("portfolio", req.input);

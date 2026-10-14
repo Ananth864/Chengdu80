@@ -10,6 +10,7 @@ export function buildContextSource(record: BuildRecord, name: string) {
 export function approvedPermissions(record: BuildRecord, project: boolean) {
   const permissions: AppBundle["manifest"]["permissions"] = ["storage.read", "storage.write"];
   if (!project) permissions.push("finance.calculate");
+  if (record.resolvedCapabilities.includes("market-research")) permissions.push("finance.research");
   if (record.resolvedCapabilities.includes("risk-industry-matching"))
     permissions.push("finance.match-companies");
   if (record.resolvedCapabilities.includes("company-cards"))
