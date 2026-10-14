@@ -22,7 +22,8 @@ export async function modelAdapter() {
     // Long streaming steps with large output budgets stay under the overall
     // turn deadline; this only guards a stuck connection.
     timeout: config.provider === "glm" ? 600000 : 300000,
-    maxRetries: 0,
+    // Retry transient provider or network failures instead of failing the step.
+    maxRetries: 2,
   });
 }
 export async function modelOptions(reasoning: "low" | "max" = "low", maxTokens = 4096) {
