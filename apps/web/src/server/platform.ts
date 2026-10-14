@@ -208,18 +208,13 @@ async function build(
 }
 export async function dispatch(access: Access, raw: unknown) {
   const req = requestSchema.parse(raw);
+  // accept/reverify stay available: they are the preview-approval gate the
+  // studio's pending-preview banner uses, with their own verified-preview
+  // validation below.
   if (
-    [
-      "create",
-      "update",
-      "import",
-      "seed",
-      "load-prices",
-      "test-provider",
-      "clarify",
-      "accept",
-      "reverify",
-    ].includes(req.action)
+    ["create", "update", "import", "seed", "load-prices", "test-provider", "clarify"].includes(
+      req.action,
+    )
   )
     throw new Error(
       "Use the financial-capability conversation to scope this request. Legacy direct builds, imports and provider tests are disabled until they support the internal capability contract.",
