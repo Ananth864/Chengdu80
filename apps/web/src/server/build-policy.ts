@@ -13,7 +13,12 @@ import history from "./protocols/history.md?raw";
 import matching from "./protocols/matching.md?raw";
 import frontendDesign from "./protocols/frontend-design.md?raw";
 import { financialExpertInstructions, financialSkills } from "./financial-expert";
-import { buildPlanSchema, type BusinessCapability, type BuildRecord } from "../lib/build-plan";
+import {
+  buildPlanSchema,
+  type BuildPlan,
+  type BusinessCapability,
+  type BuildRecord,
+} from "../lib/build-plan";
 import type { AppBundle } from "../lib/contracts";
 import { sseACompanies } from "./providers";
 import {
@@ -91,9 +96,10 @@ export type ManagedCompanyTable =
       companies: [];
       reason: string;
     };
-// Live company identity comes from the platform's Tushare token (SSE Class A
-// listed shares). App users cannot replace this table.
-export async function managedCompanies(mode: "fixture" | "live"): Promise<ManagedCompanyTable> {
+// Fixture identity is retained only for pinned legacy releases; new plans are live-only.
+export async function managedCompanies(
+  mode: "fixture" | "live" = "live",
+): Promise<ManagedCompanyTable> {
   if (mode === "fixture")
     return {
       version: "synthetic-companies-v1",
@@ -152,33 +158,20 @@ export async function prepareBuild(
   turnId: string,
   revision: number,
   additionalBlockers: string[] = [],
-): Promise<BuildRecord> {
+): Promise<BuildRecord & { plan: BuildPlan; readiness: "live" | "blocked" }> {
   const plan = buildPlanSchema.parse(raw);
   const resolvedCapabilities = resolveCapabilities(plan.capabilities);
-  const financialScope = resolvedCapabilities.some((id) =>
-    ["historical-analysis", "price-target", "market-research"].includes(id),
-  );
-  const table = financialScope
-    ? {
-        available: true as const,
-        synthetic: false,
-        version: suppliedCompanyUniverseVersion,
-        companies: suppliedCompanyUniverse().map((company) => ({
-          ticker: `${company.ticker}.SH`,
-          name: company.name,
-          industry: company.industry,
-        })),
-      }
-    : plan.companyQueries.length
-      ? await managedCompanies(plan.mode)
-      : {
-          available: true as const,
-          synthetic: false,
-          version: suppliedCompanyUniverseVersion,
-          companies: [],
-        };
+  const table = {
+    available: true as const,
+    synthetic: false,
+    version: suppliedCompanyUniverseVersion,
+    companies: suppliedCompanyUniverse().map((company) => ({
+      ticker: `${company.ticker}.SH`,
+      name: company.name,
+      industry: company.industry,
+    })),
+  };
   const blockers: string[] = [...additionalBlockers];
-  if (!table.available) blockers.push(`Live company lookup is unavailable: ${table.reason}`);
   const companyIds: string[] = [];
   for (const query of plan.companyQueries) {
     if (!table.available) continue;
@@ -190,7 +183,7 @@ export async function prepareBuild(
     blockers.push(
       resolved.ambiguous
         ? `Ambiguous company: ${query}. Ask which ticker is intended.`
-        : `Company is outside the SSE Class A scope: ${query}. The platform currently supports Shanghai Stock Exchange Class A companies only.`,
+        : `Company is outside the SSE Class A scope: ${query}. Reject this company and propose a different real Shanghai Stock Exchange Class A company instead (lookup_companies); never offer demo or synthetic data.`,
     );
   }
   if (
@@ -219,6 +212,15 @@ export async function prepareBuild(
       ...resolvedCapabilities.map((id) => [id, capabilityProtocols[id]] as const),
     ].map(([id, content]) => [id, hash(content)]),
   );
+  // Keep the shell's industry picker on the protected CSV taxonomy.
+  const confirmed = new Set(companyIds);
+  const companyIndustries = [
+    ...new Set(
+      suppliedCompanyUniverse()
+        .filter((company) => confirmed.size === 0 || confirmed.has(`${company.ticker}.SH`))
+        .map((company) => company.industry),
+    ),
+  ].sort();
   const record = {
     id: crypto.randomUUID(),
     version: 1 as const,
@@ -249,6 +251,7 @@ export async function prepareBuild(
         : {}),
       ...(resolvedCapabilities.includes("price-target") ? { "finance.price-target": "1.2.0" } : {}),
     },
+    companyIndustries,
     theme: plan.themeOverride ?? "starter-default",
     readiness: blockers.length ? ("blocked" as const) : plan.mode,
     blockers,
@@ -285,7 +288,9 @@ export function validateScopedBundle(bundle: AppBundle, record: BuildRecord) {
   const project = bundle.manifest.schemaVersion === 3;
   const allowed = approvedPermissions(record, project);
   if (project) {
-    if (record.moduleVersions.starter !== financialStarterVersion)
+    if (
+      ![financialStarterVersion, "financial-react-v1"].includes(record.moduleVersions.starter ?? "")
+    )
       throw new Error("The financial starter version changed. Prepare a new build.");
     inspectProjectProtection(bundle, record);
   }

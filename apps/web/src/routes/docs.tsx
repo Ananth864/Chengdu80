@@ -17,7 +17,7 @@ function DocumentationLayout() {
     >
       <DocsLayout
         tree={documentationTree}
-        nav={{ title: "Linus", url: "/" }}
+        nav={{ title: "Linus", url: "/#view=builds" }}
         links={[{ text: "Workspace", url: "/" }]}
       >
         <Outlet />

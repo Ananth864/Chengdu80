@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:http";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -34,17 +35,17 @@ const browserErrors: string[] = [];
 const cloudDatabaseRequests: string[] = [];
 const researchSpecification: ProductSpec = {
   name: "Copper Finch",
-  purpose: "Synthetic industry research with clearly unavailable evidence.",
+  purpose: "Historical listed-company industry research with explicit evidence availability.",
   protocol: "portfolio",
-  inputs: ["Selected industry"],
+  inputs: ["Selected company"],
   outputs: ["Industry research", "Evidence availability"],
   outputDetails: {
     "Industry research":
-      "Selected-industry research requires sourced industry evidence; unavailable in this synthetic demo.",
+      "Historical industry revenue and matched-cohort growth for the selected supplied-CSV company; unavailable without provider evidence.",
     "Evidence availability":
       "Show source coverage and missing-evidence reasons from the research response; no invented sources.",
   },
-  constraints: ["Synthetic demo; no invented research"],
+  constraints: ["Live sources required; no invented research"],
 };
 const liveResearchSpecification: ProductSpec = {
   ...researchSpecification,
@@ -58,15 +59,31 @@ const liveResearchSpecification: ProductSpec = {
   constraints: ["Live sources required; unavailable evidence must not be fabricated"],
 };
 const researchPlan = {
-  requirements: "Build a synthetic industry research demo using the supported capability",
+  requirements: "Build an industry research app using the supported capability",
   capabilities: ["market-research"],
-  companyQueries: [],
-  mode: "fixture",
+  companyQueries: ["600000.SH"],
+  mode: "live",
   themeOverride: null,
 };
 const approvalMessage = "Workflow approved. Continue building the approved workflow now.";
 let sequence = 0;
 const providerCities: string[] = [];
+const tushareSample = JSON.parse(
+  await readFile(new URL("./fixtures/stock-basic-sample.json", import.meta.url), "utf8"),
+);
+const tushareCaps: [string, number][] = [
+  ["600000.SH", 20_000_000],
+  ["600036.SH", 80_000_000],
+  ["601988.SH", 100_000_000],
+  ["601398.SH", 150_000_000],
+  ["600519.SH", 180_000_000],
+  ["601857.SH", 1_200_000_000],
+  ["600900.SH", 50_000_000],
+  ["603288.SH", 20_000_000],
+  ["605499.SH", 4_000_000],
+  ["688981.SH", 40_000_000],
+  ["689009.SH", 5_000_000],
+];
 const fixture = createServer(async (req, res) => {
   try {
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
@@ -75,6 +92,20 @@ const fixture = createServer(async (req, res) => {
       providerCities.push(city);
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ city, temperature: 21 }));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/") {
+      let raw = "";
+      for await (const chunk of req) raw += chunk;
+      const body = JSON.parse(raw) as { api_name?: string; token?: string };
+      assert.equal(body.token, "server-tushare-token");
+      assert(["stock_basic", "daily_basic"].includes(body.api_name ?? ""));
+      const payload =
+        body.api_name === "stock_basic"
+          ? tushareSample
+          : { code: 0, msg: "", data: { fields: ["ts_code", "total_mv"], items: tushareCaps } };
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(payload));
       return;
     }
     assert.equal(req.url, "/v1/responses");
@@ -115,7 +146,7 @@ const fixture = createServer(async (req, res) => {
           name: "write_file",
           arguments: {
             path: "index.html",
-            content: "<main>Synthetic demo: booking application</main>",
+            content: "<main>booking application</main>",
           },
         },
         { name: "deploy_preview", arguments: { summary: "Attempt unrelated deployment" } },
@@ -128,15 +159,15 @@ const fixture = createServer(async (req, res) => {
           arguments: {
             ...researchPlan,
             specification: researchSpecification,
-            summary: "Synthetic industry research for Technology; evidence remains unavailable.",
+            summary:
+              "Historical industry research for a supplied-CSV company; evidence remains unavailable.",
           },
         };
-      text =
-        "I propose a synthetic Copper Finch industry research demo for Technology. Please confirm the plan.";
+      text = "I propose a Copper Finch historical industry research app. Please confirm the plan.";
     } else if (
       automaticApproval &&
       approvalContext.includes(
-        "Synthetic industry research for Technology; evidence remains unavailable.",
+        "Historical industry research for a supplied-CSV company; evidence remains unavailable.",
       )
     ) {
       if (!calls) await new Promise((resolve) => setTimeout(resolve, 4000));
@@ -162,8 +193,7 @@ const fixture = createServer(async (req, res) => {
           name: "write_file",
           arguments: {
             path: "index.html",
-            content:
-              '<main><p>Synthetic demo</p><h1 id="title">Copper Finch</h1><p id="note"></p></main>',
+            content: '<main><h1 id="title">Copper Finch</h1><p id="note"></p></main>',
           },
         },
         {
@@ -206,13 +236,13 @@ const fixture = createServer(async (req, res) => {
           arguments: {
             ...researchPlan,
             specification: researchSpecification,
-            summary: "Test a broken synthetic research presentation change.",
+            summary: "Test a broken research presentation change.",
           },
         };
-      text = "Please confirm the synthetic research presentation change before I stage it.";
+      text = "Please confirm the research presentation change before I stage it.";
     } else if (
       automaticApproval &&
-      approvalContext.includes("Test a broken synthetic research presentation change.")
+      approvalContext.includes("Test a broken research presentation change.")
     ) {
       tool = [
         {
@@ -224,7 +254,7 @@ const fixture = createServer(async (req, res) => {
           name: "write_file",
           arguments: {
             path: "index.html",
-            content: '<main><p>Synthetic demo</p><script>alert("forbidden")</script></main>',
+            content: '<main><script>alert("forbidden")</script></main>',
           },
         },
         { name: "deploy_preview", arguments: { summary: "Check intentionally invalid source" } },
@@ -238,13 +268,18 @@ const fixture = createServer(async (req, res) => {
             ...researchPlan,
             specification: liveResearchSpecification,
             mode: "live",
+            companyQueries: ["Apple"],
             summary: "Request live industry research.",
           },
         };
       text = "Please confirm the live research plan; platform readiness still needs validation.";
     } else if (automaticApproval && approvalContext.includes("Request live industry research.")) {
       tool = [
-        { name: "prepare_build", arguments: { ...researchPlan, mode: "live" } },
+        // Out-of-scope company triggers the merged live gate: blocked validation retains the proposal.
+        {
+          name: "prepare_build",
+          arguments: { ...researchPlan, mode: "live", companyQueries: ["Apple"] },
+        },
         {
           name: "write_file",
           arguments: { path: "index.html", content: "<main>Blocked live replacement</main>" },
@@ -266,7 +301,7 @@ const fixture = createServer(async (req, res) => {
       text = "The changed plan needs a new proposal.";
     } else if (prompt.includes("Change an approved plan field")) {
       const change = prompt.includes("requirements")
-        ? { requirements: "A different synthetic industry research requirement" }
+        ? { requirements: "A different historical industry research requirement" }
         : prompt.includes("themeOverride")
           ? { themeOverride: "Use a dark theme" }
           : { cardMetrics: ["ps"] };
@@ -375,6 +410,8 @@ async function start() {
       CD80_LOCAL_MODE: "1",
       CD80_DEMO_MODE: "1",
       CD80_DATA_DIR: dataDir,
+      TUSHARE_TOKEN: "server-tushare-token",
+      TUSHARE_API_URL: `http://127.0.0.1:${fixturePort}`,
       MODEL_PROVIDER: "openai",
       OPENAI_MODEL: "gpt-6-luna",
       OPENAI_API_KEY: "agent-fixture-key",
@@ -553,17 +590,17 @@ try {
     .waitFor();
   await page.getByRole("heading", { name: "Agent fixture site", exact: true }).waitFor();
   const dataBefore = (await appById(id)).data;
-  const noProposal = await turn(id, "Prepare without a proposal for a synthetic demo.");
+  const noProposal = await turn(id, "Prepare without a proposal for a research app.");
   assert(noProposal.ok);
   assert((await noProposal.text()).includes("Call propose_build and end the turn first"));
   assert.equal((await appById(id)).buildRecords?.length ?? 0, 0);
   await page
     .getByRole("textbox", { name: "Message the AI" })
-    .fill("Build the Copper Finch synthetic industry research demo now.");
+    .fill("Build the Copper Finch historical industry research app now.");
   await page.getByRole("textbox", { name: "Message the AI" }).press("Enter");
   await page
     .getByText(
-      "I propose a synthetic Copper Finch industry research demo for Technology. Please confirm the plan.",
+      "I propose a Copper Finch historical industry research app. Please confirm the plan.",
       { exact: true },
     )
     .waitFor();
@@ -602,11 +639,11 @@ try {
   assert.equal(stillUnapproved.preview, null);
   assert.deepEqual(stillUnapproved.workspace, proposed.workspace);
   await page.reload();
-  await page.getByRole("tab", { name: "Workflow", exact: true }).click();
+  await page.getByRole("tab", { name: "How it works", exact: true }).click();
   const workflowNodes = page.getByRole("region", { name: "Workflow nodes by kind", exact: true });
-  for (const label of ["Input", "Capabilities", "Output"])
-    await workflowNodes.getByText(label, { exact: true }).waitFor();
-  await workflowNodes.getByRole("button", { name: "Selected industry", exact: true }).waitFor();
+  for (const label of ["Information used", "Steps the app takes", "What you get"])
+    await workflowNodes.getByText(label, { exact: false }).first().waitFor();
+  await workflowNodes.getByRole("button", { name: "Selected company", exact: true }).waitFor();
   for (const output of researchSpecification.outputs)
     await workflowNodes.getByRole("button", { name: output, exact: true }).waitFor();
   for (const output of researchSpecification.outputs) {
@@ -686,7 +723,7 @@ try {
   assert.equal(await conversation.locator("code").filter({ hasText: "cd80.ready()" }).count(), 1);
   await worked.click();
   assert.equal(await worked.getAttribute("aria-expanded"), "true");
-  await page.getByRole("button", { name: /list files.*Done/ }).waitFor();
+  await page.getByRole("button", { name: /Listing project files.*Done/ }).waitFor();
   await worked.click();
   assert.equal(await worked.getAttribute("aria-expanded"), "false");
   await page.locator('iframe[aria-busy="false"]').waitFor();
@@ -715,7 +752,7 @@ try {
   assert.equal(built.current.id, staged.preview.id);
   assert.equal(built.preview, null);
   assert.deepEqual(built.current.spec, researchSpecification);
-  assert.deepEqual(built.current.spec.inputs, ["Selected industry"]);
+  assert.deepEqual(built.current.spec.inputs, ["Selected company"]);
   assert.deepEqual(built.current.spec.outputs, ["Industry research", "Evidence availability"]);
   assert.deepEqual(Object.keys(built.current.spec.outputDetails ?? {}), built.current.spec.outputs);
   assert.equal(new Set(Object.values(built.current.spec.outputDetails ?? {})).size, 2);
@@ -776,7 +813,11 @@ try {
   assert(
     builderInstructions.includes("Related catalog IDs are requirement references, not aliases"),
   );
-  assert(builderInstructions.includes("verified_endpoints"));
+  assert(builderInstructions.includes("1.9.0"));
+  assert(builderInstructions.includes("finance.historical-analysis"));
+  assert(builderInstructions.includes("finance.industry-research"));
+  assert(builderInstructions.includes("finance.price-target"));
+  assert(builderInstructions.includes("matched-cohort"));
   assert(builderInstructions.includes("Ordinary forms, navigation, uploads"));
   assert(builderInstructions.includes("skills/annual-report-company-metrics.md"));
   assert(
@@ -817,7 +858,7 @@ try {
   await page.getByRole("menuitem", { name: "Specification", exact: true }).click();
   const specification = page.getByRole("dialog", { name: "Specification", exact: true });
   await specification
-    .getByText("Build a synthetic industry research demo using the supported capability", {
+    .getByText("Build an industry research app using the supported capability", {
       exact: true,
     })
     .waitFor();
@@ -901,7 +942,7 @@ try {
     .getByRole("textbox", { name: "Message the AI" })
     .fill("Start a slow turn so I can stop it.");
   await page.getByRole("textbox", { name: "Message the AI" }).press("Enter");
-  await page.getByRole("button", { name: /list files.*Done/ }).waitFor();
+  await page.getByRole("button", { name: /Listing project files.*Done/ }).waitFor();
   await page.getByRole("button", { name: "Stop generation" }).click();
   await page.waitForTimeout(1600);
   assert.equal(
@@ -955,15 +996,11 @@ try {
   const liveApproval = await approveWorkflow(id);
   assert(liveApproval?.workflowApproval);
   const liveBlocked = await waitForApproval(id, liveApproval.workflowApproval.proposalId);
-  const liveMessages = liveBlocked.conversation?.slice(
-    liveBlocked.conversation.findIndex(
-      (message) => message.id === liveApproval.workflowApproval!.turnId,
-    ),
-  );
+  // The transcript elides large prepare_build outputs; the saved record carries the blockers.
   assert(
-    JSON.stringify(liveMessages).includes(
-      "Live company lookup is unavailable: TUSHARE_TOKEN is not configured on the server",
-    ),
+    liveBlocked.buildRecords
+      ?.at(-1)
+      ?.blockers?.some((blocker) => blocker.includes("SSE Class A scope")),
   );
   assert.equal(liveBlocked.current?.id, activeRelease);
   assert.equal(liveBlocked.buildRecords?.at(-1)?.readiness, "blocked");
@@ -986,12 +1023,18 @@ try {
   assert.equal(latest.current?.id, activeRelease);
   assert(!requests.at(-1)?.tools?.some((tool) => tool.name === "call_plugin"));
   assert.deepEqual(providerCities, [], "No weather provider call was made");
+  assert(built.current.buildRecord?.resolvedCapabilities.includes("market-research"));
+  // News stays out of the closure: the platform does not offer news tracking.
   assert(!built.current.buildRecord?.resolvedCapabilities.includes("news"));
   assert(built.current.buildRecord?.protocolHashes.builder);
   assert(built.current.buildRecord?.protocolHashes["financial-expert"]);
   assert(built.current.buildRecord?.protocolHashes["financial-skill:general-dashboard-generation"]);
   assert.equal(built.current.buildRecord?.provider, "tushare");
-  assert.equal(built.current.buildRecord?.readiness, "fixture");
+  assert.equal(built.current.buildRecord?.readiness, "live");
+  assert.equal(built.current.buildRecord?.plan.mode, "live");
+  assert.deepEqual(built.current.buildRecord?.companyIds, ["600000.SH"]);
+  assert.deepEqual(built.current.buildRecord?.resolvedCapabilities, ["market-research"]);
+  assert.equal(built.current.buildRecord?.moduleVersions["finance.industry-research"], "1.2.0");
   const legacy = await fetch(`${base}/api/platform`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -1001,29 +1044,54 @@ try {
   results.push(
     "Scoped build records pin protocols and dependencies; arbitrary plugins and legacy direct builds are blocked",
   );
-  // Seed a scoped module fixture into the isolated test store. All calls below use actual HTTP RPC.
+  // Legacy fixture RPC compatibility is separate from newly prepared live-only builds.
   await stop();
   const stored = JSON.parse(await readFile(join(dataDir, "apps.json"), "utf8")) as Application[];
   const cardsApp = structuredClone(built);
   cardsApp.id = "company-module-fixture";
-  cardsApp.name = "Synthetic company cards";
+  cardsApp.name = "Company cards module";
   cardsApp.current!.id = "company-module-release";
   cardsApp.current!.bundle.manifest.permissions.push(
     "finance.match-companies",
     "finance.company-cards",
   );
-  cardsApp.current!.buildRecord = await prepareBuild(
+  const cardsRecord = await prepareBuild(
     {
-      requirements: "Synthetic daily company card demo",
+      requirements: "Daily company cards module",
       capabilities: ["company-cards"],
       companyQueries: [],
-      mode: "fixture",
+      mode: "live",
       themeOverride: null,
       cardMetrics: ["ps"],
     },
     "company-module-turn",
     1,
   );
+  assert.equal(cardsRecord.readiness, "live");
+  const { hash: _liveHash, ...legacyPayload } = {
+    ...cardsRecord,
+    plan: { ...cardsRecord.plan, mode: "fixture" as const },
+    readiness: "fixture" as const,
+    companyTableVersion: "synthetic-companies-v1",
+    moduleVersions: { companies: "company-capabilities-v1", starter: "financial-react-v1" },
+  };
+  cardsApp.current!.bundle.files["index.html"] += "<p>Synthetic demo</p>";
+  cardsApp.current!.buildRecord = {
+    ...legacyPayload,
+    hash: createHash("sha256")
+      .update(
+        JSON.stringify(legacyPayload, (_key, item) =>
+          item && typeof item === "object" && !Array.isArray(item)
+            ? Object.fromEntries(
+                Object.keys(item)
+                  .sort()
+                  .map((key) => [key, item[key]]),
+              )
+            : item,
+        ),
+      )
+      .digest("hex"),
+  };
   cardsApp.current!.verification.sourceHash = await sourceHash(cardsApp.current!.bundle);
   cardsApp.current!.buildRecord.artifactHash = cardsApp.current!.verification.sourceHash;
   stored.push(cardsApp);
@@ -1052,15 +1120,16 @@ try {
   const batchInput = { action: "batch", risk: "low", industries: ["Technology"] };
   const [batchA, batchB] = await Promise.all([moduleCall(batchInput), moduleCall(batchInput)]);
   assert.deepEqual(batchA, batchB);
-  assert.equal(batchA.companies[0].ticker, "DEMO001");
+  const firstTicker = batchA.companies[0]?.ticker as string;
+  assert.equal(firstTicker, "DEMO001", "Only the pinned legacy release uses fixture companies");
   assert.deepEqual(
     batchA.companies[0].metrics.map((metric: any) => metric.id),
     ["ps"],
   );
   assert.equal(batchA.companies[0].metrics[0].value, null);
-  await moduleCall({ action: "decide", ticker: "DEMO001", choice: "yes" });
+  await moduleCall({ action: "decide", ticker: firstTicker, choice: "yes" });
   await moduleCall(
-    { action: "decide", ticker: "DEMO001", choice: "no" },
+    { action: "decide", ticker: firstTicker, choice: "no" },
     "finance.company-cards",
     false,
   );
@@ -1069,7 +1138,7 @@ try {
   await stop();
   await start();
   const savedWatchlist = await moduleCall({ action: "watchlist" });
-  assert.deepEqual(savedWatchlist.watchlist, ["DEMO001"]);
+  assert.deepEqual(savedWatchlist.watchlist, [firstTicker]);
   const unchanged = await moduleCall(batchInput);
   assert.equal(unchanged.companies[0].choice, "yes");
   const unauthorized = await fetch(`${base}/api/platform`, {
@@ -1085,7 +1154,7 @@ try {
   });
   assert.equal(unauthorized.status, 400);
   results.push(
-    "Platform company modules enforce capability scope, concurrent daily batches, protected state, pinned metrics and restart persistence",
+    "Pinned legacy fixture company modules enforce capability scope, concurrent daily batches, protected state, pinned metrics and restart persistence",
   );
   // Gallery includes only working apps, supports search, and restores studio selection.
   await page.reload();
@@ -1143,12 +1212,9 @@ try {
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   await page.screenshot({ path: ".local/agent-tests/build-gallery-mobile.png", fullPage: true });
   await gallery.getByRole("button", { name: `Select build ${built.name}` }).click();
-  await page.getByRole("note").filter({ hasText: "Synthetic demo. Company identities" }).waitFor();
   await page.getByRole("tab", { name: "Chat", exact: true }).click();
   await page.getByRole("textbox", { name: "Message the AI" }).waitFor();
   assert(new URL(page.url()).hash.includes(id));
-  await page.getByRole("tab", { name: "Preview", exact: true }).first().click();
-  await page.getByRole("note").filter({ hasText: "Synthetic demo. Company identities" }).waitFor();
   results.push(
     "Built-app gallery supports safe layout thumbnails, search, browser Back/Forward and full-width tablet/mobile panels",
   );

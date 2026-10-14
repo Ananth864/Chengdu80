@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BuildRecord } from "../apps/web/src/lib/build-plan";
+import { capabilityStarterV1Files } from "../apps/web/src/lib/capability-starter-v1";
 import type { AppBundle, Application, ProductSpec, Release } from "../apps/web/src/lib/contracts";
 import {
   approvedPermissions,
@@ -78,17 +79,18 @@ try {
       requirements: spec.purpose,
       capabilities: ["risk-assessment", "company-cards"],
       companyQueries: [],
-      mode: "fixture",
+      mode: "live",
       themeOverride: null,
     },
     "risk-integration-turn",
     1,
   );
-  assert.equal(record.readiness, "fixture");
+  assert.equal(record.readiness, "live");
+  await assert.rejects(prepareBuild({ ...record.plan, mode: "fixture" }, "fixture-rejected", 1));
   assert.equal(record.moduleVersions["risk-profile"], "v0-demo");
   assert.deepEqual(record.moduleVersions, {
     companies: "company-capabilities-v1",
-    starter: "financial-react-v1",
+    starter: "financial-react-v4",
     "risk-profile": "v0-demo",
     "industry-preferences": "v1.4.0",
     "company-discovery": "v1.3.0",
@@ -98,6 +100,9 @@ try {
   bundle.files[buildContextPath] = buildContextSource(record, spec.name);
   assert.ok(bundle.manifest.permissions.includes("finance.risk-profile"));
   validateScopedBundle(bundle, record);
+  const editable = structuredClone(bundle);
+  editable.files["src/components/risk-questionnaire.tsx"] += "\n// editable presentation";
+  validateScopedBundle(editable, record);
   const release = await fixtureRelease(bundle, record);
   const preview = { ...structuredClone(release), id: crypto.randomUUID() };
   const app: Application = {
@@ -203,6 +208,7 @@ try {
   console.log("PASS scoring and reserved storage require the risk permission");
 
   const oldRecord = structuredClone(record);
+  oldRecord.moduleVersions.starter = "financial-react-v1";
   delete oldRecord.moduleVersions["risk-profile"];
   delete oldRecord.moduleVersions["company-discovery"];
   delete oldRecord.moduleVersions["industry-preferences"];
@@ -230,6 +236,7 @@ try {
   assert.ok(oldRecord.resolvedCapabilities.includes("risk-assessment"));
   assert.ok(!approvedPermissions(oldRecord, true).includes("finance.risk-profile"));
   const legacyBundle = structuredClone(bundle);
+  Object.assign(legacyBundle.files, capabilityStarterV1Files);
   legacyBundle.manifest.permissions = approvedPermissions(oldRecord, true);
   legacyBundle.files[buildContextPath] = buildContextSource(oldRecord, spec.name);
   legacyBundle.files["src/lib/cd80.ts"] = legacyFinancialSdkSource;
@@ -254,6 +261,8 @@ try {
   changedLegacy.files["src/lib/cd80.ts"] += "\n// mutated legacy SDK";
   assert.throws(() => validateScopedBundle(changedLegacy, oldRecord), /starter file unchanged/);
   const escalatedBundle = structuredClone(bundle);
+  Object.assign(escalatedBundle.files, capabilityStarterV1Files);
+  escalatedBundle.files[buildContextPath] = buildContextSource(oldRecord, spec.name);
   assert.throws(
     () => validateScopedBundle(escalatedBundle, oldRecord),
     /approved platform modules/,
@@ -272,15 +281,14 @@ try {
     "PASS legacy SDK/releases remain readable but cannot gain risk permission without a module snapshot",
   );
 
-  for (const path of [
-    "src/lib/cd80.ts",
-    "src/lib/risk-profile.ts",
-    "src/components/risk-questionnaire.tsx",
-  ]) {
+  for (const path of ["src/lib/cd80.ts", "src/lib/risk-profile.ts", "src/lib/build-context.ts"]) {
     assert.equal(typeof bundle.files[path], "string", `Protected starter file is missing: ${path}`);
     const changed = structuredClone(bundle);
     changed.files[path] += "\n// mutated protected risk source";
-    assert.throws(() => validateScopedBundle(changed, record), /starter file unchanged/);
+    assert.throws(
+      () => validateScopedBundle(changed, record),
+      /starter file unchanged|project context/,
+    );
     const changedRelease = await fixtureRelease(changed, record);
     latest = await findApp(access, app.id);
     latest.current = changedRelease;
@@ -288,7 +296,7 @@ try {
     const beforeMutation = await persisted();
     await assert.rejects(
       rpc("finance.risk-profile", input, changedRelease.id),
-      /starter file unchanged/,
+      /starter file unchanged|project context/,
     );
     assert.equal(await persisted(), beforeMutation);
   }

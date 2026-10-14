@@ -1,6 +1,6 @@
 import { FinancialDemo } from "@/components/financial-app";
 
-// Compose the requested application here using the protected financial components.
+// This default composition is editable; the root supplies routing only.
 export default function App() {
   return <FinancialDemo />;
 }

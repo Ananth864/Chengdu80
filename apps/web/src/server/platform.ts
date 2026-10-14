@@ -54,7 +54,7 @@ import {
   deleteChat,
   type Access,
 } from "./repository";
-import { projectStarterBundle } from "../lib/financial-starter";
+import { projectStarterBundle, isMainLegacyBuild } from "../lib/financial-starter";
 import { execute, sourceHash, verify } from "./runtime";
 import { demoMode, demoOwnerId, localMode, settings } from "./settings";
 
@@ -233,17 +233,16 @@ async function build(
 }
 export async function dispatch(access: Access, raw: unknown) {
   const req = requestSchema.parse(raw);
+  if (req.action === "reverify")
+    throw new Error(
+      "Legacy reverification is disabled by the internal capability contract. Use explicit Preview approval for a scoped, verified release.",
+    );
+  // Only accept activates a scoped, verified preview. Legacy reverification
+  // must not provide an alternate activation path.
   if (
-    [
-      "create",
-      "update",
-      "import",
-      "seed",
-      "load-prices",
-      "test-provider",
-      "clarify",
-      "reverify",
-    ].includes(req.action)
+    ["create", "update", "import", "seed", "load-prices", "test-provider", "clarify"].includes(
+      req.action,
+    )
   )
     throw new Error(
       "Use the financial-capability conversation to scope this request. Legacy direct builds, imports and provider tests are disabled until they support the internal capability contract.",
@@ -407,18 +406,6 @@ export async function dispatch(access: Access, raw: unknown) {
     });
     return { recorded: true };
   }
-  if (req.action === "reverify") {
-    if (app.preview?.id !== req.releaseId) throw new Error("Preview changed. Refresh first.");
-    app.preview.verification = await verify(app.preview.bundle, app.preview.spec);
-    const active = await applyRelease(app, app.preview);
-    event(
-      app,
-      active
-        ? "Verified source activated."
-        : "Source still fails verification; working app retained.",
-    );
-    return saveApp(access, app, app.revision);
-  }
   if (req.action === "load-prices") {
     if (app.spec.protocol !== "strategy" || !app.current)
       throw new Error("Build a strategy app before loading a price series.");
@@ -499,6 +486,18 @@ export async function dispatch(access: Access, raw: unknown) {
   validateScopedBundle(release.bundle, release.buildRecord);
   if (JSON.stringify(req.input ?? null).length > 150000)
     throw new Error("Capability input exceeds size limit");
+  if (
+    isMainLegacyBuild(release.buildRecord) &&
+    [
+      "finance.research",
+      "finance.match-companies",
+      "finance.company-cards",
+      "market.prices",
+    ].includes(req.capability)
+  )
+    throw new Error(
+      "This release uses a retired financial data interface. Approve an updated workflow to rebuild with the current capability SDK. Saved data is retained.",
+    );
   if (req.capability === "finance.risk-profile") return scoreRiskProfile(req.input);
   if (req.capability === "finance.company-discovery.v1-3")
     return executeDiscoveryContract(req.input, suppliedCompanyUniverse());

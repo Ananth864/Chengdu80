@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BuildRecord } from "../apps/web/src/lib/build-plan";
+import { capabilityStarterV1Files } from "../apps/web/src/lib/capability-starter-v1";
 import { importCompanyCsv } from "../apps/web/src/lib/company-table";
 import type { AppBundle, Application, ProductSpec, Release } from "../apps/web/src/lib/contracts";
 import {
@@ -93,18 +94,19 @@ try {
       requirements: spec.purpose,
       capabilities: ["risk-industry-matching"],
       companyQueries: [],
-      mode: "fixture",
+      mode: "live",
       themeOverride: null,
     },
     "discovery-integration-turn",
     1,
   );
-  assert.equal(record.readiness, "fixture");
+  assert.equal(record.readiness, "live");
+  await assert.rejects(prepareBuild({ ...record.plan, mode: "fixture" }, "fixture-rejected", 1));
   assert.equal(record.moduleVersions["company-discovery"], "v1.3.0");
   assert.equal(record.moduleVersions["industry-preferences"], "v1.4.0");
   assert.deepEqual(record.moduleVersions, {
     companies: "company-capabilities-v1",
-    starter: "financial-react-v1",
+    starter: "financial-react-v4",
     "risk-profile": "v0-demo",
     "industry-preferences": "v1.4.0",
     "company-discovery": "v1.3.0",
@@ -117,6 +119,9 @@ try {
   assert.ok(!bundle.manifest.permissions.includes("finance.match-companies"));
   assert.ok(!bundle.manifest.permissions.includes("finance.company-cards"));
   validateScopedBundle(bundle, record);
+  const editable = structuredClone(bundle);
+  editable.files["src/components/company-discovery.tsx"] += "\n// editable presentation";
+  validateScopedBundle(editable, record);
   const release = await fixtureRelease(bundle, record);
   const preview = { ...structuredClone(release), id: crypto.randomUUID() };
   const app: Application = {
@@ -236,6 +241,7 @@ try {
   );
 
   const oldSessionsRecord = structuredClone(record);
+  oldSessionsRecord.moduleVersions.starter = "financial-react-v1";
   oldSessionsRecord.moduleVersions["company-discovery"] = "v2-sessions";
   oldSessionsRecord.moduleVersions["industry-preferences"] = "v1.3.0";
   for (const key of Object.keys(oldSessionsRecord.moduleVersions))
@@ -267,6 +273,7 @@ try {
     .digest("hex");
   requireBuild(oldSessionsRecord, oldSessionsRecord.turnId);
   const oldSessionsBundle = structuredClone(bundle);
+  Object.assign(oldSessionsBundle.files, capabilityStarterV1Files);
   oldSessionsBundle.manifest.permissions = approvedPermissions(oldSessionsRecord, true);
   oldSessionsBundle.files[buildContextPath] = buildContextSource(oldSessionsRecord, spec.name);
   Object.assign(oldSessionsBundle.files, preAnalysisStarterSnapshot);
@@ -401,6 +408,7 @@ try {
     ["risk", riskFinancialSdkSource],
   ] as const) {
     const oldRecord = structuredClone(record);
+    oldRecord.moduleVersions.starter = "financial-react-v1";
     for (const key of Object.keys(oldRecord.moduleVersions))
       if (key.startsWith("finance.")) delete oldRecord.moduleVersions[key];
     delete oldRecord.moduleVersions["company-discovery"];
@@ -429,6 +437,7 @@ try {
     assert.ok(oldRecord.resolvedCapabilities.includes("risk-industry-matching"));
     assert.ok(!approvedPermissions(oldRecord, true).includes("finance.company-discovery"));
     const oldBundle = structuredClone(bundle);
+    Object.assign(oldBundle.files, capabilityStarterV1Files);
     oldBundle.manifest.permissions = approvedPermissions(oldRecord, true);
     oldBundle.files[buildContextPath] = buildContextSource(oldRecord, spec.name);
     oldBundle.files["src/lib/cd80.ts"] = sdk;
@@ -461,11 +470,7 @@ try {
       /Company discovery permission/,
     );
     assert.equal(await persisted(), beforeLegacy);
-    for (const path of [
-      "src/lib/cd80.ts",
-      "src/lib/risk-profile.ts",
-      "src/components/risk-questionnaire.tsx",
-    ]) {
+    for (const path of ["src/lib/cd80.ts", "src/lib/risk-profile.ts"]) {
       if (oldBundle.files[path] === undefined) continue;
       const changed = structuredClone(oldBundle);
       changed.files[path] += "\n// mutated historical protected source";
@@ -484,6 +489,7 @@ try {
 
     // Escalate only discovery permission for the risk SDK case: no risk escalation is involved.
     const escalatedBundle = structuredClone(bundle);
+    Object.assign(escalatedBundle.files, capabilityStarterV1Files);
     escalatedBundle.manifest.permissions = [
       ...approvedPermissions(oldRecord, true),
       "finance.company-discovery",
@@ -515,10 +521,8 @@ try {
   for (const path of [
     "src/lib/cd80.ts",
     "src/lib/company-discovery.ts",
-    "src/components/company-discovery.tsx",
     "src/lib/discovery-contract.ts",
     "src/lib/financial-results.ts",
-    "src/components/financial-analysis.tsx",
   ]) {
     assert.equal(typeof bundle.files[path], "string", `Protected starter file is missing: ${path}`);
     const changed = structuredClone(bundle);

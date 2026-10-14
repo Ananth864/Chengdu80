@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BuildRecord } from "../apps/web/src/lib/build-plan";
+import { capabilityStarterV1Files } from "../apps/web/src/lib/capability-starter-v1";
 import { capabilityDefinitions } from "../apps/web/src/lib/capability-catalog";
 import type { AppBundle, Application, ProductSpec, Release } from "../apps/web/src/lib/contracts";
 import { discoveryStarterSnapshot } from "../apps/web/src/lib/discovery-starter-snapshot";
@@ -93,13 +94,14 @@ try {
       requirements: spec.purpose,
       capabilities: ["industry-preference"],
       companyQueries: [],
-      mode: "fixture",
+      mode: "live",
       themeOverride: null,
     },
     "industry-preference-integration-turn",
     1,
   );
-  assert.equal(record.readiness, "fixture");
+  assert.equal(record.readiness, "live");
+  await assert.rejects(prepareBuild({ ...record.plan, mode: "fixture" }, "fixture-rejected", 1));
   assert.deepEqual(record.plan.capabilities, ["industry-preference"]);
   assert.deepEqual(record.resolvedCapabilities, ["industry-preference"]);
   assert.deepEqual(record.companyIds, []);
@@ -108,7 +110,7 @@ try {
   assert.equal(record.moduleVersions["company-discovery"], undefined);
   assert.deepEqual(record.moduleVersions, {
     companies: "company-capabilities-v1",
-    starter: "financial-react-v1",
+    starter: "financial-react-v4",
     "industry-preferences": "v1.4.0",
   });
   const bundle = projectStarterBundle(spec);
@@ -120,6 +122,9 @@ try {
     "finance.industry-preferences",
   ]);
   validateScopedBundle(bundle, record);
+  const editable = structuredClone(bundle);
+  editable.files["src/components/industry-preference.tsx"] += "\n// editable presentation";
+  validateScopedBundle(editable, record);
   const release = await fixtureRelease(bundle, record);
   const preview = { ...structuredClone(release), id: crypto.randomUUID() };
   const app: Application = {
@@ -299,6 +304,7 @@ try {
     ["discovery", discoverySdk],
   ] as const) {
     const oldRecord = structuredClone(historicalRecord);
+    oldRecord.moduleVersions.starter = "financial-react-v1";
     for (const key of Object.keys(oldRecord.moduleVersions))
       if (key.startsWith("finance.")) delete oldRecord.moduleVersions[key];
     delete oldRecord.moduleVersions["industry-preferences"];
@@ -329,6 +335,7 @@ try {
     assert.ok(oldRecord.resolvedCapabilities.includes("industry-preference"));
     assert.ok(!approvedPermissions(oldRecord, true).includes("finance.industry-preferences"));
     const oldBundle = structuredClone(bundle);
+    Object.assign(oldBundle.files, capabilityStarterV1Files);
     oldBundle.manifest.permissions = approvedPermissions(oldRecord, true);
     oldBundle.files[buildContextPath] = buildContextSource(oldRecord, spec.name);
     oldBundle.files["src/lib/cd80.ts"] = sdk;
@@ -367,11 +374,8 @@ try {
     assert.equal(await persisted(), beforeLegacy);
     for (const path of [
       "src/lib/cd80.ts",
-      "src/components/financial-app.tsx",
       "src/lib/risk-profile.ts",
-      "src/components/risk-questionnaire.tsx",
       "src/lib/company-discovery.ts",
-      "src/components/company-discovery.tsx",
     ]) {
       if (oldBundle.files[path] === undefined) continue;
       const changed = structuredClone(oldBundle);
@@ -389,6 +393,7 @@ try {
       assert.equal(await persisted(), beforeMutation);
     }
     const escalatedBundle = structuredClone(bundle);
+    Object.assign(escalatedBundle.files, capabilityStarterV1Files);
     escalatedBundle.manifest.permissions = [
       ...approvedPermissions(oldRecord, true),
       "finance.industry-preferences",
@@ -417,12 +422,7 @@ try {
     "PASS v1, risk and discovery snapshots remain readable without preference escalation",
   );
 
-  for (const path of [
-    "src/lib/cd80.ts",
-    "src/components/financial-app.tsx",
-    "src/lib/industry-preference.ts",
-    "src/components/industry-preference.tsx",
-  ]) {
+  for (const path of ["src/lib/cd80.ts", "src/lib/industry-preference.ts"]) {
     assert.equal(typeof bundle.files[path], "string", `Protected starter file is missing: ${path}`);
     const changed = structuredClone(bundle);
     changed.files[path] += "\n// mutated protected preference source";

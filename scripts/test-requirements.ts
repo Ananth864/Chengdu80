@@ -156,7 +156,7 @@ const planWithoutTheme = {
   requirements: "Build an industry preference form",
   capabilities: ["industry-preference"],
   companyQueries: [],
-  mode: "fixture",
+  mode: "live",
 };
 assert.equal(buildPlanSchema.parse(planWithoutTheme).themeOverride, null);
 assert.equal(
@@ -168,6 +168,7 @@ assert.equal(
   "Warm neutral",
 );
 assert.throws(() => buildPlanSchema.parse({ ...planWithoutTheme, themeOverride: " " }));
+assert.throws(() => buildPlanSchema.parse({ ...planWithoutTheme, mode: "fixture" }), /live mode/);
 
 // Draft graph: no record yet, so data flows conceptually to the output.
 const draft = workflowGraph(spec, undefined, undefined);
@@ -211,10 +212,10 @@ const record = {
   createdAt: new Date().toISOString(),
   hash: "hash",
   plan: {
-    requirements: "Demo matching app",
+    requirements: "Live matching app",
     capabilities: ["risk-industry-matching", "company-cards"],
-    companyQueries: ["Demo Technology Large"],
-    mode: "fixture" as const,
+    companyQueries: ["600000.SH"],
+    mode: "live" as const,
     themeOverride: null,
   },
   resolvedCapabilities: [
@@ -223,18 +224,20 @@ const record = {
     "risk-industry-matching",
     "company-cards",
   ],
-  companyIds: ["DEMO001"],
-  companyTableVersion: "synthetic-companies-v1",
+  companyIds: ["600000.SH"],
+  companyIndustries: ["Financial services"],
+  companyTableVersion: "supplied-csv-test-version",
   protocolHashes: {},
   provider: "tushare" as const,
   moduleVersions: {},
   theme: "starter-default",
-  readiness: "fixture" as const,
+  readiness: "live" as const,
   blockers: [],
 } satisfies BuildRecord;
 const graph = workflowGraph(spec, initialRequirements(), record);
 assert.equal(graph.basis, "build-record");
-assert.ok(graph.nodes.some((node) => node.id === "companies" && node.inputs === "DEMO001"));
+assert.ok(graph.nodes.some((node) => node.id === "companies" && node.inputs === "600000.SH"));
+assert.equal(graph.nodes.find((node) => node.id === "data")?.label, "Live platform data");
 assert.deepEqual(
   graph.nodes.filter((node) => node.kind === "capability").map((node) => node.label),
   ["Risk/industry matching", "Company discovery cards"],

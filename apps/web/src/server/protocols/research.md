@@ -20,7 +20,7 @@ Live industry retrieval has a maximum budget of 80 shared-query calls per invoca
 
 Show queried and unqueried company counts, year-specific included/total counts, matched-cohort coverage, exclusions, budget/deadline limitations and the actual as_of_date explicitly. A successful bounded subset is partial, not whole-industry verification. Keep annual totals and growth statuses independent: available, partial, unavailable or insufficient_data. Preserve retrieved_at and publication dates so later retrieval does not imply that later-published information existed at the cutoff.
 
-The recorded 2026-10-15 Asia/Shanghai live verification covers daily, adj_factor, income and report_rc for one representative company; see docs/tushare-verification.md. It proves representative retrieval, not full industry membership/coverage, annual statement comparability or every downstream result. Actual availability follows server-returned evidence. Tushare is the sole external provider; credentials and all retrieval stay server-owned. Fixture data is explicitly synthetic and never substitutes for requested live data.
+The recorded 2026-10-15 Asia/Shanghai live verification covers daily, adj_factor, income and report_rc for one representative company; see docs/tushare-verification.md. It proves representative retrieval, not full industry membership/coverage, annual statement comparability or every downstream result. Actual availability follows server-returned evidence. Tushare is the sole external provider; credentials and all retrieval stay server-owned. Every build uses live mode and keeps the visible "Live · Shanghai Stock Exchange" label; never substitute synthetic observations for missing data.
 
 ## Presentation Limits
 

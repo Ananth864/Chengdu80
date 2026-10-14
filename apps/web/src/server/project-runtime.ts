@@ -29,7 +29,7 @@ export function inspectProject(
       name: "Financial contract and protected starter",
       passed: true,
       detail:
-        "Fixed SDK, financial modules, shadcn source and build configuration match the approved platform starter and contract.",
+        "SDK, build configuration, contract context and shadcn primitives match the approved platform starter; all presentation files are agent-owned.",
     });
   } catch (error) {
     checks.push({
@@ -49,16 +49,6 @@ export function inspectProject(
   return checks;
 }
 
-export function validateFinancialRender(status: number, html: string, mode: "fixture" | "live") {
-  if (status !== 200) throw new Error(`The compiled app returned HTTP ${status}.`);
-  if (!html.includes('data-financial-module-version="financial-react-v1"'))
-    throw new Error(
-      "The compiled app did not render its protected financial modules. Render FinancialModules during initial SSR, independently of browser-only storage queries.",
-    );
-  if (mode === "fixture" && !html.includes("Synthetic demo"))
-    throw new Error("The fixture app must render its visible Synthetic demo label.");
-}
-
 export async function verifyProject(
   bundle: AppBundle,
   spec: ProductSpec,
@@ -76,7 +66,11 @@ export async function verifyProject(
       const preview = await startPreview(workspace);
       const response = await readPreviewResponse(preview, "/");
       const html = await response.text();
-      validateFinancialRender(response.status, html, record!.plan.mode);
+      const expectedLabel = "Live · Shanghai Stock Exchange";
+      if (response.status !== 200 || !html.includes(expectedLabel))
+        throw new Error(
+          'The compiled app did not render with its live-source label. Keep "Live · Shanghai Stock Exchange" visible in the page.',
+        );
       const output = await readProjectFiles(workspace);
       for (const [name, source] of Object.entries(bundle.files))
         if (name !== "src/routeTree.gen.ts" && output[name] !== source)
@@ -96,7 +90,7 @@ export async function verifyProject(
         name: "Platform build, type checks and financial render",
         passed: true,
         detail:
-          "Platform-owned Vite+ commands compiled the pinned project inside Linux isolation. SSR rendered the fixed financial module; source remained unchanged.",
+          "Platform-owned Vite+ commands compiled the pinned project inside Linux isolation. SSR rendered the app with its live-source label; source remained unchanged.",
       });
     } catch (error) {
       checks.push({

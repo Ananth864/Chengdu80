@@ -541,7 +541,7 @@
           <div class="panel">
             <h3>Capability-level guidance</h3>
             <details open>
-              <summary>Research + one-time news</summary>
+              <summary>Market research</summary>
               <p>
                 Industry-only mode for standalone research. Company-specific research plus industry
                 context for company details. Retain evidence; no continuous monitoring for the demo.
@@ -633,7 +633,7 @@ The application LLM answers only from prepared dated asset analysis and reviewed
 
 Retain sources, asset identity, periods and uncertainty. Explain missing, stale and conflicting evidence. Give no buy, hold or sell recommendation. Keep English and Simplified Chinese figures and qualifications identical.
 
-Research generation is a separate capability run. Company-card research includes the company plus industry context. Standalone research is industry-level. News retrieval is once per demo research run. Chat answers perform no new external research. Brokerage execution and continuous monitoring are outside current scope.
+Research generation is a separate capability run. Company-card research includes the company plus industry context. Standalone research is industry-level. Chat answers perform no new external research. Brokerage execution and continuous monitoring are outside current scope.
 
 The reviewed explanation library and research procedure are pending expert inputs. A fixture app may demonstrate the interface; it must not claim that prepared live analysis exists.
 </pre>
@@ -697,7 +697,7 @@ Show up to five randomly selected company cards per China calendar day. Preserve
 
 Each card represents one company. Metric menu: P/E, P/S, dividend yield, revenue growth, ROE, interest coverage. Defaults: P/E, dividend yield, ROE, interest coverage. Explicit selections replace defaults. Keep unavailable selected metrics with reasons. Detailed calculation and industry-benchmark rules need expert validation.
 
-Company research detail is optional and requires market research plus news. Matching may alternatively include the historical/target package without research. Fixtures demonstrate layout and fixed matching/decision behavior. Live assessment and financial data remain pending.
+Company research detail is optional and requires market research. Matching may alternatively include the historical/target package without research. Fixtures demonstrate layout and fixed matching/decision behavior. Live assessment and financial data remain pending.
 
 The platform provides company-capabilities-v1. Reuse its matching, daily selection and decision APIs. Questionnaire scoring remains pending; fixture apps must label manually selected demo profiles. Never write module data via storage.write. Financial values are unavailable until approved fields and definitions are wired.
 </pre>
@@ -707,9 +707,9 @@ The platform provides company-capabilities-v1. Reuse its matching, daily selecti
           <!-- prettier-ignore -->
           <pre data-protocol="research.md" style="white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.6 ui-monospace,monospace"># Market research protocol v1
 
-Include news retrieval with market research. Standalone research is industry-level. When supporting company-card details, prepare company-specific research plus relevant industry context before the user decides yes or no.
+Standalone research is industry-level. When supporting company-card details, prepare company-specific research plus relevant industry context before the user decides yes or no.
 
-Resolve a requested company and its industry from the platform-managed company table. Keep research evidence and dates; distinguish verified events from possible implications. Demo news is retrieved once; there is no recurring monitoring.
+Resolve a requested company and its industry from the platform-managed company table. Keep research evidence and dates; distinguish verified events from possible implications. There is no recurring monitoring.
 
 Detailed research procedure, source coverage, freshness and bilingual explanation material remain pending. Display unavailable for unsupported facts. Fixture research must be synthetic and clearly identified.
 </pre>
@@ -723,8 +723,8 @@ Detailed research procedure, source coverage, freshness and bilingual explanatio
             eligibility.
           </li>
           <li>
-            Product team’s internal company CSV and validated Wind fields/access. Price-target and
-            news coverage still need confirmation.
+            Product team’s internal company CSV and validated Wind fields/access. Price-target
+            coverage still needs confirmation.
           </li>
         </ul>
         <p class="note">App 3 and brokerage integration are excluded from this build scope.</p>
@@ -757,9 +757,7 @@ Detailed research procedure, source coverage, freshness and bilingual explanatio
             <tbody>
               <tr>
                 <td>Market research</td>
-                <td>
-                  One-time news retrieval; company CSV industry lookup where a company is specified
-                </td>
+                <td>Company CSV industry lookup where a company is specified</td>
                 <td>Historical analysis or price target</td>
               </tr>
               <tr>
@@ -774,7 +772,7 @@ Detailed research procedure, source coverage, freshness and bilingual explanatio
               </tr>
               <tr>
                 <td>Company research detail</td>
-                <td>Company-specific research + industry context + news</td>
+                <td>Company-specific research + industry context</td>
                 <td>Historical package unless requested</td>
               </tr>
             </tbody>
@@ -821,7 +819,6 @@ Detailed research procedure, source coverage, freshness and bilingual explanatio
             <ul>
               <li>Company-specific research</li>
               <li>Relevant industry context</li>
-              <li>One-time news, sources and dates</li>
             </ul>
             <p class="note">
               Shown when research is included in the app contract. This walkthrough contains no
@@ -893,12 +890,7 @@ Detailed research procedure, source coverage, freshness and bilingual explanatio
       });
       const scenarios = {
         research: {
-          nodes: [
-            "Industry request",
-            "Industry research",
-            "One-time news",
-            "Evidence-backed industry analysis",
-          ],
+          nodes: ["Industry request", "Industry research", "Evidence-backed industry analysis"],
           note: "A company search can use the CSV to identify its industry. Standalone output remains industry-level.",
         },
         history: {
@@ -923,7 +915,7 @@ Detailed research procedure, source coverage, freshness and bilingual explanatio
             "Risk + industries",
             "CSV matching",
             "Daily company cards",
-            "Company research + industry context + news",
+            "Company research + industry context",
           ],
           note: "The user can open prepared research before deciding yes or no.",
         },
@@ -931,7 +923,7 @@ Detailed research procedure, source coverage, freshness and bilingual explanatio
           nodes: [
             "Risk + industries",
             "Matched company cards",
-            "Research + news",
+            "Research",
             "Historical analysis + sourced target",
           ],
           note: "Capabilities can cross demo-app boundaries. Feasibility still checks every required protocol and provider.",

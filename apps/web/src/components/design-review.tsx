@@ -343,9 +343,7 @@ export function DesignReview({
                   )}
                   {record.readiness === "live"
                     ? "Feasible — live market data (Tushare)"
-                    : record.readiness === "fixture"
-                      ? "Feasible — synthetic demo build"
-                      : "Blocked"}
+                    : "Blocked"}
                 </span>
                 <span className="text-xs font-normal text-muted-foreground">
                   Record {record.revision} · {new Date(record.createdAt).toLocaleString()}
@@ -371,10 +369,7 @@ export function DesignReview({
                 </ul>
               )}
               <p className="text-xs text-muted-foreground">
-                Data:{" "}
-                {record.plan.mode === "fixture"
-                  ? "synthetic demo"
-                  : `live via ${record.provider} (pending)`}
+                Data: live from Tushare
                 {record.companyIds.length ? ` · companies ${record.companyIds.join(", ")}` : ""}
               </p>
             </CardContent>
@@ -395,10 +390,12 @@ export function DesignReview({
 }
 
 const columns = [
-  { kind: "data", title: "Input", Icon: Database },
-  { kind: "capability", title: "Capabilities", Icon: Sparkles },
-  { kind: "output", title: "Output", Icon: LayoutPanelLeft },
+  { kind: "data", title: "Information used", Icon: Database },
+  { kind: "capability", title: "Steps the app takes", Icon: Sparkles },
+  { kind: "output", title: "What you get", Icon: LayoutPanelLeft },
 ] as const;
+
+const kindNames = { data: "Information", capability: "Step", output: "Result" } as const;
 
 export function WorkflowView({
   app,
@@ -416,18 +413,18 @@ export function WorkflowView({
   return (
     <section className="mx-auto flex w-full max-w-5xl min-w-0 flex-col gap-6 p-4 pb-10">
       <header className="flex flex-col gap-1">
-        <h2 className="studio-display font-medium">Workflow</h2>
+        <h2 className="studio-display font-medium">How your app works</h2>
         <p className="text-sm text-muted-foreground">
           {graph.basis === "proposal"
-            ? "Proposed workflow awaiting user review; not active."
+            ? "This workflow is waiting for your approval — nothing is built until you approve it."
             : graph.basis === "active-release"
-              ? "Showing the active application's specification and build record."
+              ? "Based on your app as it is running right now."
               : graph.basis === "build-record"
-                ? "Planned workflow from the latest approved build preparation; not active yet."
-                : "Draft specification; no approved build record available."}{" "}
-          Capabilities are declared for this build, not evidence of runtime use. Supporting
-          dependencies appear in capability details. Outputs come from the specification, not
-          observed execution results.
+                ? "Based on your app as it was last built."
+                : "Based on the plan so far — nothing has been built yet."}{" "}
+          A plain-language summary to help you review the idea. Inside the app these steps may be
+          combined or reordered, so the working app itself is always the final word. Select any item
+          to see what it does.
         </p>
       </header>
       <div
@@ -445,8 +442,13 @@ export function WorkflowView({
             <Card size="sm" className="min-w-0">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-sm">
-                  <Icon className="size-4 text-muted-foreground" />
-                  {title}
+                  <Icon className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0">
+                    <span className="mr-1.5 text-muted-foreground" aria-hidden="true">
+                      {index + 1}·
+                    </span>
+                    {title}
+                  </span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-1.5">
@@ -466,9 +468,7 @@ export function WorkflowView({
                     ))
                 ) : (
                   <p className="px-2 py-2 text-sm text-muted-foreground">
-                    {kind === "capability"
-                      ? "No capabilities recorded for this workflow."
-                      : "None recorded."}
+                    {kind === "capability" ? "Chosen during the build." : "Nothing yet."}
                   </p>
                 )}
               </CardContent>
@@ -482,7 +482,7 @@ export function WorkflowView({
             <CardTitle className="flex flex-wrap items-center justify-between gap-2">
               {node.label}
               <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-normal text-muted-foreground">
-                {node.kind === "data" ? "input" : node.kind}
+                {kindNames[node.kind]}
               </span>
             </CardTitle>
           </CardHeader>
@@ -490,9 +490,9 @@ export function WorkflowView({
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
               {(
                 [
-                  ["Detail", node.detail || "None recorded."],
-                  ["Inputs", node.inputs || "None recorded."],
-                  ["Outputs", node.outputs || "None recorded."],
+                  ["About", node.detail || "Nothing recorded yet."],
+                  ["What it uses", node.inputs || "Nothing recorded yet."],
+                  ["What it produces", node.outputs || "Nothing recorded yet."],
                 ] as const
               ).map(([label, value]) => (
                 <div key={label} className="flex flex-col gap-0.5">
@@ -522,7 +522,7 @@ export function WorkflowView({
             )}
             <p>Capabilities: {proposal.capabilities.map(capabilityLabel).join(", ")}</p>
             <p>Companies: {proposal.companyQueries.join(", ") || "None specified"}</p>
-            <p>Data mode: {proposal.mode === "fixture" ? "Synthetic demo" : "Live requested"}</p>
+            <p>Data mode: Live — real Shanghai Stock Exchange Class A data</p>
             {proposal.approvedAt ? (
               <p>
                 The builder continues automatically after approval. Feasibility checks still apply;

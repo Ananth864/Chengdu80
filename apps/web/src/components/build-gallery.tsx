@@ -113,7 +113,7 @@ export function BuildGallery({
                   <div className="build-cover-label">
                     <span>{buildCategory(app)}</span>
                     <span className="build-data-status">
-                      {app.current!.buildRecord ? "Synthetic demo" : "Earlier build"}
+                      {app.current!.buildRecord ? "Live · SSE Class A" : "Earlier build"}
                     </span>
                   </div>
                   <div className="build-screen relative">

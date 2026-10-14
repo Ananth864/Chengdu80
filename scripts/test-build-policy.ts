@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { parseStockBasic, resetSseCompanyCache } from "../apps/web/src/server/providers";
+import { suppliedCompanyUniverseVersion } from "../apps/web/src/server/company-universe";
 import {
   prepareBuild,
   requireBuild,
@@ -16,16 +17,21 @@ import { protocols } from "../apps/web/src/lib/contracts";
 import { sampleBundle } from "../apps/web/src/lib/samples";
 import { capabilityCatalog, capabilityDefinitions } from "../apps/web/src/lib/capability-catalog";
 import type { BusinessCapability } from "../apps/web/src/lib/capability-catalog";
-import { approvedPermissions } from "../apps/web/src/lib/financial-starter";
-import { buildPlanSchema } from "../apps/web/src/lib/build-plan";
+import {
+  approvedPermissions,
+  financialStarterVersion,
+} from "../apps/web/src/lib/financial-starter";
+import { buildPlanSchema, type BuildRecord } from "../apps/web/src/lib/build-plan";
+
 const plan = {
-  requirements: "An industry research demo",
+  requirements: "An industry research app on real Shanghai listings",
   capabilities: ["market-research"],
   companyQueries: ["600000.SH"],
-  mode: "fixture",
+  mode: "live",
   themeOverride: null,
 };
 const record = await prepareBuild(plan, "turn-1", 1);
+assert.equal(record.readiness, "live");
 const { themeOverride: _defaultTheme, ...withoutTheme } = plan;
 assert.deepEqual(buildPlanSchema.parse(withoutTheme), buildPlanSchema.parse(plan));
 assert.equal(buildPlanSchema.parse({ ...plan, themeOverride: undefined }).themeOverride, null);
@@ -82,9 +88,8 @@ console.log("PASS bundled financial expert, allowlisted skill loading and build 
 assert.deepEqual(record.resolvedCapabilities, ["market-research"]);
 assert.equal(record.theme, "starter-default");
 requireBuild(record, "turn-1");
-assert.throws(() =>
-  requireBuild({ ...record, readiness: "fixture", provider: "wind" } as never, "turn-1"),
-);
+assert.throws(() => requireBuild({ ...record, provider: "wind" } as never, "turn-1"));
+assert.throws(() => requireBuild({ ...record, readiness: "fixture" }, "turn-1"));
 assert.throws(() =>
   requireBuild({ ...record, plan: { ...record.plan, capabilities: ["company-cards"] } }, "turn-1"),
 );
@@ -93,6 +98,7 @@ assert.throws(() => requireBuild(rejectedIntent, "turn-1"));
 assert.throws(() => requireBuild(record, "turn-2"));
 assert.throws(() => requireBuild(undefined, "turn-1"));
 assert.throws(() => resolveCapabilities(["weather"] as never));
+await assert.rejects(() => prepareBuild({ ...plan, mode: "fixture" }, "turn-1", 1), /live mode/);
 assert.equal(capabilityCatalog.version, "1.9.0");
 assert.equal(capabilityCatalog.capabilities.length, 6);
 for (const capability of [
@@ -105,7 +111,7 @@ for (const capability of [
   assert.deepEqual(capabilityDefinitions[capability].dependencies, []);
   assert.deepEqual(resolveCapabilities([capability]), [capability]);
 }
-await assert.rejects(prepareBuild({ ...plan, capabilities: ["news"] }, "turn-1", 1));
+await assert.rejects(() => prepareBuild({ ...plan, capabilities: ["news"] }, "turn-1", 1));
 assert.equal(
   buildPlanSchema.safeParse({ ...plan, capabilities: ["market-research", "news"] }).success,
   false,
@@ -129,11 +135,12 @@ for (const [capability, permission] of [
 ] as const) {
   const independent = await prepareBuild({ ...plan, capabilities: [capability] }, "turn-1", 1);
   requireBuild(independent, "turn-1");
+  assert.equal(independent.readiness, "live");
   assert.deepEqual(independent.companyIds, ["600000.SH"]);
   assert.deepEqual(independent.resolvedCapabilities, [capability]);
   assert.deepEqual(independent.moduleVersions, {
     companies: "company-capabilities-v1",
-    starter: "financial-react-v1",
+    starter: financialStarterVersion,
     [permission]: "1.2.0",
   });
   assert.deepEqual(approvedPermissions(independent, true), [
@@ -141,7 +148,7 @@ for (const [capability, permission] of [
     "storage.write",
     permission,
   ]);
-  for (const companyQueries of [[], ["DEMO001"]]) {
+  for (const companyQueries of [[], ["DEMO001"], ["Apple"]]) {
     const blocked = await prepareBuild(
       { ...plan, capabilities: [capability], companyQueries },
       "turn-1",
@@ -151,43 +158,45 @@ for (const [capability, permission] of [
     assert.throws(() => requireBuild(blocked, "turn-1"));
   }
 }
-const unknown = await prepareBuild({ ...plan, companyQueries: ["Apple"] }, "turn-1", 2);
-assert.equal(unknown.readiness, "blocked");
-assert.throws(() => requireBuild(unknown, "turn-1"));
-const historical = await prepareBuild(
-  { ...plan, capabilities: ["price-target"], companyQueries: ["600000.SH"] },
-  "turn-1",
-  3,
-);
-assert.equal(historical.readiness, "fixture");
-assert.deepEqual(historical.companyIds, ["600000.SH"]);
-assert.deepEqual(historical.resolvedCapabilities, ["price-target"]);
-assert.equal(historical.moduleVersions["finance.price-target"], "1.2.0");
-assert.equal(historical.moduleVersions["finance.historical-analysis"], undefined);
-assert.deepEqual(approvedPermissions(historical, true), [
-  "storage.read",
-  "storage.write",
-  "finance.price-target",
-]);
-assert.equal(record.moduleVersions["finance.industry-research"], "1.2.0");
-assert.deepEqual(approvedPermissions(record, true), [
-  "storage.read",
-  "storage.write",
-  "finance.industry-research",
-]);
-const withoutCompany = await prepareBuild(
-  { ...plan, capabilities: ["historical-analysis"], companyQueries: [] },
-  "turn-1",
-  4,
-);
-assert.equal(withoutCompany.readiness, "blocked");
 await assert.rejects(() => prepareBuild({ ...plan, capabilities: ["weather"] }, "turn-1", 1));
 const bundle = sampleBundle(protocols[0]!.defaultSpec);
 assert.throws(() => validateScopedBundle(bundle, record));
 bundle.manifest.permissions = ["finance.calculate", "storage.read", "storage.write"];
-assert.throws(() => validateScopedBundle(bundle, record));
-bundle.files["index.html"] = "<main><p>Synthetic demo</p></main>";
+bundle.files["index.html"] = "<main>Live analysis</main>";
 validateScopedBundle(bundle, record);
+
+// Persisted fixture records remain valid only with their original hash and visible label.
+const { hash: _liveHash, ...legacyPayload } = {
+  ...record,
+  plan: { ...record.plan, mode: "fixture" as const },
+  readiness: "fixture" as const,
+  companyIds: ["DEMO001"],
+  companyTableVersion: "synthetic-companies-v1",
+  moduleVersions: { companies: "company-capabilities-v1", starter: "financial-react-v1" },
+};
+const legacyRecord: BuildRecord = {
+  ...legacyPayload,
+  hash: createHash("sha256")
+    .update(
+      JSON.stringify(legacyPayload, (_key, item) =>
+        item && typeof item === "object" && !Array.isArray(item)
+          ? Object.fromEntries(
+              Object.keys(item)
+                .sort()
+                .map((key) => [key, item[key]]),
+            )
+          : item,
+      ),
+    )
+    .digest("hex"),
+};
+requireBuild(legacyRecord, "turn-1");
+assert.throws(() => validateScopedBundle(bundle, legacyRecord), /Synthetic demo/);
+const legacyBundle = structuredClone(bundle);
+legacyBundle.files["index.html"] = "<main>Synthetic demo</main>";
+validateScopedBundle(legacyBundle, legacyRecord);
+assert((await managedCompanies("fixture")).synthetic);
+
 const sample = JSON.parse(
   await readFile(new URL("./fixtures/stock-basic-sample.json", import.meta.url), "utf8"),
 );
@@ -195,12 +204,37 @@ const previousToken = process.env.TUSHARE_TOKEN;
 const originalFetch = globalThis.fetch;
 try {
   process.env.TUSHARE_TOKEN = "";
+  globalThis.fetch = Object.assign(
+    async () => {
+      throw new Error("CSV preparation must not fetch");
+    },
+    {
+      preconnect: originalFetch.preconnect,
+    },
+  );
   resetSseCompanyCache();
-  const unconfigured = await prepareBuild({ ...plan, mode: "live" }, "turn-1", 1);
-  assert.equal(unconfigured.readiness, "live", "CSV identity preparation needs no provider token");
-  assert.deepEqual(unconfigured.companyIds, ["600000.SH"]);
-  assert.deepEqual(unconfigured.blockers, []);
-  requireBuild(unconfigured, "turn-1");
+  const csvCards = await prepareBuild(
+    { ...plan, capabilities: ["company-cards"], companyQueries: ["600000"] },
+    "csv-cards-turn",
+    1,
+  );
+  assert.equal(csvCards.readiness, "live");
+  assert.deepEqual(csvCards.companyIds, ["600000.SH"]);
+  assert.deepEqual(csvCards.blockers, []);
+  assert.equal(csvCards.companyTableVersion, suppliedCompanyUniverseVersion);
+  assert.match(csvCards.companyTableVersion, /^[0-9a-f]{64}$/);
+  requireBuild(csvCards, "csv-cards-turn");
+  for (const capability of ["historical-analysis", "price-target", "market-research"]) {
+    const unconfigured = await prepareBuild({ ...plan, capabilities: [capability] }, "turn-1", 1);
+    assert.equal(
+      unconfigured.readiness,
+      "live",
+      "CSV identity preparation needs no provider token",
+    );
+    assert.deepEqual(unconfigured.companyIds, ["600000.SH"]);
+    assert.deepEqual(unconfigured.blockers, []);
+    requireBuild(unconfigured, "turn-1");
+  }
   const unavailable = await managedCompanies("live");
   assert.equal(unavailable.available, false);
   if (unavailable.available) throw new Error("Expected unconfigured server lookup");
@@ -208,7 +242,7 @@ try {
   process.env.TUSHARE_TOKEN = "test-token";
   globalThis.fetch = Object.assign(async () => new Response(JSON.stringify(sample)), {
     preconnect: originalFetch.preconnect,
-  }) satisfies typeof fetch;
+  });
   resetSseCompanyCache();
   const live = await managedCompanies("live");
   assert(live.available);
@@ -218,31 +252,12 @@ try {
   assert(!tickers.includes("900901.SH"), "B-shares are outside the SSE Class A scope");
   assert(!tickers.includes("000001.SZ"), "SZSE companies are outside the SSE Class A scope");
   assert(/sse-a:[0-9a-f]+:\d{8}/.test(live.version));
-  const valid = await prepareBuild(
-    { ...plan, mode: "live", companyQueries: ["600000.SH"] },
-    "turn-1",
-    1,
-  );
-  assert.deepEqual(valid.companyIds, ["600000.SH"]);
-  assert.equal(
-    valid.readiness,
-    "live",
-    "Prepared live readiness pins supplied-CSV identity, not financial adapter coverage",
-  );
-  requireBuild(valid, "turn-1");
-  validateScopedBundle(bundle, valid);
   const byFullName = await prepareBuild(
-    { ...plan, mode: "live", companyQueries: ["上海浦东发展银行股份有限公司"] },
+    { ...plan, companyQueries: ["上海浦东发展银行股份有限公司"] },
     "turn-1",
     2,
   );
   assert.deepEqual(byFullName.companyIds, ["600000.SH"]);
-  const outside = await prepareBuild(
-    { ...plan, mode: "live", companyQueries: ["Apple"] },
-    "turn-1",
-    3,
-  );
-  assert(outside.blockers.some((blocker) => blocker.includes("SSE Class A scope")));
   const duplicates = JSON.parse(JSON.stringify(sample)) as typeof sample;
   duplicates.data.items.push(duplicates.data.items[0]);
   assert.throws(() => parseStockBasic(duplicates), /duplicate tickers/);
@@ -254,7 +269,7 @@ try {
   resetSseCompanyCache();
 }
 console.log(
-  "PASS dependency closure, unsupported capabilities, turn gating, labels/permissions, live SSE Class A identity and blockers",
+  "PASS independent scopes, live-only plans, pinned fixture compatibility, CSV identity without tokens and live lookup blockers",
 );
 
 const csv =

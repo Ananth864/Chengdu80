@@ -54,14 +54,12 @@ export function workflowGraph(
     {
       id: "data",
       kind: "data",
-      label: record
-        ? record.plan.mode === "fixture"
-          ? "Synthetic demo data"
-          : "Live platform data"
-        : "Application inputs",
+      label: record ? "Live platform data" : "Your inputs",
       detail: record
-        ? `Company table ${record.companyTableVersion} · provider ${record.provider}`
-        : "Inputs are confirmed when the internal build record is prepared.",
+        ? `Live market data from ${
+            record.provider === "tushare" ? "Tushare" : record.provider
+          }, using the platform's checked company list.`
+        : "These are confirmed when the app is built.",
       inputs: [
         spec.inputs.join("; "),
         requirements?.assumptions.length
@@ -71,8 +69,8 @@ export function workflowGraph(
         .filter(Boolean)
         .join(" · "),
       outputs: requirements?.missingInputs.length
-        ? `Normalized application inputs (missing: ${requirements.missingInputs.join("; ")})`
-        : "Normalized application inputs",
+        ? `The information the app needs (still missing: ${requirements.missingInputs.join("; ")})`
+        : "The information the app needs",
     },
   ];
   if (proposal && spec.inputs.length) {
@@ -95,10 +93,10 @@ export function workflowGraph(
     nodes.push({
       id: "companies",
       kind: "data",
-      label: "Requested companies",
-      detail: "Resolved against the platform-managed company table.",
+      label: "Companies you picked",
+      detail: "Matched against the platform's checked company list.",
       inputs: record.companyIds.join(", "),
-      outputs: "Table identities with industry and size category",
+      outputs: "Each company's name, industry and size",
     });
   const sourceIds = record?.companyIds.length ? ["data", "companies"] : ["data"];
   const capabilities: BusinessCapability[] = proposal
@@ -126,9 +124,9 @@ export function workflowGraph(
         .join(" "),
       inputs:
         sourceIds.includes("companies") && id !== "market-research"
-          ? "Application and company-table inputs"
-          : "Application inputs",
-      outputs: "Capability results",
+          ? "Your inputs and the company list"
+          : "Your inputs",
+      outputs: "Findings passed on to your app",
     });
   const outputs = spec.outputs.map((output) => output.trim()).filter(Boolean);
   for (const [index, output] of (outputs.length ? outputs : ["No outputs specified yet"]).entries())
@@ -150,7 +148,7 @@ export function workflowGraph(
     edges: middle.length
       ? [
           ...sourceIds.flatMap((from) =>
-            middle.map((node) => ({ from, to: node.id, label: "Provides inputs" })),
+            middle.map((node) => ({ from, to: node.id, label: "supplies information" })),
           ),
           ...middle.flatMap((node) =>
             outputNodes.map((output) => ({

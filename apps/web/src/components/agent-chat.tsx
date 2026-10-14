@@ -95,6 +95,24 @@ function toolTarget(args: string) {
   return "";
 }
 
+// Users see what the agent is doing, not how the platform names its steps.
+const toolLabels: Record<string, string> = {
+  propose_build: "Writing the build plan",
+  prepare_build: "Preparing the build",
+  deploy_preview: "Preparing your preview",
+  lookup_companies: "Looking up companies",
+  record_requirements: "Saving your requirements",
+  read_starter_reference: "Reviewing the starter template",
+  get_browser_logs: "Checking the app in the preview",
+  read_app_data: "Reading app data",
+  list_files: "Listing project files",
+  read_file: "Reading a file",
+  write_file: "Writing a file",
+  edit_file: "Editing a file",
+  bash: "Running a command",
+  set_specification: "Updating the specification",
+};
+
 function ToolActivity({
   part,
   result,
@@ -119,7 +137,7 @@ function ToolActivity({
           <Terminal data-icon="inline-start" />
         )}
         <span className="min-w-0 truncate">
-          {part.name.replaceAll("_", " ")}
+          {toolLabels[part.name] ?? part.name.replaceAll("_", " ")}
           {target ? ` · ${target}` : ""}
         </span>
         <span className="ml-auto shrink-0">
@@ -453,8 +471,8 @@ export function AgentChat(props: AgentChatProps) {
             {!props.app && (
               <EmptyContent>
                 {[
-                  "Build a synthetic industry research demo",
-                  "Build a synthetic daily company-card demo",
+                  "Build an industry research app for Shanghai-listed banks",
+                  "Build a daily company-card app for Shanghai-listed stocks",
                 ].map((example) => (
                   <Button
                     key={example}

@@ -54,9 +54,9 @@ const displayCompanySchema = companySchema.extend({
     .array(
       z.object({
         id: z.string(),
-        value: z.null(),
-        status: z.literal("unavailable"),
-        reason: z.string(),
+        value: z.number().nullable(),
+        status: z.enum(["available", "unavailable"]),
+        reason: z.string().optional(),
       }),
     )
     .default([]),
@@ -66,7 +66,7 @@ const matchingResult = z.object({
   size: z.enum(["small", "medium", "large"]),
   companies: z.array(displayCompanySchema),
   moduleVersion: z.literal("company-capabilities-v1"),
-  synthetic: z.literal(true),
+  synthetic: z.literal(false),
 });
 const cardsInput = z.discriminatedUnion("action", [
   criteriaSchema.extend({ action: z.literal("batch"), revisitDismissed: z.boolean().optional() }),
@@ -75,7 +75,7 @@ const cardsInput = z.discriminatedUnion("action", [
 ]);
 const cardsResult = z.object({
   day: z.string(),
-  synthetic: z.literal(true),
+  synthetic: z.literal(false),
   moduleVersion: z.literal("company-capabilities-v1"),
   criteria: criteriaSchema.nullable(),
   exhausted: z.boolean(),

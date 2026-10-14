@@ -1,4 +1,4 @@
-import type { BuildRecord, BuildPlan, BusinessCapability } from "./build-plan";
+import type { BuildPlan, BuildRecord, BusinessCapability } from "./build-plan";
 import type { UIMessage } from "@tanstack/ai";
 import { z } from "zod";
 import { isProjectFile } from "./project-files";
@@ -7,6 +7,8 @@ export const capabilities = [
   "market.prices",
   "market.assets",
   "finance.calculate",
+  // Persisted main releases only; no new build can acquire this permission.
+  "finance.research",
   "finance.risk-profile",
   "finance.company-discovery",
   "finance.company-discovery.v1-3",
@@ -253,7 +255,7 @@ export type Application = {
     approvedAt?: string;
     turnId: string;
     createdAt: string;
-    mode: "fixture" | "live";
+    mode: BuildRecord["plan"]["mode"];
     capabilities: BusinessCapability[];
     companyQueries: string[];
     summary: string;

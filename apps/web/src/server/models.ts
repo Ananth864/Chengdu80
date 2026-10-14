@@ -19,11 +19,17 @@ export async function modelAdapter() {
     api: config.provider === "glm" ? "chat-completions" : "responses",
     apiKey: config.apiKey,
     baseURL: config.baseURL,
-    timeout: config.provider === "glm" ? 180000 : 90000,
-    maxRetries: 0,
+    // Long streaming steps with large output budgets stay under the overall
+    // turn deadline; this only guards a stuck connection.
+    timeout: config.provider === "glm" ? 600000 : 300000,
+    // Retry transient provider or network failures instead of failing the step.
+    maxRetries: 2,
   });
 }
-export async function modelOptions(reasoning: "low" | "max" = "low", maxTokens = 4096) {
+export async function modelOptions(
+  reasoning: "low" | "medium" | "high" | "max" = "low",
+  maxTokens = 4096,
+) {
   return modelConfiguration(await settings()).provider === "glm"
     ? { thinking: { type: "enabled" }, reasoning_effort: reasoning, max_tokens: maxTokens }
     : { max_output_tokens: maxTokens };

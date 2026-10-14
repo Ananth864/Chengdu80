@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BuildRecord } from "../apps/web/src/lib/build-plan";
+import { capabilityStarterV1Files } from "../apps/web/src/lib/capability-starter-v1";
 import { capabilityCatalog, capabilityDefinitions } from "../apps/web/src/lib/capability-catalog";
 import type { AppBundle, Application, ProductSpec, Release } from "../apps/web/src/lib/contracts";
 import { discoveryStarterSnapshot } from "../apps/web/src/lib/discovery-starter-snapshot";
@@ -83,7 +84,7 @@ const plan = {
   requirements: spec.purpose,
   capabilities: scopes,
   companyQueries: ["600000"],
-  mode: "fixture",
+  mode: "live",
   themeOverride: null,
 };
 const calls: { endpoint: string; params: Record<string, string> }[] = [];
@@ -163,6 +164,24 @@ globalThis.fetch = Object.assign(
   { preconnect: originalFetch.preconnect },
 );
 
+function rehashRecord(record: BuildRecord) {
+  const { hash: _hash, artifactHash: _artifactHash, ...payload } = record;
+  record.hash = createHash("sha256")
+    .update(
+      JSON.stringify(payload, (_key, value) =>
+        value && typeof value === "object" && !Array.isArray(value)
+          ? Object.fromEntries(
+              Object.keys(value)
+                .sort()
+                .map((key) => [key, value[key]]),
+            )
+          : value,
+      ),
+    )
+    .digest("hex");
+  requireBuild(record, record.turnId);
+}
+
 // Matching hashes exercise dispatch policy, not a real build or sandbox verification.
 async function fixtureRelease(bundle: AppBundle, record: BuildRecord): Promise<Release> {
   const hash = await sourceHash(bundle);
@@ -211,8 +230,16 @@ try {
       [catalogIds[index]],
     );
   }
-  const record = await prepareBuild(plan, "financial-integration-fixture", 1);
-  requireBuild(record, record.turnId);
+  const liveRecord = await prepareBuild(plan, "financial-integration-live", 1);
+  assert.equal(liveRecord.readiness, "live");
+  assert.equal(liveRecord.moduleVersions.starter, "financial-react-v4");
+  await assert.rejects(prepareBuild({ ...plan, mode: "fixture" }, "fixture-rejected", 1));
+  // Reconstruct a persisted historical fixture, never a newly prepared fixture plan.
+  const record: BuildRecord = structuredClone(liveRecord);
+  record.plan.mode = "fixture";
+  record.readiness = "fixture";
+  record.moduleVersions.starter = "financial-react-v1";
+  rehashRecord(record);
   assert.equal(record.readiness, "fixture");
   assert.deepEqual(record.blockers, []);
   assert.deepEqual(record.resolvedCapabilities, [...scopes].sort());
@@ -227,10 +254,10 @@ try {
   }
   const all = await prepareBuild(
     { ...plan, capabilities: [...scopes, "risk-industry-matching"] },
-    "all-six-fixture",
+    "all-six-live",
     1,
   );
-  assert.equal(all.readiness, "fixture");
+  assert.equal(all.readiness, "live");
   assert.deepEqual(
     approvedPermissions(all, true).sort(),
     [
@@ -250,6 +277,7 @@ try {
   assert.equal(fetchAttempts, 0);
 
   const bundle = projectStarterBundle(spec);
+  Object.assign(bundle.files, capabilityStarterV1Files);
   bundle.manifest.permissions = approvedPermissions(record, true);
   bundle.files[buildContextPath] = buildContextSource(record, spec.name);
   assert.deepEqual(bundle.manifest.permissions, ["storage.read", "storage.write", ...permissions]);
@@ -289,19 +317,20 @@ try {
     assert.equal(fetchAttempts, 0);
   }
   console.log(
-    "PASS all six catalog/registry contracts align; canonical fixture preparation and RPCs never fetch or mutate data; news blocked",
+    "PASS all six catalog/registry contracts align; new fixture plans rejected; historical fixture RPCs never fetch or mutate data; news blocked",
   );
 
-  const liveRecord = await prepareBuild(
-    { ...plan, mode: "live" },
-    "financial-integration-live-fixture",
-    1,
-  );
   assert.equal(liveRecord.readiness, "live");
   assert.deepEqual(liveRecord.companyIds, ["600000.SH"]);
   assert.equal(fetchAttempts, 0, "Live preparation uses canonical CSV, not Tushare");
-  const liveBundle = structuredClone(bundle);
+  const liveBundle = projectStarterBundle(spec);
+  liveBundle.manifest.permissions = approvedPermissions(liveRecord, true);
   liveBundle.files[buildContextPath] = buildContextSource(liveRecord, spec.name);
+  validateScopedBundle(liveBundle, liveRecord);
+  const editable = structuredClone(liveBundle);
+  for (const path of ["src/components/financial-app.tsx", "src/components/financial-analysis.tsx"])
+    editable.files[path] += "\n// editable presentation";
+  validateScopedBundle(editable, liveRecord);
   const liveRelease = await fixtureRelease(liveBundle, liveRecord);
   const liveBefore = await install(liveRelease);
   for (const patch of [
@@ -451,21 +480,7 @@ try {
   }
   const oldRecord = structuredClone(record);
   for (const permission of permissions) delete oldRecord.moduleVersions[permission];
-  const { hash: _hash, artifactHash: _artifactHash, ...payload } = oldRecord;
-  oldRecord.hash = createHash("sha256")
-    .update(
-      JSON.stringify(payload, (_key, value) =>
-        value && typeof value === "object" && !Array.isArray(value)
-          ? Object.fromEntries(
-              Object.keys(value)
-                .sort()
-                .map((key) => [key, value[key]]),
-            )
-          : value,
-      ),
-    )
-    .digest("hex");
-  requireBuild(oldRecord, oldRecord.turnId);
+  rehashRecord(oldRecord);
   assert.deepEqual(approvedPermissions(oldRecord, true), ["storage.read", "storage.write"]);
   const oldBundle = structuredClone(bundle);
   oldBundle.manifest.permissions = approvedPermissions(oldRecord, true);
@@ -526,14 +541,14 @@ try {
   for (const path of [
     "src/lib/cd80.ts",
     "src/lib/financial-results.ts",
-    "src/components/financial-app.tsx",
-    "src/components/financial-analysis.tsx",
+    "package.json",
+    "vite.config.ts",
   ]) {
-    assert.equal(typeof bundle.files[path], "string", `Missing protected source: ${path}`);
-    const changed = structuredClone(bundle);
+    assert.equal(typeof liveBundle.files[path], "string", `Missing protected source: ${path}`);
+    const changed = structuredClone(liveBundle);
     changed.files[path] += "\n// mutated protected financial source";
-    assert.throws(() => validateScopedBundle(changed, record), /starter file unchanged/);
-    const changedRelease = await fixtureRelease(changed, record);
+    assert.throws(() => validateScopedBundle(changed, liveRecord), /starter file unchanged/);
+    const changedRelease = await fixtureRelease(changed, liveRecord);
     const mutationBefore = await install(changedRelease);
     for (const permission of permissions) {
       await assert.rejects(rpc(permission, request, changedRelease.id), /starter file unchanged/);

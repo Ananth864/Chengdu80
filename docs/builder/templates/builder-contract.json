@@ -37,18 +37,13 @@
       "id": "market-research",
       "protocolVersion": "TODO",
       "readiness": "template"
-    },
-    {
-      "id": "news",
-      "protocolVersion": "TODO",
-      "readiness": "template"
     }
   ],
   "dependencies": {
     "risk-industry-matching": ["risk-assessment", "industry-preference"],
     "company-cards": ["risk-industry-matching"],
     "company-research-detail": ["market-research"],
-    "market-research": ["news"]
+    "market-research": []
   },
   "configuration": {
     "riskToSize": {
@@ -64,7 +59,6 @@
     "defaultMetrics": ["pe", "dividendYield", "roe", "interestCoverage"],
     "selectedMetrics": null,
     "researchMode": "company-and-industry",
-    "newsMode": "once-per-research-run",
     "yesAction": "add-to-watchlist",
     "noAction": "dismiss",
     "brokerageIntegration": false
@@ -101,7 +95,7 @@
     "mode": "fixture",
     "adapters": [
       {
-        "id": "wind",
+        "id": "tushare",
         "product": "TODO",
         "readiness": "template",
         "requiredFieldsReference": "TODO"
@@ -110,7 +104,7 @@
     "fixturesReference": "TODO",
     "evidenceRequired": true,
     "missingValuePolicy": "unavailable-with-reason",
-    "officialProvider": "wind",
+    "officialProvider": "tushare",
     "allowAutomaticProviderFallback": false,
     "ownership": "platform-managed",
     "companyTableConfiguredBy": "product-team"
@@ -143,7 +137,7 @@
     "reuse-existing-ai-integration",
     "resolved-theme-matches-contract",
     "requested-companies-valid-in-table",
-    "wind-production-provider",
+    "tushare-production-provider",
     "plain-language-specification-review"
   ],
   "feasibility": {

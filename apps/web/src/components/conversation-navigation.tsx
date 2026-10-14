@@ -52,7 +52,7 @@ export function ConversationNavigation({
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <a href="/" aria-label="Linus home" className="studio-wordmark">
+            <a href="/#view=builds" aria-label="Linus home" className="studio-wordmark">
               <span>Linus</span>
             </a>
           </SidebarMenuItem>

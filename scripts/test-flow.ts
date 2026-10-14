@@ -148,6 +148,10 @@ try {
   const after = await request();
   assert.deepEqual(after.apps, before.apps);
   pass("Repeated legacy API calls cannot bypass the capability contract or activate a release");
+  const result = await request({ action: "accept", appId: "missing", releaseId: "missing" }, false);
+  assert(result.error.includes("not found") || result.error.includes("denied"));
+  assert(!result.error.includes("internal capability contract"));
+  pass("Explicit Preview approval remains available but rejects missing applications");
   const unknown = await request({ action: "build-anything" }, false);
   assert(unknown.error);
   pass("Unknown platform actions fail closed");
@@ -162,7 +166,7 @@ try {
     appId: workspace.id,
     requirements: {
       analysisPeriod: "Past year",
-      assumptions: ["Synthetic demo data only"],
+      assumptions: ["Live SSE Class A data only"],
       missingInputs: [],
       questions: [{ id: "q1", question: "Which industries matter to you?", answer: "" }],
     },
@@ -181,7 +185,9 @@ try {
   );
   assert(protocolChange.error.toLowerCase().includes("protocol"));
   pass("save-design rejects changing the app's calculation protocol");
-  console.log(`${passed} scoped API flow checks passed, including 27 bypass attempts.`);
+  console.log(
+    `${passed} scoped API flow checks passed, including ${attempts.length * 3} bypass attempts.`,
+  );
 } finally {
   const signalGroup = (signal: NodeJS.Signals) => {
     if (!server.pid) return;

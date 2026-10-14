@@ -14,7 +14,7 @@ export function FinancialModules() {
   const capabilities: readonly string[] = buildContext.capabilities;
   return (
     <section
-      data-financial-module-version="financial-react-v1"
+      data-financial-module-version="financial-react-v4"
       className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-10"
     >
       {capabilities.includes("risk-industry-matching") && (
@@ -83,9 +83,12 @@ export function FinancialDemo() {
   return (
     <main>
       <header className="mx-auto max-w-5xl space-y-3 px-6 pt-10">
-        <Badge variant="secondary">Synthetic demo</Badge>
+        <Badge variant="secondary">Live · Shanghai Stock Exchange</Badge>
         <h1 className="text-3xl font-semibold tracking-tight">{buildContext.name}</h1>
-        <p className="text-muted-foreground">Live data and expert assessments are unavailable.</p>
+        <p className="text-muted-foreground">
+          Live mode. Data availability and limitations are reported by each capability. Nothing here
+          is investment advice.
+        </p>
       </header>
       <FinancialModules />
     </main>

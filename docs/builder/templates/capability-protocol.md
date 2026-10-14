@@ -45,7 +45,7 @@ Approved explanations and English/Simplified Chinese wording: TODO.
 ## Data and readiness
 
 Official provider: Tushare (platform-held token). Exact api_name/fields: TODO.
-Do not select Tushare or substitute providers as production defaults; clearly label fixtures.
+Do not select providers other than Tushare as production defaults; clearly label fixtures.
 Freshness and coverage requirements: TODO.
 Dependencies pending: TODO.
 Readiness: template / fixture / live-ready.

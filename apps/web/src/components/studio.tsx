@@ -19,6 +19,8 @@ import {
   RefreshCw,
   ShieldCheck,
   LayoutGrid,
+  PanelRightClose,
+  PanelRightOpen,
   X,
 } from "lucide-react";
 import { Button, buttonVariants } from "@web-starter/ui/components/button";
@@ -69,6 +71,7 @@ import {
   type Application,
   type Release,
 } from "../lib/contracts";
+import { disclaimerText } from "../lib/disclaimer";
 import { CodeWorkspace, type SourcePath } from "./code-workspace";
 import { AppFrame } from "./app-frame";
 
@@ -89,7 +92,7 @@ const workspaceTabs = [
   { value: "source", label: "Code", Icon: Code2 },
   { value: "data", label: "Database (read-only)", Icon: Database },
   { value: "requirements", label: "Requirements", Icon: ClipboardList },
-  { value: "workflow", label: "Workflow", Icon: Workflow },
+  { value: "workflow", label: "How it works", Icon: Workflow },
 ] as const;
 export function Studio() {
   const convexConfigured = !!useRouter().options.context.convexClient;
@@ -118,6 +121,7 @@ export function Studio() {
   const [chatKey, setChatKey] = useState("new");
   const [agentBusy, setAgentBusy] = useState(false);
   const [previewRevision, setPreviewRevision] = useState(0);
+  const [previewCollapsed, setPreviewCollapsed] = useState(false);
   const file = useRef<HTMLInputElement>(null);
   const workspace = useRef<HTMLElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -144,6 +148,36 @@ export function Studio() {
   const messagesReady = !reactive || !selected || subscribedMessages?.appId === selected;
   const release = app && (app.preview ?? app.current);
   const pendingPreview = app ? (app.preview?.id !== app.current?.id ? app.preview : null) : null;
+  const lastReleaseId = useRef<string | null>(null);
+  useEffect(() => {
+    const id = release?.id ?? null;
+    // Anything new lands in the preview panel — a staged preview, an activation,
+    // a fresh build — so open the panel whenever its content changes.
+    if (id && id !== lastReleaseId.current) {
+      lastReleaseId.current = id;
+      setPreviewCollapsed(false);
+    }
+  }, [release?.id]);
+  const lastWorkflowRecord = useRef<{ appId: string | null; recordId: string | null }>({
+    appId: null,
+    recordId: null,
+  });
+  useEffect(() => {
+    const appId = app?.id ?? null;
+    const recordId = app?.buildRecords?.at(-1)?.id ?? null;
+    const seen = lastWorkflowRecord.current;
+    // Selecting an app seeds from its existing build so opening an old chat
+    // never yanks the tab; a build landing during the session switches the
+    // workspace to the workflow view, mirroring the preview panel above.
+    if (appId !== seen.appId) {
+      lastWorkflowRecord.current = { appId, recordId };
+      return;
+    }
+    if (recordId && recordId !== seen.recordId) {
+      lastWorkflowRecord.current = { appId, recordId };
+      setTab("workflow");
+    }
+  }, [app?.id, app?.buildRecords]);
   const workspaceBundle = app?.workspace ?? release?.bundle;
   const refreshVersion = useRef(0);
   async function refresh() {
@@ -228,6 +262,7 @@ export function Studio() {
     setChatKey(id ?? crypto.randomUUID());
     setTab("preview");
     setMobilePane(pane);
+    if (pane === "preview") setPreviewCollapsed(false);
     setReview(null);
     setActiveSourceFile("app.js");
     window.history.pushState(null, "", id ? `/#app=${id}` : "/");
@@ -369,6 +404,19 @@ export function Studio() {
               <Button
                 variant="outline"
                 size="sm"
+                className="hidden xl:inline-flex"
+                aria-label={previewCollapsed ? "Show preview panel" : "Hide preview panel"}
+                aria-pressed={previewCollapsed}
+                onClick={() => setPreviewCollapsed((value) => !value)}
+              >
+                {previewCollapsed ? <PanelRightOpen /> : <PanelRightClose />}
+                Preview
+              </Button>
+            )}
+            {view === "studio" && (
+              <Button
+                variant="outline"
+                size="sm"
                 disabled={!!busy || agentBusy}
                 onClick={openGallery}
               >
@@ -494,8 +542,9 @@ export function Studio() {
               aria-labelledby="studio-chat-tab"
               aria-label="Application chat"
               className={cn(
-                "min-h-0 w-full flex-1 flex-col gap-4 overflow-hidden p-4 xl:flex xl:w-120 xl:flex-none 2xl:w-144",
+                "min-h-0 w-full flex-1 flex-col gap-4 overflow-hidden p-4 xl:flex",
                 mobilePane === "chat" ? "flex" : "hidden",
+                previewCollapsed ? "xl:w-auto xl:flex-1" : "xl:w-120 xl:flex-none 2xl:w-144",
               )}
             >
               <AgentChat
@@ -520,7 +569,10 @@ export function Studio() {
                 }}
               />
             </aside>
-            <Separator orientation="vertical" className="hidden xl:block" />
+            <Separator
+              orientation="vertical"
+              className={cn("hidden", !previewCollapsed && "xl:block")}
+            />
             <div
               id="studio-preview-panel"
               role="tabpanel"
@@ -528,6 +580,7 @@ export function Studio() {
               className={cn(
                 "min-h-0 min-w-0 flex-1 flex-col overflow-hidden xl:flex",
                 mobilePane === "preview" ? "flex" : "hidden",
+                previewCollapsed && "xl:hidden",
               )}
             >
               <main
@@ -741,13 +794,14 @@ export function Studio() {
                                 : "Describe a supported financial app in the conversation."}
                             </EmptyDescription>
                           </EmptyHeader>
-                          {release && (
-                            <EmptyContent>
+                          <EmptyContent>
+                            {release && (
                               <Button variant="outline" onClick={() => setReview("checks")}>
                                 View checks
                               </Button>
-                            </EmptyContent>
-                          )}
+                            )}
+                            <p className="text-sm text-muted-foreground">{disclaimerText()}</p>
+                          </EmptyContent>
                         </Empty>
                       )}
                     </TabsContent>
@@ -815,6 +869,9 @@ export function Studio() {
                         Your preview appears here when the build is ready.
                       </EmptyDescription>
                     </EmptyHeader>
+                    <EmptyContent>
+                      <p className="text-sm text-muted-foreground">{disclaimerText()}</p>
+                    </EmptyContent>
                   </Empty>
                 )}
               </main>
@@ -912,7 +969,7 @@ export function Studio() {
                 <TableCell>
                   {snapshot?.status.tushareConfigured
                     ? "Tushare token configured · live daily prices"
-                    : "Tushare token not set · synthetic demos only"}
+                    : "Tushare token not set · live data unavailable"}
                 </TableCell>
               </TableRow>
             </TableBody>
@@ -1008,11 +1065,7 @@ function SpecView({ release }: { release: Release }) {
             ))}
           </ul>
         </section>
-        <p>
-          {record.plan.mode === "fixture"
-            ? "Synthetic demo. Live market data and financial outputs are not available in this build."
-            : "Uses the platform's configured market data."}
-        </p>
+        <p>Uses the platform's configured market data.</p>
         <p>Theme: {record.theme}</p>
         <Button
           variant="outline"

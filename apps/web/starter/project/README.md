@@ -41,21 +41,31 @@ Bash; keep the public file tree limited to project source.
 
 ## Platform capabilities and UI
 
-Use the fixed `FinancialDemo` module in the root route. It displays only the
-capabilities selected in the platform-owned build context. Do not rebuild its
-company matching, daily cards, watchlist, metrics or missing-data behavior.
-`cd80.finance.matchCompanies(criteria)` and `cd80.finance.companyCards(input)`
-call server-owned modules. `useStoredValue(key, schema)` supplies validated
-ordinary app storage. Reserved financial state cannot be changed through it.
+The starter's `FinancialDemo` shell shows the pattern for every platform
+capability: company matching, daily cards with live metrics, watchlist, the
+price-history chart and figures, and verified research. It renders only the
+capabilities selected in the platform-owned build context. Call the server
+modules through the SDK (`cd80.finance.matchCompanies`, `companyCards`,
+`priceHistory`, `research`); do not recreate their server logic — matching
+rules, daily batches, decisions, metric sourcing and data provenance belong to
+the platform. `useStoredValue(key, schema)` supplies validated ordinary app
+storage; reserved financial state cannot be changed through it.
 
-Wind and the company table belong to the platform team. Live data, approved
-research, price-target sources and expert assessment content remain pending.
-Do not call data providers, install dependencies, enable plugins, expose LLM
-explanations or invent financial outputs. The SDK deliberately omits these APIs.
+What the live feed serves today: company identity and market-cap sizing,
+daily closes (`market.prices`, unadjusted), trailing P/E, P/S and dividend
+yield on the daily cards, and verified research facts (industry peers,
+industry valuation, report listings, company fundamentals, macro context).
+Outside price-target sources, news tracking and expert assessment content
+remain pending — display those gaps as unavailable, never as estimates. Do not
+call data providers directly, install dependencies, enable plugins, expose LLM
+explanations or invent financial outputs.
 
-The platform owns package.json, Vite/TypeScript configuration, routing,
-shadcn components and the financial SDK/modules. Customize src/App.tsx and
-new presentation components after prepare_build approves this turn. Use the
-default theme; src/app.css can override it only when the contract specifies
-an override. Build/check commands are fixed by the platform. Passing scoped
-builds activate automatically; failed updates keep the accepted release.
+You own the whole presentation surface: `FinancialDemo`, src/App.tsx, routes,
+styles and any new components. Redesign all of it freely so the finished page
+reads as one deliberate design — the shell is a starting point, not a
+constraint. Keep the visible "Live · Shanghai Stock Exchange" label: deploy
+verification requires it. The platform owns package.json, Vite/TypeScript
+configuration, the SDK (src/lib/cd80.ts), src/lib/build-context.ts and the
+shadcn primitives. Build/check commands are fixed by the platform. Passing
+scoped builds activate automatically; failed updates keep the accepted
+release.

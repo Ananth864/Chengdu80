@@ -195,11 +195,14 @@ export async function startAgentTurn(
   const abort = () => controller.abort();
   requestSignal.addEventListener("abort", abort, { once: true });
   if (requestSignal.aborted) abort();
+  // Full builds legitimately take many steps and many minutes of verification;
+  // this deadline only guards against a hung provider, not normal work.
   const expireTurn = () => {
     deadlineReached = true;
     abort();
+    activeTurns.delete(turnKey);
   };
-  let deadline = setTimeout(expireTurn, approvalProposalId ? 600000 : 240000);
+  let deadline = setTimeout(expireTurn, 3600000);
   let processor!: StreamProcessor;
   let persisted = false;
   let project: AppWorkspace | undefined;
@@ -277,16 +280,6 @@ export async function startAgentTurn(
     const prior =
       app.current?.buildRecord ??
       [...(app.buildRecords ?? [])].reverse().find((record) => record.readiness !== "blocked");
-    const fixtureAuthorized =
-      prior?.plan.mode === "fixture" ||
-      (app.conversation ?? []).some(
-        (message) =>
-          message.role === "user" &&
-          message.parts.some(
-            (part) =>
-              part.type === "text" && /fixture|synthetic|demo|演示|模拟|示例/i.test(part.content),
-          ),
-      );
     const selected = prior ? selectedProtocols(prior.resolvedCapabilities) : [];
     async function requirePlan() {
       controller.signal.throwIfAborted();
@@ -307,11 +300,10 @@ export async function startAgentTurn(
         (name === "cd80.json" ||
           name === buildContextPath ||
           name in protectedProjectFiles() ||
-          name === "src/routeTree.gen.ts" ||
-          (name === "src/app.css" && !buildRecord?.plan.themeOverride))
+          name === "src/routeTree.gen.ts")
       )
         throw new Error(
-          "Reuse the platform-owned starter, financial SDK and contract context unchanged.",
+          "That file belongs to the platform (SDK, build config, shadcn primitives). All presentation files — the financial shell, routes, styling and anything new — are yours to redesign.",
         );
     }
     async function getProject() {
@@ -367,8 +359,8 @@ export async function startAgentTurn(
       toolDefinition({
         name: "lookup_companies",
         description:
-          "Fuzzy-search the canonical supplied CSV SSE A-share universe by ticker, exact Chinese company name or industry in either mode. Returns scored matches with .SH tickers, unchanged CSV names and industry labels. Lookup needs no provider token and does not retrieve market data.",
-        inputSchema: z.object({ mode: z.enum(["fixture", "live"]), query: z.string().max(100) }),
+          "Fuzzy-search the canonical supplied CSV SSE A-share universe by ticker, exact Chinese company name or industry. Returns scored matches with .SH tickers, unchanged CSV names and industry labels. Lookup needs no provider token and does not retrieve market data. Unknown companies are unsupported; search related terms and offer real alternatives without silently substituting one.",
+        inputSchema: z.object({ query: z.string().max(100) }),
       }).server(({ query }) => {
         const ranked = rankCompanyMatches(
           query,
@@ -393,7 +385,7 @@ export async function startAgentTurn(
       toolDefinition({
         name: "propose_build",
         description:
-          "Generate the full Input -> Capabilities -> Output workflow before requesting approval: include an application-specific specification with inputs, outputs, constraints and a distinct outputDetails entry keyed by each exact outputs label, plus business capabilities, data mode, companies and assumptions. themeOverride may be omitted or null for the default theme. Select only implemented requested financial capabilities: news retrieval is unsupported; company-cards is discovery, not an industry-metrics permission. Do not add price-target unless brokerage summaries are requested. Historical, industry-research and price-target adapters are implemented, though individual data/evidence may be unavailable. The Workflow tab renders this proposal before its approval button. End the turn immediately after this call; prepare_build requires Workflow-stage approval in a later turn.",
+          "Generate the full Input -> Capabilities -> Output workflow before requesting approval: include an application-specific specification with inputs, outputs, constraints and a distinct outputDetails entry keyed by each exact outputs label, plus business capabilities, companies and assumptions. Every build uses live mode on real Shanghai Stock Exchange Class A data; never propose demo or synthetic data. themeOverride may be omitted or null for the default theme. Select only implemented requested financial capabilities: news retrieval is unsupported; company-cards is discovery, not an industry-metrics permission. Do not add price-target unless brokerage summaries are requested. Historical, industry-research and price-target adapters are implemented, though individual data/evidence may be unavailable. The Workflow tab renders this proposal before its approval button. End the turn immediately after this call; prepare_build requires Workflow-stage approval in a later turn.",
         inputSchema: buildPlanSchema.extend({
           summary: z.string().min(1).max(2000),
           specification: specSchema,
@@ -412,10 +404,6 @@ export async function startAgentTurn(
         if (missingOutputDetails.length)
           throw new Error(
             `Generate an outputDetails entry keyed by each exact outputs label before requesting Workflow approval. Missing keys: ${JSON.stringify(missingOutputDetails)}.`,
-          );
-        if (proposal.mode === "fixture" && !fixtureAuthorized)
-          throw new Error(
-            "Ask whether the user wants a clearly labeled synthetic demo. Live data must not silently become fixtures.",
           );
         await mutateApp(access, appId, (latest) => {
           controller.signal.throwIfAborted();
@@ -446,10 +434,6 @@ export async function startAgentTurn(
       }).server(async (rawPlan) => {
         const plan = buildPlanSchema.parse(rawPlan);
         buildRecord = undefined;
-        if (plan.mode === "fixture" && !fixtureAuthorized)
-          throw new Error(
-            "Ask whether the user wants a clearly labeled synthetic demo. Live data must not silently become fixtures.",
-          );
         const proposal = (await findApp(access, appId)).buildProposal;
         if (!proposal)
           throw new Error(
@@ -502,6 +486,8 @@ export async function startAgentTurn(
         }
         approvedSpecification = proposal.specification;
         if (projectFormat && record.readiness !== "blocked") {
+          // Only the platform upgrades protected dependencies after exact Workflow approval.
+          // Editable presentation source remains the user's work and must not be replaced.
           for (const [name, source] of Object.entries(protectedProjectFiles()))
             files[name] = source;
           const manifest = JSON.parse(files["cd80.json"]);
@@ -525,10 +511,10 @@ export async function startAgentTurn(
                 designNotice:
                   "The frontend design protocol loads with an approved build record, not a blocked one.",
               }),
-          ...(record.readiness === "fixture"
+          ...(record.readiness !== "blocked"
             ? {
-                fixtureNotice:
-                  "Synthetic demo: approved React/shadcn starter and fixed company modules; live financial outputs remain unavailable.",
+                liveNotice:
+                  "Live build: market data comes from the platform's verified Tushare feed (SSE Class A daily data). Sections the feed does not cover must display as unavailable (暂无数据), never estimates. No buy/sell recommendations.",
               }
             : {}),
         };
@@ -599,7 +585,7 @@ export async function startAgentTurn(
       toolDefinition({
         name: "read_file",
         description:
-          "Read a bounded source window in the app workspace. Defaults to 160 lines; use nextOffset to continue. Protected components need composition, not reimplementation.",
+          "Read a bounded source window in the app workspace. Defaults to 160 lines; use nextOffset to continue. Reuse protected SDK logic; presentation components are editable.",
         inputSchema: z.object({
           path: filePath,
           offset: z.number().int().positive().optional(),
@@ -788,16 +774,16 @@ export async function startAgentTurn(
       }),
     ];
     const adapter = await modelAdapter();
-    const options = await modelOptions("low", 16000);
+    const options = await modelOptions("high", 32768);
     const stream = chat({
       adapter,
       abortController: controller,
       modelOptions: options,
       tools,
-      agentLoopStrategy: maxIterations(18),
+      agentLoopStrategy: maxIterations(120),
       messages: processor.getMessages(),
       systemPrompts: [
-        "Compose exactly one requested application in src/App.tsx. The protected root supplies routing only. Import FinancialModules from @/components/financial-app and render the selected protected modules inside your app layout, not a second FinancialDemo page. Show a visible Synthetic demo label only for fixture mode. Reuse the protected financial SDK and algorithms unchanged.",
+        'Compose exactly one requested application in src/App.tsx. The root supplies routing, not a second starter page. Compose the protected financial SDK freely within the requested presentation; FinancialModules and FinancialDemo are editable reference compositions, not required immutable pages. Do not stack a generic page above the user\'s requested app. Reuse the protected financial SDK and algorithms unchanged. Never add demo or synthetic labels: every build runs live on real Shanghai Stock Exchange Class A data. Keep the visible "Live · Shanghai Stock Exchange" label.',
         ...(approvalProposalId
           ? [
               `The user approved workflow ${approvalProposalId} through the UI or CLI. Continue building now using this exact approved proposal, without another approval request: ${JSON.stringify(app.buildProposal)}. Call prepare_build, then set_specification with its specification and build. Preview activation still requires separate approval.`,
@@ -807,15 +793,15 @@ export async function startAgentTurn(
         ...Object.values(agentProtocols),
         ...selected,
         `Map requirements using the shared capability.json catalog above. Current internal build record: ${JSON.stringify(prior ?? null)}. Current draft requirements for the Requirements tab: ${JSON.stringify(app.requirements ?? null)}.`,
-        "Use the six capability contracts in catalog 1.9.0: risk-profile, industry-preferences, company-discovery, historical-analysis, industry-research and price-target. Select only requested scopes and required dependencies. Protected RiskQuestionnaire and IndustryPreference work independently; neither requires discovery. Optional protected CompanyDiscovery uses finance.company-discovery.v1-3, completed risk_result and normalized industry_preference, exact CSV industries and supplied size categories. Its neutral session has at most five distinct companies, shuffled once; app-owned exclusions, actions and an optional watchlist follow the approved requirements, not mandatory daily batches or Add/Skip rules. Preserve existing releases' versioned contracts until an approved upgrade; do not recreate protected logic.",
+        "Use the six capability contracts in catalog 1.9.0: risk-profile, industry-preferences, company-discovery, historical-analysis, industry-research and price-target. Select only requested scopes and required dependencies. RiskQuestionnaire and IndustryPreference work independently; neither requires discovery. Optional CompanyDiscovery uses finance.company-discovery.v1-3, completed risk_result and normalized industry_preference, exact CSV industries and supplied size categories. Its neutral session has at most five distinct companies, shuffled once; app-owned exclusions, actions and an optional watchlist follow the approved requirements, not mandatory daily batches or Add/Skip rules. Preserve existing releases' versioned contracts until an approved upgrade; do not recreate protected SDK logic.",
         "Live analytic scopes are implemented through protected FinancialAnalysis and server-owned finance.historical-analysis, finance.industry-research and finance.price-target. Tushare is the sole external financial provider; credentials stay server-side. Show each section's status, sources, as_of_date, retrieval time, actual coverage, basis and limitations independently. Missing adjustment factors make adjusted drawdown null without suppressing raw-price metrics. Industry research is historical supplied-universe listed-company revenue and matched-cohort growth, not national market size or forecasts. Brokerage summaries require server-owned identity and versioned rating evidence; never infer rating mappings or target horizons from wording, report age or forecast quarter. Target averages and implied differences remain null without verified comparable horizon/share basis and at least three eligible brokerages per group; supported ratings remain independent. No invented observations, fallback providers, news or generated financial algorithms.",
-        "lookup_companies uses the canonical supplied CSV in all modes without a provider token; CSV identities are not synthetic market observations. Preserve returned Chinese names, exact industry labels and .SH tickers. State a clear high-scoring company assumption; ask the user to choose ambiguous matches. Unknown companies are outside the supplied SSE A-share universe. For a new or changed plan, propose_build the complete application-specific workflow and end the turn. Exact prior-turn Workflow UI/CLI approval automatically starts one bounded build turn; chat confirmation is not approval. Call prepare_build before modifications, follow its prepared record, hashes, selected protocols and designGuidance, and set_specification to the approved specification unchanged. A blocked mechanical validation retains approval; changed plan fields need new approval. deploy_preview only verifies and stages; Preview activation is separate, and no live claim or working link is allowed before activation.",
+        "lookup_companies uses the canonical supplied CSV without a provider token; CSV identities are not synthetic market observations. Preserve returned Chinese names, exact industry labels and .SH tickers. State a clear high-scoring company assumption; ask the user to choose ambiguous matches. Unknown companies are outside the supplied SSE A-share universe. For a new or changed plan, propose_build the complete application-specific workflow and end the turn. Exact prior-turn Workflow UI/CLI approval automatically starts one bounded build turn; chat confirmation is not approval. Call prepare_build before modifications, follow its prepared record, hashes, selected protocols and designGuidance, and set_specification to the approved specification unchanged. A blocked mechanical validation retains approval; changed plan fields need new approval. deploy_preview only verifies and stages; Preview activation is separate, and no live claim or working link is allowed before activation. Every build uses live mode through the server-owned Tushare feed; never offer demo or synthetic data. Write user-facing messages in plain product language, not internal implementation terminology.",
         projectFormat
-          ? "This app is an actual TanStack Start React/TypeScript checkout with installed libraries and local shadcn Base UI source. Call read_starter_reference to inspect exact SDK types and toolkit imports. Render FinancialModules within src/App.tsx; the protected root supplies routing only. Customize src/App.tsx and presentation components only after prepare_build approves this turn. Package/build configuration, SDK, financial modules and shadcn source are immutable. Use installed shadcn components; do not recreate controls or financial logic. Use the default theme; src/app.css changes require a recorded theme override. No direct provider/LLM/network calls, generic plugins or package installation. Permissions and src/lib/build-context.ts are derived from the contract. Keep missing financial outputs unavailable. deploy_preview uses platform-owned build/type checks and financial render checks in Linux isolation."
+          ? 'This app is an actual TanStack Start React/TypeScript checkout with installed libraries and local shadcn Base UI source. Call read_starter_reference to inspect exact SDK types and toolkit imports. The platform owns only the SDK (src/lib/cd80.ts), src/lib/build-context.ts, package/build configuration and shadcn primitives — everything else is your presentation canvas, including src/components/financial-app.tsx, the routes and styling; redesign them freely so the whole page reads as one deliberate design. Keep server module logic (matching, daily batches, decisions, watchlists, metric values) in the platform modules rather than recreating it, and keep the visible "Live · Shanghai Stock Exchange" label. Take real time over the design: settle the palette, type and layout plan first, then build it — a result that could belong to any other app is a failure. No direct provider/LLM/network calls, generic plugins or package installation. Permissions and src/lib/build-context.ts are derived from the contract. Keep missing financial outputs unavailable. deploy_preview uses platform-owned build/type checks and a financial render check (the app must render and show the live label) in Linux isolation.'
           : "Legacy workspace: index.html is a body fragment; app.js is self-contained JavaScript with top-level await; style.css supplies styling; calculations.js exports analyze(input); cd80.json is the manifest. Preserve the source format and pure calculation scaffold. No imports, npm, CDN, fetch or external resources. Call cd80.ready() after rendering; privileged calls use cd80.call(name,input).",
         projectFormat
           ? `Current presentation specification: ${JSON.stringify(spec)}. SDK permissions are derived by the platform from the feasible financial contract.`
-          : `Current scaffold specification: ${JSON.stringify(spec)}. Legacy transport contract: ${scaffoldInstructions(spec)}. Transport capability definitions: ${JSON.stringify(scopedTransportContracts)}. Only the fixture permissions above are enabled.`,
+          : `Current scaffold specification: ${JSON.stringify(spec)}. Legacy transport contract: ${scaffoldInstructions(spec)}. Transport capability definitions: ${JSON.stringify(scopedTransportContracts)}. Only the transport permissions above are enabled.`,
       ],
     });
     async function* tracked(): AsyncGenerator<StreamChunk> {
@@ -889,6 +875,21 @@ export async function startAgentTurn(
               });
               latest.events.push({ at: new Date().toISOString(), message });
             }
+            // A turn that ends without any assistant text (step-limit
+            // exhaustion mid-build) otherwise looks silently abandoned.
+            const last = latest.conversation.at(-1);
+            const hasText = last?.parts?.some(
+              (part) => part.type === "text" && part.content.trim().length > 0,
+            );
+            if (status === "complete" && last?.role === "assistant" && !hasText)
+              last.parts = [
+                ...(last.parts ?? []),
+                {
+                  type: "text" as const,
+                  content:
+                    "This turn reached its step limit before I could finish and stage a preview. Reply “continue” and I'll pick up where I left off.",
+                },
+              ];
             const settledTurn = {
               id: user.id,
               startedAt: latest.agentTurn?.startedAt ?? new Date().toISOString(),
