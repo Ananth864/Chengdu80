@@ -99,7 +99,7 @@ export function workflowGraph(
       outputs: "Each company's name, industry and size",
     });
   const sourceIds = record?.companyIds.length ? ["data", "companies"] : ["data"];
-  const capabilities = proposal
+  const capabilities: BusinessCapability[] = proposal
     ? [...new Set(proposal.capabilities)]
     : record
       ? [...new Set(record.plan.capabilities)].filter((id) =>

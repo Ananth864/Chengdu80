@@ -1,12 +1,38 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
+import { discoveryRequestSchema, discoveryResultSchema } from "./company-discovery";
+import {
+  discoveryContractRequestSchema,
+  discoveryContractResultSchema,
+} from "./discovery-contract";
+import {
+  financialRequestSchema,
+  financialResultSchema,
+  financialOperationRequestSchema,
+  industryResearchRequestSchema,
+  priceTargetRequestSchema,
+} from "./financial-results";
+import {
+  industryPreferenceRequestSchema,
+  industryPreferenceResultSchema,
+} from "./industry-preference";
+import {
+  riskProfileInputSchema,
+  riskProfileResultSchema,
+  type RiskProfileInput,
+} from "./risk-profile";
 type Capability =
   | "storage.read"
   | "storage.write"
+  | "finance.risk-profile"
+  | "finance.company-discovery"
+  | "finance.company-discovery.v1-3"
+  | "finance.historical-analysis"
+  | "finance.industry-research"
+  | "finance.price-target"
+  | "finance.industry-preferences"
   | "finance.match-companies"
-  | "finance.company-cards"
-  | "finance.research"
-  | "market.prices";
+  | "finance.company-cards";
 declare global {
   interface Window {
     cd80: { call: (capability: Capability, input: unknown) => Promise<unknown>; ready: () => void };
@@ -57,73 +83,6 @@ const cardsResult = z.object({
   watchlist: z.array(z.string()),
   notice: z.string().nullable(),
 });
-export const researchResultSchema = z.object({
-  available: z.literal(true),
-  asOf: z.string(),
-  company: z.object({
-    tsCode: z.string(),
-    name: z.string().nullable(),
-    indicators: z
-      .object({
-        endDate: z.string(),
-        announced: z.string().nullable(),
-        revenueYoy: z.number().nullable(),
-        profitYoy: z.number().nullable(),
-        roe: z.number().nullable(),
-        grossMargin: z.number().nullable(),
-      })
-      .nullable(),
-  }),
-  industry: z
-    .object({
-      path: z.string(),
-      l3Code: z.string().nullable(),
-      peers: z.array(z.object({ tsCode: z.string(), name: z.string(), sse: z.boolean() })),
-      valuation: z
-        .object({
-          totalMvRmb: z.number(),
-          pe: z.number().nullable(),
-          pb: z.number().nullable(),
-          asOf: z.string(),
-        })
-        .nullable(),
-      reports: z.array(
-        z.object({ date: z.string(), title: z.string(), inst: z.string(), url: z.string() }),
-      ),
-    })
-    .nullable(),
-  macro: z
-    .object({
-      gdp: z.array(z.object({ quarter: z.string(), yoy: z.number() })),
-      pmi: z.array(
-        z.object({
-          month: z.string(),
-          pmi: z.number(),
-          production: z.number(),
-          newOrders: z.number(),
-        }),
-      ),
-    })
-    .nullable(),
-  unavailable: z.array(z.string()),
-});
-export const priceHistorySchema = z.object({
-  symbol: z.string(),
-  prices: z
-    .array(z.object({ date: z.string(), close: z.number() }))
-    .min(1)
-    .refine(
-      (rows) => rows.every((row, index) => index === 0 || rows[index - 1].date <= row.date),
-      "Prices must be ordered by date",
-    ),
-  meta: z.object({
-    provider: z.string(),
-    synthetic: z.literal(false),
-    currency: z.literal("CNY"),
-    coverage: z.string(),
-    warning: z.string(),
-  }),
-});
 async function call(capability: Capability, input: unknown): Promise<unknown> {
   if (typeof window === "undefined" || !window.cd80)
     throw new Error("Financial capabilities are available only in the platform preview.");
@@ -140,6 +99,47 @@ export const cd80 = {
     },
   },
   finance: {
+    async companyDiscoveryContract(input: z.input<typeof discoveryContractRequestSchema>) {
+      return discoveryContractResultSchema.parse(
+        await call("finance.company-discovery.v1-3", discoveryContractRequestSchema.parse(input)),
+      );
+    },
+    async financialAnalysis(
+      capability: "historical-analysis" | "industry-research" | "price-target",
+      input: z.input<typeof financialOperationRequestSchema>,
+    ) {
+      const schema =
+        capability === "industry-research"
+          ? industryResearchRequestSchema
+          : capability === "price-target"
+            ? priceTargetRequestSchema
+            : financialRequestSchema;
+      const request = schema.parse(input);
+      const permission = {
+        "historical-analysis": "finance.historical-analysis",
+        "industry-research": "finance.industry-research",
+        "price-target": "finance.price-target",
+      } as const;
+      const result = financialResultSchema.parse(await call(permission[capability], request));
+      if (result.capability_id !== capability)
+        throw new Error("Financial result capability mismatch.");
+      return result;
+    },
+    async industryPreferences(input: z.input<typeof industryPreferenceRequestSchema>) {
+      return industryPreferenceResultSchema.parse(
+        await call("finance.industry-preferences", industryPreferenceRequestSchema.parse(input)),
+      );
+    },
+    async companyDiscovery(input: z.input<typeof discoveryRequestSchema>) {
+      return discoveryResultSchema.parse(
+        await call("finance.company-discovery", discoveryRequestSchema.parse(input)),
+      );
+    },
+    async riskProfile(input: RiskProfileInput) {
+      return riskProfileResultSchema.parse(
+        await call("finance.risk-profile", riskProfileInputSchema.parse(input)),
+      );
+    },
     async matchCompanies(input: z.input<typeof criteriaSchema>) {
       return matchingResult.parse(
         await call("finance.match-companies", criteriaSchema.parse(input)),
@@ -147,12 +147,6 @@ export const cd80 = {
     },
     async companyCards(input: z.input<typeof cardsInput>) {
       return cardsResult.parse(await call("finance.company-cards", cardsInput.parse(input)));
-    },
-    async research(tsCode: string) {
-      return researchResultSchema.parse(await call("finance.research", { tsCode }));
-    },
-    async priceHistory(symbol: string) {
-      return priceHistorySchema.parse(await call("market.prices", { symbol }));
     },
   },
 };

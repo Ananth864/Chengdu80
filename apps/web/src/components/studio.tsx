@@ -964,8 +964,9 @@ function Checks({ release }: { release: Release }) {
           {release.verification.passed ? "Mandatory checks passed" : "Release blocked"}
         </AlertTitle>
         <AlertDescription>
-          Fixtures validate the protocol contract. Passing builds activate automatically; failed
-          changes leave the working app in place.
+          Passing checks stage a preview for your review. Activation requires your separate approval
+          in Preview; failed changes leave the working app in place. Fixture tests do not prove live
+          data availability.
         </AlertDescription>
       </Alert>
       <Table>

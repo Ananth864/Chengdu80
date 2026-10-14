@@ -1,98 +1,113 @@
-# General Dashboard Generation
+---
+name: dashboard-composition
+description: Compose or update app-configured financial dashboards using registered composition adapters, with independent capability statuses, accessible metric explanations, sourced charts, and financial-report compositions. Use for shared dashboard integration in compositions such as a stock-analysis dashboard or an annual-report executive dashboard.
+metadata:
+  skill-role: dashboard-composition
+  contract-version: "1.2.0"
+  implementation-status: platform_adapters_available_with_evidence_limits
+---
 
-## When to Use
+# Dashboard Composition and Display
 
-Use to generate, compose or update the general financial dashboard layout and its configured sections. Follow [agent.md](../agent.md) for product boundaries, evidence, freshness, interpretation and bilingual parity. This skill governs presentation and composition, not financial metric definitions or new product scope.
+This is a composition skill, not a capability-library entry. It coordinates only the reusable capabilities selected by the application's approved specification. The supplied current definitions for historical-analysis, industry-research and price-target govern those analytic scopes when older dashboard/reference guidance conflicts. They do not authorize financial metric modifications in any scope.
 
-## Inputs and Scope
+Compose app-configured capability records into accessible dashboards through registered composition adapters. For example, preserve an existing stock-analysis dashboard’s bundle API.
 
-- Use the selected asset/company, requested dashboard profile, user metric selections, configured capabilities and validated prepared results.
-- For annual-report views, use normalized report datasets with explicit fiscal periods, accounting scope, sources and optional validated comparison datasets.
-- Resolve company identities and validate any configured stock universe and industry taxonomy. An SSE-only application profile may retain that restriction; general dashboard composition must not hardcode it for all profiles.
-- Supported asset-specific profiles require approved definitions and datasets. General composition does not authorize company ratios for other asset types.
-- Industry-only research or news without a selected company requires a separate approved input contract.
+## Inputs and scope
 
-## Metric and Analysis Routing
+- For an example stock-analysis profile, use one or more validated SSE A-share stocks from the supplied CSV and results from configured analysis capabilities.
+- For financial-report composition, use normalized financial-report datasets, optional peer datasets, and an app-selected composition profile.
+- Require a validated stock universe and exact industry taxonomy for stock-selected bundles.
+- Support app-configured financial dashboard subjects; an example stock-analysis profile can remain scoped to SSE A-shares.
+- Current industry research requires a validated selected SSE company to establish its exact CSV industry; it returns historical supplied-universe listed-company statistics, not general industry narratives. News requires a separately supplied supported contract; do not invent one or add news automatically as a research dependency.
+- Risk assessment and preference capture are independent scopes, not mandatory dashboard inputs. Only explicitly enabled discovery requires both completed risk and normalized preferences. Missing input remains missing, not an inferred default.
 
-| Dashboard content                                        | Definition source                                                                     |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Original investment metric cards, defaults and selection | [Investment dashboard metrics](investment-dashboard-metrics.md)                       |
-| Six annual-report company metrics                        | [Annual-report company metrics](annual-report-company-metrics.md)                     |
-| Declines and losses area                                 | [Segment declines and losses](segment-declines-and-losses.md)                         |
-| Two or more selected companies                           | [Cross-company comparison](cross-company-comparison.md)                               |
-| Industry medians and eligibility                         | [Industry benchmarking](industry-benchmarking.md)                                     |
-| Performance history, headlines and industry context      | [Headlines and supporting analysis](headlines-supporting-analysis.md)                 |
-| Optional stored-data chatbot                             | [Database-grounded chatbot](database-grounded-chatbot.md) and [agent.md](../agent.md) |
+## Composition integration
 
-Keep the two six-metric dashboards separate. Do not infer annual-report defaults from investment-dashboard defaults or add roadmap metrics to a selector. Metric calculations belong to validated data services, not the presentation layer.
+New prepared CSV-backed discovery uses protected CompanyDiscovery and finance.company-discovery.v1-3 with the neutral company-discovery v1.3 contract, an optional industry-preferences add-on rather than a mandatory standalone capability. It requires completed validated risk_result and consistent normalized industry_preference, maps low/medium/high only to assigned Large cap/Mid cap/Small cap, and independently filters exact supported industries. Never calculate new size thresholds or widen filters. Shuffle once per memory-only session, with at most five distinct companies and one company per round; refresh abandons session state. Optional excluded_company_ids contains app-owned canonical exchange+ticker exclusions; absent means none. Prior exposure alone does not exclude a company from later sessions. The app chooses actions and any optional saved-company list from its approved requirements; do not impose Add/Skip, a watchlist, persistence keys or a mandatory feature. Metrics are separate and must not block advancement. Preserve existing v2-sessions finance.company-discovery SDK/render and Add/Skip/watchlist behavior until an approved upgrade; existing daily-batch releases likewise keep their legacy SDK until upgraded.
 
-## Composition Procedure
+Preference capture is implemented independently through protected IndustryPreference from @/components/industry-preference and finance.industry-preferences contract v1.3.0. Risk assessment uses protected RiskQuestionnaire and finance.risk-profile independently of preferences/discovery. Persist only completed validated inputs and any requested app-owned list through the permission-checked platform storage bridge; no localStorage. Do not fabricate missing preferences, risk results or financial observations.
 
-Record the application-specific specification before deploying a new app. Inputs and outputs must reflect the requested profile, not inherited sample metadata or the transport protocol. A single-company research view must not acquire holdings totals, portfolio returns or concentration unless explicitly requested. Define each output's own content, source requirements and availability limitations in set_specification.outputDetails, keyed by the exact output label. Never copy the overall prompt into every output detail. Do not add unrelated capabilities or fabricate details to fill empty sections; ask for clarification where needed. Specification outputs are intended deliverables, not evidence of implemented integrations or populated data.
+The three current analytic scopes have server adapters finance.historical-analysis, finance.industry-research and finance.price-target, presented by protected FinancialAnalysis through the supplied FinancialModules composition. They are not globally pending. Select only requested scopes and preserve each returned availability, source, basis, coverage, as_of_date, retrieved_at and limitation independently. Generated apps cannot call providers or recreate retrieval, formulas, rating mappings, financial algorithms or protected components.
 
-1. Identify the requested profile and selected asset, companies or annual report. Ask for clarification when the profile or identity is ambiguous.
-2. Load the corresponding metric/analysis skills and configured results. Apply the approved selection rules exactly.
-3. Compose identity, selected metric cards and supported chart, context, headline, source and chatbot sections as configured. Include segment flags and company-comparison sections only for their applicable profiles.
-4. Preserve independent availability, freshness and provenance for each section and field. A failed section must not hide unrelated successful results.
-5. Provide accessible explanations and evidence details, with layouts usable on desktop and mobile and identical financial content in English and Simplified Chinese.
-6. Verify the resulting sections against their source records and the checks below. Report missing integration or data requirements explicitly.
+Use the reference implementation at `library/browser/dashboard.js`, resolved relative to the target project.
 
-## Composition Integration
-
-For projects using the supplied shared-dashboard contract, retain capability identifier `dashboard` and contract version `1.1.0`. The supplied metadata describes a reference implementation; verify its presence and behaviour before claiming it is implemented in the target project.
-
-The reference path is `library/browser/dashboard.js`, relative to the target project. Where that contract is in use, expose these entry points:
+Expose these shared entry points:
 
 ```javascript
 SharedDashboard.register(composition_id, composer);
 SharedDashboard.compose(composition_id, input);
 ```
 
-Keep composition independent of a hardcoded company universe. Library consumers choose enabled capabilities through app configuration. Do not add bundle-choice UI unless required by the selected profile.
+Keep composition independent of a hardcoded company universe. Library consumers choose enabled capabilities through app configuration. For example, a stock-analysis dashboard invokes its configured analysis capabilities and exposes no bundle-choice UI.
 
-If integrating with an existing application such as ExampleStockApp, preserve its established `dashboard.run(company, bundle)` API and existing services unless a change is explicitly required. These example APIs are integration details, not prerequisites for every generated dashboard.
+For example, preserve an existing `dashboard.run(company, bundle)` entry point while updating its services to the current contracts. An annual-report executive dashboard uses the registered financial-report composition.
 
-Where available, use `result-store` for stored results, `metric-education` for metric education, and `financial-visualizations` for chart rendering. Reuse existing shared behaviours rather than duplicating them. Do not assume these modules exist merely because this skill names them.
+The six investment metrics, metric education, financial visualization, result storage and grounded chat are skill/composition responsibilities, not reusable financial capability IDs. For requested investment metrics, read [Investment dashboard metrics](investment-dashboard-metrics.md). Skill ownership means composition and presentation through protected SDK/server modules, not implementation of formulas or metric modifications in generated code in any scope. Missing definitions, observations or benchmark evidence remain unavailable. Removing catalog entries neither removes permitted presentation functionality nor authorizes replacement algorithms.
 
-Optional financial integrations include `industry-research`, `company-industry-news`, `historical-analysis`, `price-target`, and `report-metrics`. Treat them as available only when configured and supported by supplied data. Database-grounded chat is an application component guided by its linked skill, not a financial capability; implement its requested interface and permitted handlers rather than rejecting it because the old catalog ID was removed.
+Current analytic integrations are `industry-research`, `historical-analysis`, and `price-target`. Optional news and financial-report integrations require separately supplied supported contracts and prepared permissions; this skill does not create new capability IDs or contracts for them. Do not add a news dependency, six-metric dependency or report dashboard simply to populate a workflow. For requested stored-data conversation, use the companion skill `SKILL_DUMBChatbot.md`.
 
-## Independent Availability and Provenance
+## Independent availability and provenance
 
 Display each capability's status, as-of and retrieved times, sources, and limitations. A failed, stale, or unavailable section must not hide successful results from other capabilities.
 
-Do not mark a capability active or populated when its provider is unconfigured, coverage is unverified, or required data is unavailable. Show clear empty chart states until the necessary datasets are available.
+Do not mark a capability populated when required evidence is unavailable. The recorded 2026-10-15 Asia/Shanghai live run verified Tushare daily, adj_factor, income and report_rc retrieval for one representative company; see docs/tushare-verification.md. It does not verify all-company coverage, complete trading history, same-day/intraday quotes, normalized brokerage rating mappings or target horizons. Tushare is the sole external financial provider; tokens, access and evidence configuration stay server-owned. Distinguish missing credentials, permission denial, partial data, empty results and errors. Show clear empty chart states until their required data is available, without hiding unrelated valid results.
 
-Display validated extraction results without inventing an additional per-result approval step. Required source validation and explanation-library review still apply. Keep ambiguous or unsupported fields unavailable with reasons. Never guess their values or block unrelated valid fields. Missing data must not appear as zero.
+Historical charts support 1 month, 6 months, 1 year and 5 years, with at most five years retrieved. Raw daily highs/lows establish the inclusive 364-day range ending on the latest quote date and the available-period range, never all-time extremes. Show actual coverage and partial states. Raw latest close/daily change are not intraday quotes. Adjusted drawdown uses the selected period and valid ticker/date adjustment factors under the documented common-reference formula; missing factors leave drawdown unavailable while raw metrics can display. Preserve returned bases and definitions rather than recalculating them in generated code.
 
-## Metric Explanations and Charts
+Industry research uses the selected company's exact CSV industry across the supplied SSE universe with no size filter, up to five completed annual consolidated total_revenue periods published by as_of_date. Show available-universe annual totals separately from pairwise matched-cohort growth, including included/total counts, exclusions and changing cohort membership. Missing observations are not zero. Retrieval is bounded per invocation to at most 80 shared-query calls, at most 40 companies, concurrency 2 and a 30-second aggregate deadline; publication windows/report types require multiple calls per company, so this is not an 80-company guarantee. Show queried/unqueried counts, year/cohort coverage, as_of_date and budget/deadline limitations explicitly. Partial retrieval is not full-industry verification; do not promise durable background completion.
 
-Every displayed metric needs an accessible explanation covering its meaning, usefulness and limitations, available through hover, keyboard focus and tap/click. Include value, unit, dates, practical implication and evidence details. Provide an industry comparison only where appropriate and valid; otherwise show the unavailable reason or relevant company trend/obligations. Do not force raw monetary amounts into industry medians or invent universal standards.
+Brokerage summaries use the inclusive 90-day report window ending on as_of_date, deduplicated reports and at most one latest contribution per evidence-backed brokerage, without older-report backfill. Normalized ratings require versioned brokerage-specific server-owned mapping evidence. Preserve originals, exclusions and counts in Strong Sell, Sell, Hold, Buy, Strong Buy order. Most common brokerage rating is the unique mode, Mixed for a positive tie and unavailable for zero mapped opinions; majority requires more than half. Do not infer mappings from translations or average rating scores.
 
-- Render sourced price history as a line chart.
+Targets require both positive ordered CNY bounds, compatible share basis and verified server-owned horizon/reference evidence. Neither report_rc quarter nor report age proves horizon. Keep horizon groups and fixed-date versus report-date-duration conventions separate. Average brokerage target midpoint is the protected server's equally weighted mean of one midpoint per eligible brokerage, displayed only with at least three eligible brokerages per group. Below three, aggregate and implied difference remain null with insufficient_brokerage_coverage; independently validated individual targets may display. Implied difference requires a compatible dated raw close and is not a promised return. Successful retrieval may still leave mapped ratings or target groups unavailable; apps cannot supply or fabricate evidence. Keep rating and target availability independent.
+
+Automatically display supported extraction results without a human-approval step. Keep ambiguous or unsupported fields unavailable with reasons. Never guess their values or block unrelated valid fields.
+
+## Metric explanations and charts
+
+Every displayed metric needs an accessible click explanation covering its meaning, usefulness, and a valid industry comparison. State when no universal benchmark exists; do not invent industry standards.
+
+- Render sourced price history as a line chart with actual coverage and raw/adjusted basis; never show all-time labels or imply gap-free history without evidence.
 - Render revenue and profit as grouped bars only when dated, consistently defined financial records are available.
-- Visually distinguish industry history from forecasts and provide sources for both.
-- Display forecasts only when separately permitted by the selected profile and supported by prepared evidence; distinguish them from observed results.
-- Label axes, units, periods and chart basis. Provide readable empty/error states and accessible alternatives; do not fabricate observations to complete a chart.
+- In this demo, render only sourced historical listed-company industry revenue and separately computed matched-cohort growth, with visible coverage; omit industry forecasts, extrapolations and national market-size claims.
+- Present brokerage target midpoint groups separately by verified horizon; a duration is not an exact date. Use a future chart marker only for a verified explicit target date on a compatible price basis.
 
-## Financial-Report Composition
+## Financial-report composition
 
-Use the six metrics defined in the [annual-report company skill](annual-report-company-metrics.md), with explicit monetary units and dates. Obtain comparison eligibility, ratio and change formulas from the linked skills and approved data contracts. Dataset fields must not silently override those definitions.
+Only compose financial-report metrics when a separate supported contract, protected implementation, approved scope and sourced datasets are supplied. This skill does not supply a report-metrics capability or authorize implementing six report/investment-metric algorithms. Preserve explicit monetary units and dates and obtain definitions and peer eligibility from that contract; absent support remains unavailable rather than a newly generated contract.
 
 Preserve source provenance and independent field availability. Compose an executive view containing supported metrics, peer gaps, changes, segment flags, and source availability. Do not fill missing definitions, formulas, or data with assumptions.
 
-## Expected Output
+## Dashboard-owned result storage
+
+Store permitted configured outputs and protected-server-calculated metrics through the app-scoped platform storage bridge, storage.read/storage.write, never browser localStorage. Keep source observations separate from calculations and preserve identities, schema versions, provider/source records, reporting and publication dates, as_of/retrieval times, units, coverage, statuses and limitations. Follow licensed retention/display rights, retain permitted versioned snapshots, and migrate compatible schemas or explicitly invalidate obsolete ones. Do not reinterpret legacy all_time/price_target records as revised outputs. Preserve original ratings, mapping eligibility, target evidence and calculated provenance separately. Never store tokens or secrets. Storage failures must not be reported as successful saves.
+
+Render refreshes and chatbot retrieval from the same authorized traceable records. Distinguish stale snapshots, missing records and unavailable source data. Demo mode is a shared workspace, not a claim of account privacy or production multi-user isolation. Reference storage guidance does not replace permission checks.
+
+## Expected output
 
 Deliver dashboard sections for configured capabilities with independent statuses, freshness, and provenance; accessible metric explanations; and supported visualizations. Include the financial-report executive composition when that profile is selected.
 
 If a chatbot interface is enabled, scope its answers to stored dashboard records.
 
-## Verification
+## Composition examples
 
-- Compare specification inputs, output labels and each output's details with the actual requested profile. Check that unrelated scaffold/sample fields are absent and that selecting different outputs does not merely repeat the overall prompt. Keep active-release metadata separate from later draft or blocked attempts.
-- Check profile separation, original investment defaults, exact explicit selections and retained unavailable cards.
-- Confirm every section has its own status, dates, source references and limitations; provider failure must not erase other valid results.
-- Confirm annual-report periods, restricted-fund caveats, ROE method labels, segment disclosure limits and comparison units survive composition.
-- Test empty, stale, conflicting and partially populated datasets without invented values or silent substitutions.
-- Check desktop/mobile layout, keyboard and touch access to explanations, chart labels and bilingual financial parity.
-- Confirm optional modules are actually configured and that chatbot retrieval enforces user authorization and the approved evidence boundary.
-- Report unimplemented integrations and unresolved product decisions; document presence alone is not implementation verification.
+- Stock-analysis dashboard: compose historical listed-company industry revenue, historical prices, and sourced brokerage summaries; display each section’s availability and sources independently.
+- Annual-report executive dashboard: compose supported report metrics, year-over-year changes, evidence links, and consistently defined financial charts.
+- Dashboard with a stored-data chatbot: answer questions from authorized stored dashboard records and explain missing or stale evidence.
+
+## Platform Integration
+
+These platform rules govern integration where the reference guidance above differs from the executable platform contracts.
+
+- This is skill composition, not a financial capability. The reference `library/browser/dashboard.js`, `SharedDashboard.register`, `SharedDashboard.compose`, and `dashboard.run(company, bundle)` APIs describe reference integrations, not platform prerequisites or runtime capability registration. Do not require or invent them when composing a platform application.
+- Load `investment-dashboard-metrics` through read_financial_skill for investment metrics. Use `industry-benchmarking`, `headlines-supporting-analysis`, and `capability.json` only where their definitions are compatible with the requested composition. Otherwise disclose missing definitions, contracts, or data rather than inventing replacements or claiming a reference contract is implemented.
+- Load the companion `SKILL_DUMBChatbot.md` through `read_financial_skill` using `database-grounded-chatbot`. It guides an application component, not a separately registered financial capability.
+- Do not use browser `localStorage`, including where supplied reference documents mention browser persistence. Use the permission-checked platform storage bridge through `storage.read` and `storage.write`, preserving authorization, provenance, and explicit failure states. Never store secrets or tokens.
+- Metric retrieval and calculations remain in protected financial SDK/server modules. Dashboard ownership means composition and presentation, not permission to recreate calculations, formulas, or protected implementations in generated application code.
+- First record an application-specific workflow proposal through `propose_build`, including the application's name, purpose, actual inputs, requested outputs, and constraints. After exact Workflow approval, call `set_specification` with that approved specification unchanged. Give each output its own `outputDetails` entry keyed by its exact label, describing its content, source requirements, and availability limitations. Do not inherit portfolio defaults, invent requirements, or repeat the overall purpose for every output. Draft outputs describe intended behavior, not verified execution or live-data availability; blocked attempts must not replace active-release metadata.
+- Building requires prior explicit Workflow-stage UI or CLI approval recorded server-side for the exact proposal. Changed plan fields require new approval; a later chat reply is not approval. UI and CLI approval use the same server action and automatically start one bounded builder turn, preserving approval receipt deduplication and persisted progress without requiring a second chat message. Preview activation remains a separate explicit user action. Follow executable capability, dependency, company, permission, build, and activation gates; automatic display of supported extraction results does not bypass them or imply durable crash recovery.
+- Compose the generated application in a single `App.tsx` using protected `FinancialModules`, selected protected `FinancialAnalysis` scopes and the existing starter. Do not create a second root or starter, replace protected modules, install providers or add generated financial algorithms. Generated Node/Bash/SSR code runs only in the Linux Bubblewrap sandbox, through the Docker launcher on macOS, never a host fallback. Preserve the current gallery, retained discussion, chat-only deletion and studio UI.
+- Preserve the current protected `RiskQuestionnaire` from `@/components/risk-questionnaire` and its independent `finance.risk-profile` bridge. It validates exactly q1 through q7 `v0-demo` integer answers 1-3 and returns a provisional internal profile; invalid/incomplete input returns no score/bucket. Keep score and bucket hidden, discard partial attempts on exit or refresh, and store only completed validated results under `risk-profile` through the platform storage bridge. Do not recreate scoring, default missing risk, infer preferences or require discovery as a dependency.
+- For approved and prepared industry-preference scope, compose protected `IndustryPreference` from `@/components/industry-preference`. Executable `finance.industry-preferences` and storage permissions are derived by the platform from the prepared record, not granted by this skill. Contract `v1.3.0` supports `capture_preferences` and exact-label `filter_companies`; capture has no capability dependencies and needs no risk result, questionnaire, company catalog or market data. Accept only the five canonical IDs `manufacturing`, `information_software_it`, `utilities`, `financial_services` and `wholesale_retail`, deduplicating selections in first-occurrence order. An explicitly submitted empty `selected_industries` array means `selection_mode=all_supported` with all five effective IDs; absent or invalid input is invalid. Explicitly selecting all five remains `selection_mode=selected`. After successful capture, store only the validated completed normalized `industry_preference` under `industry-preference` through platform storage, and report a save only after storage succeeds. Never save drafts or infer preferences from questionnaire answers. Filtering matches exact labels from the protected five-industry CSV taxonomy and preserves input record order and duplicates; an explicit empty `industry_labels` array retains all records. Do not translate, fuzzy-match or widen labels, recreate protected normalization, or promise equal industry representation. Discovery still applies the independent risk-based size filter; preference capture does not authorize market metrics.
+- This skill update is not implementation evidence. The three analytic server adapters and recorded four-endpoint retrieval are current platform support, not evidence that every mapping, horizon, company, observation or application flow is available. Follow executable prepared scopes and server-returned statuses rather than stale reference pending claims or blanket readiness claims.

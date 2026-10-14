@@ -1,4 +1,6 @@
-// Add presentation details here. Fixed financial modules render in the platform-owned root route.
+import { FinancialDemo } from "@/components/financial-app";
+
+// This default composition is editable; the root supplies routing only.
 export default function App() {
-  return null;
+  return <FinancialDemo />;
 }

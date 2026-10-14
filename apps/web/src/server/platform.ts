@@ -1,6 +1,22 @@
-import { requireBuild, validateScopedBundle } from "./build-policy";
+import { managedCompanies, requireBuild, validateScopedBundle } from "./build-policy";
+import { executeDiscoveryContract } from "../../starter/project/src/lib/discovery-contract";
+import { historicalAnalysis } from "./historical-analysis";
+import { industryResearch } from "./industry-research";
+import { priceTarget } from "./price-target";
+import { financialResultSchema } from "../../starter/project/src/lib/financial-results";
+import { runIndustryPreference } from "../../starter/project/src/lib/industry-preference";
+import { normalizedIndustryPreferenceSchema } from "../../starter/project/src/lib/company-discovery";
+import { suppliedCompanyUniverse } from "./company-universe";
 import {
-  companyCardMetrics,
+  createDiscoverySession,
+  advanceDiscoverySession,
+  discoveryRequestSchema,
+} from "../../starter/project/src/lib/company-discovery";
+import {
+  scoreRiskProfile,
+  completedRiskProfileSchema,
+} from "../../starter/project/src/lib/risk-profile";
+import {
   companyCardsInputSchema,
   companyModuleVersion,
   dailyCompanyCards,
@@ -8,6 +24,7 @@ import {
   emptyCardState,
   matchCompanies,
   shanghaiDay,
+  unavailableCardMetrics,
   type CardState,
 } from "../lib/company-capabilities";
 import { modelConfiguration } from "./model-config";
@@ -27,7 +44,7 @@ import { calculate, defaultData, fixtureMeta } from "../lib/finance";
 import { sampleBundle } from "../lib/samples";
 import { auth } from "../integrations/auth";
 import { clarify, explain, feasibility, generate } from "./models";
-import { assetUniverse, financeResearch, prices, sizedSseCompanies } from "./providers";
+import { assetUniverse, prices } from "./providers";
 import {
   event,
   findApp,
@@ -37,7 +54,7 @@ import {
   deleteChat,
   type Access,
 } from "./repository";
-import { projectStarterBundle } from "../lib/financial-starter";
+import { projectStarterBundle, isMainLegacyBuild } from "../lib/financial-starter";
 import { execute, sourceHash, verify } from "./runtime";
 import { demoMode, demoOwnerId, localMode, settings } from "./settings";
 
@@ -216,9 +233,12 @@ async function build(
 }
 export async function dispatch(access: Access, raw: unknown) {
   const req = requestSchema.parse(raw);
-  // accept/reverify stay available: they are the preview-approval gate the
-  // studio's pending-preview banner uses, with their own verified-preview
-  // validation below.
+  if (req.action === "reverify")
+    throw new Error(
+      "Legacy reverification is disabled by the internal capability contract. Use explicit Preview approval for a scoped, verified release.",
+    );
+  // Only accept activates a scoped, verified preview. Legacy reverification
+  // must not provide an alternate activation path.
   if (
     ["create", "update", "import", "seed", "load-prices", "test-provider", "clarify"].includes(
       req.action,
@@ -386,18 +406,6 @@ export async function dispatch(access: Access, raw: unknown) {
     });
     return { recorded: true };
   }
-  if (req.action === "reverify") {
-    if (app.preview?.id !== req.releaseId) throw new Error("Preview changed. Refresh first.");
-    app.preview.verification = await verify(app.preview.bundle, app.preview.spec);
-    const active = await applyRelease(app, app.preview);
-    event(
-      app,
-      active
-        ? "Verified source activated."
-        : "Source still fails verification; working app retained.",
-    );
-    return saveApp(access, app, app.revision);
-  }
   if (req.action === "load-prices") {
     if (app.spec.protocol !== "strategy" || !app.current)
       throw new Error("Build a strategy app before loading a price series.");
@@ -478,6 +486,82 @@ export async function dispatch(access: Access, raw: unknown) {
   validateScopedBundle(release.bundle, release.buildRecord);
   if (JSON.stringify(req.input ?? null).length > 150000)
     throw new Error("Capability input exceeds size limit");
+  if (
+    isMainLegacyBuild(release.buildRecord) &&
+    [
+      "finance.research",
+      "finance.match-companies",
+      "finance.company-cards",
+      "market.prices",
+    ].includes(req.capability)
+  )
+    throw new Error(
+      "This release uses a retired financial data interface. Approve an updated workflow to rebuild with the current capability SDK. Saved data is retained.",
+    );
+  if (req.capability === "finance.risk-profile") return scoreRiskProfile(req.input);
+  if (req.capability === "finance.company-discovery.v1-3")
+    return executeDiscoveryContract(req.input, suppliedCompanyUniverse());
+  if (
+    ["finance.historical-analysis", "finance.industry-research", "finance.price-target"].includes(
+      req.capability,
+    )
+  ) {
+    const context = {
+      mode: release.buildRecord.plan.mode,
+      companyIds: release.buildRecord.companyIds.length
+        ? release.buildRecord.companyIds
+        : undefined,
+    };
+    if (req.capability === "finance.historical-analysis")
+      return historicalAnalysis(req.input, context);
+    if (req.capability === "finance.industry-research") {
+      const result = await industryResearch(req.input, context);
+      return financialResultSchema.parse({
+        ...result,
+        capability_id: "industry-research",
+        provider: "Tushare",
+        mode: context.mode,
+      });
+    }
+    const result = (await priceTarget(req.input, context)) as Record<string, unknown>;
+    const status = ["available", "partial", "insufficient_data", "invalid_input"].includes(
+      String(result.status),
+    )
+      ? result.status
+      : "unavailable";
+    return financialResultSchema.parse({
+      ...result,
+      status,
+      capability_id: "price-target",
+      provider: "Tushare",
+      mode: context.mode,
+      data_limitations: result.limitations ?? [],
+    });
+  }
+  if (req.capability === "finance.industry-preferences") return runIndustryPreference(req.input);
+  if (req.capability === "finance.company-discovery") {
+    const parsed = discoveryRequestSchema.safeParse(req.input);
+    if (!parsed.success)
+      return {
+        status: "invalid_input",
+        error_code: "INVALID_INPUT",
+        message: "Invalid discovery request.",
+      };
+    const input = parsed.data;
+    const companies = suppliedCompanyUniverse();
+    if (input.action === "start") {
+      const canonicalIds = new Set(companies.map((company) => `SSE:${company.ticker}`));
+      if (input.watchlist.some((id) => !canonicalIds.has(id)))
+        return {
+          status: "invalid_input",
+          error_code: "INVALID_INPUT",
+          message: "Watchlist identities must belong to the supplied universe.",
+        };
+      const { action: _action, ...parameters } = input;
+      return createDiscoverySession(parameters, companies);
+    }
+    return advanceDiscoverySession(input.session_state, input.company_id, input.choice, companies);
+  }
   if (req.capability === "plugin.call") {
     const input = z
       .object({
@@ -496,12 +580,13 @@ export async function dispatch(access: Access, raw: unknown) {
     );
   }
   if (["finance.match-companies", "finance.company-cards"].includes(req.capability)) {
-    // All builds serve the real SSE Class A identity table joined with
-    // daily_basic market caps; there is no synthetic fallback.
-    const table = await sizedSseCompanies();
-    if (!table.available) throw new Error(`Company data is unavailable right now. ${table.reason}`);
+    if (!release.buildRecord || release.buildRecord.plan.mode !== "fixture")
+      throw new Error("Company modules currently support explicit synthetic builds only.");
+    const table = await managedCompanies("fixture");
+    if (!table.available || !table.synthetic)
+      throw new Error("The fixture company table is unavailable.");
     if (req.capability === "finance.match-companies")
-      return { ...matchCompanies(table.companies, req.input), synthetic: table.synthetic };
+      return { ...matchCompanies(table.companies, req.input), synthetic: true };
     const input = companyCardsInputSchema.parse(req.input);
     const day = shanghaiDay(new Date());
     let response: unknown;
@@ -533,20 +618,14 @@ export async function dispatch(access: Access, raw: unknown) {
       response = {
         day,
         criteria: state.batch?.day === day ? JSON.parse(state.batch.criteriaKey) : null,
-        synthetic: table.synthetic,
+        synthetic: true,
         moduleVersion: companyModuleVersion,
         exhausted,
-        companies: tickers.map((ticker) => {
-          const company = table.companies.find((entry) => entry.ticker === ticker);
-          return {
-            ...company,
-            metrics: companyCardMetrics(
-              company?.fundamentals,
-              release.buildRecord!.plan.cardMetrics,
-            ),
-            choice: state.batch?.day === day ? (state.batch.decisions[ticker] ?? null) : null,
-          };
-        }),
+        companies: tickers.map((ticker) => ({
+          ...table.companies.find((company) => company.ticker === ticker),
+          metrics: unavailableCardMetrics(release.buildRecord!.plan.cardMetrics),
+          choice: state.batch?.day === day ? (state.batch.decisions[ticker] ?? null) : null,
+        })),
         watchlist: state.watchlist,
         notice: exhausted
           ? "No unseen eligible companies remain. You may explicitly revisit dismissed companies."
@@ -557,31 +636,16 @@ export async function dispatch(access: Access, raw: unknown) {
     });
     return response;
   }
-  if (req.capability === "finance.research") {
-    const input = z
-      .object({
-        tsCode: z
-          .string()
-          .trim()
-          .regex(/^[0-9]{6}\.(SH|SZ)$/),
-      })
-      .strict()
-      .parse(req.input);
-    const dossier = await financeResearch(input.tsCode);
-    if (!dossier.available)
-      throw new Error(`Research data is unavailable right now. ${dossier.reason}`);
-    return dossier;
-  }
   if (req.capability === "finance.calculate") return execute(release.bundle, req.input);
   if (req.capability === "finance.portfolio") return calculate("portfolio", req.input);
   if (req.capability === "finance.screen") return calculate("screening", req.input);
   if (req.capability === "finance.backtest") return calculate("strategy", req.input);
   if (req.capability === "market.assets") return assetUniverse();
   if (req.capability === "market.prices") {
-    // Apps never choose the provider: platform-initiated calls always use the
-    // live SSE Class A feed, never fixtures.
-    const { symbol } = z.object({ symbol: z.string() }).parse(req.input);
-    return prices({ provider: "tushare", symbol });
+    const input = z
+      .object({ provider: z.enum(["fixtures", "tushare"]).default("fixtures"), symbol: z.string() })
+      .parse(req.input);
+    return prices(input);
   }
   if (req.capability === "storage.read") {
     const { key } = z.object({ key: z.string().regex(/^[a-zA-Z0-9_-]{1,50}$/) }).parse(req.input);
@@ -594,6 +658,27 @@ export async function dispatch(access: Access, raw: unknown) {
       .object({ key: z.string().regex(/^[a-zA-Z0-9_-]{1,50}$/), value: z.unknown() })
       .parse(req.input);
     if (key.startsWith("_")) throw new Error("Reserved platform metadata key");
+    if (key === "risk-profile") {
+      if (!release.bundle.manifest.permissions.includes("finance.risk-profile"))
+        throw new Error("Risk questionnaire permission is required to save its completion.");
+      completedRiskProfileSchema.parse(value);
+    }
+    if (key === "industry-preference") {
+      if (!release.bundle.manifest.permissions.includes("finance.industry-preferences"))
+        throw new Error("Industry preference permission is required to save preferences.");
+      normalizedIndustryPreferenceSchema.parse(value);
+    }
+    if (key === "discovery-watchlist") {
+      if (
+        !release.bundle.manifest.permissions.includes("finance.company-discovery") &&
+        !release.bundle.manifest.permissions.includes("finance.company-discovery.v1-3")
+      )
+        throw new Error("Company discovery permission is required to save its watchlist.");
+      const ids = z.array(z.string().regex(/^SSE:(?:600|601|603|605|688|689)\d{3}$/)).parse(value);
+      const allowed = new Set(suppliedCompanyUniverse().map((company) => `SSE:${company.ticker}`));
+      if (new Set(ids).size !== ids.length || ids.some((id) => !allowed.has(id)))
+        throw new Error("Watchlist requires unique canonical company identities.");
+    }
     if (key === "inputs") await execute(release.bundle, value);
     if (JSON.stringify({ ...app.data, [key]: value }).length > 150000)
       throw new Error("Shared data exceeds prototype size limit");

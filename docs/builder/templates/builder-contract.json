@@ -40,16 +40,9 @@
     }
   ],
   "dependencies": {
-    "risk-industry-matching": [
-      "risk-assessment",
-      "industry-preference"
-    ],
-    "company-cards": [
-      "risk-industry-matching"
-    ],
-    "company-research-detail": [
-      "market-research"
-    ],
+    "risk-industry-matching": ["risk-assessment", "industry-preference"],
+    "company-cards": ["risk-industry-matching"],
+    "company-research-detail": ["market-research"],
     "market-research": []
   },
   "configuration": {
@@ -62,20 +55,8 @@
     "companyUniverseReference": "TODO",
     "cardsPerDay": 5,
     "timezone": "Asia/Shanghai",
-    "metricMenu": [
-      "pe",
-      "ps",
-      "dividendYield",
-      "revenueGrowth",
-      "roe",
-      "interestCoverage"
-    ],
-    "defaultMetrics": [
-      "pe",
-      "dividendYield",
-      "roe",
-      "interestCoverage"
-    ],
+    "metricMenu": ["pe", "ps", "dividendYield", "revenueGrowth", "roe", "interestCoverage"],
+    "defaultMetrics": ["pe", "dividendYield", "roe", "interestCoverage"],
     "selectedMetrics": null,
     "researchMode": "company-and-industry",
     "yesAction": "add-to-watchlist",
@@ -88,10 +69,7 @@
     "uiLibrary": "shadcn-base-ui",
     "theme": "starter-default",
     "themeVersion": "TODO",
-    "languages": [
-      "en",
-      "zh-CN"
-    ],
+    "languages": ["en", "zh-CN"],
     "requiredModules": [
       "company-lookup",
       "risk-assessment",
@@ -164,11 +142,7 @@
   ],
   "feasibility": {
     "status": "pending",
-    "blockers": [
-      "expert-protocols",
-      "company-csv",
-      "provider-field-validation"
-    ],
+    "blockers": ["expert-protocols", "company-csv", "provider-field-validation"],
     "supportedAlternatives": [],
     "companyValidation": {
       "universeReference": "TODO",
@@ -184,11 +158,7 @@
   },
   "userReview": {
     "level": "high-level",
-    "include": [
-      "outcomes",
-      "user-journey",
-      "material-limitations"
-    ],
+    "include": ["outcomes", "user-journey", "material-limitations"],
     "technicalDetailsInContractOnly": true
   }
 }
