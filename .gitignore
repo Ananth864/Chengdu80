@@ -61,3 +61,4 @@ temp
 .scratch
 
 /apps/web/starter/project/src/routeTree.gen.ts
+.local-fast

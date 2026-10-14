@@ -63,7 +63,8 @@
     "dev:isolated": "bun scripts/dev-isolated.ts",
     "provider": "bun scripts/set-provider.ts",
     "dev:glm": "bun scripts/set-provider.ts glm && bun run dev:local",
-    "dev:openai": "bun scripts/set-provider.ts openai && bun run dev:local"
+    "dev:openai": "bun scripts/set-provider.ts openai && bun run dev:local",
+    "dev:fast": "bun scripts/dev-fast.ts"
   },
   "dependencies": {
     "@web-starter/env": "workspace:*",
