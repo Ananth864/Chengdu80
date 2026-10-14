@@ -38,7 +38,7 @@ import {
 } from "../lib/contracts";
 import { findApp, saveApp, mutateApp, checkpointMessages, type Access } from "./repository";
 import { applyRelease, makeRelease } from "./platform";
-import { assessBuildIntent, modelAdapter, modelOptions } from "./models";
+import { modelAdapter, modelOptions } from "./models";
 import { buildPlanSchema, type BuildRecord } from "../lib/build-plan";
 import {
   agentProtocols,
@@ -46,7 +46,6 @@ import {
   managedCompanies,
   prepareBuild,
   requireBuild,
-  resolveCapabilities,
   selectedProtocols,
   validateScopedBundle,
 } from "./build-policy";
@@ -342,7 +341,7 @@ export async function startAgentTurn(
       toolDefinition({
         name: "prepare_build",
         description:
-          "Validate requested capabilities and dependencies, resolve company-table identity, pin protocol versions and save an internal build record. Required before each build/edit turn. No user-facing submission screen. Return blockers instead of building unsupported requests.",
+          "Validate requested capabilities and dependencies, resolve company-table identity, pin protocol versions and save an internal build record. Required before each build/edit turn. No user-facing submission screen. You determine request feasibility against the builder protocol before declaring a plan; the platform independently validates capabilities, company identity and data readiness, and returns blockers instead of building unsupported requests.",
         inputSchema: buildPlanSchema,
       }).server(async (plan) => {
         buildRecord = undefined;
@@ -350,42 +349,10 @@ export async function startAgentTurn(
           throw new Error(
             "Ask whether the user wants a clearly labeled synthetic demo. Live data must not silently become fixtures.",
           );
-        const refusedTurns = new Set([
-          ...(app.rejectedBuildTurns ?? []),
-          ...(app.buildRecords ?? [])
-            .filter((record) => record.readiness === "blocked")
-            .map((record) => record.turnId),
-        ]);
-        const discussion = (app.conversation ?? [])
-          .filter(
-            (message) =>
-              message.role === "user" && message.id !== user.id && !refusedTurns.has(message.id),
-          )
-          .map((message) =>
-            message.parts
-              .filter((part) => part.type === "text")
-              .map((part) => part.content)
-              .join("\n"),
-          );
-        const intent = await assessBuildIntent(user.content, prior?.plan, discussion);
-        const blockers = intent.supported ? [] : [intent.reason];
-        if (intent.requiresLive && plan.mode === "fixture")
-          blockers.push(
-            "The user requested live data; a synthetic demo cannot fulfill that request.",
-          );
-        const declared = resolveCapabilities(plan.capabilities);
-        if (
-          JSON.stringify(resolveCapabilities(intent.requiredCapabilities)) !==
-          JSON.stringify(declared)
-        )
-          blockers.push(
-            "Declared capabilities must exactly match the independently checked user request and its dependencies.",
-          );
         const record = await prepareBuild(
-          { ...plan, companyQueries: intent.companyQueries },
+          plan,
           user.id,
           ((await findApp(access, appId)).buildRecords?.at(-1)?.revision ?? 0) + 1,
-          blockers,
         );
         await mutateApp(access, appId, (latest) => {
           controller.signal.throwIfAborted();

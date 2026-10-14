@@ -1,6 +1,8 @@
-# Builder protocol v2
+# Builder protocol v3
 
 Follow the versioned internal build record and selected capability protocols. The platform validates dependencies, company identities and data readiness independently on every modifying turn. Reuse confirmed functionality and approved interfaces.
+
+You determine request feasibility against this protocol before declaring a plan; there is no second checker. Supported: market research and news, historical analysis with sourced targets, risk and industry matching, company cards, metrics and watchlist, and presentation/configuration changes within an existing supported goal. Outside scope: general nonfinancial apps, brokerage or trade execution, continuous monitoring and notifications. A new unrelated app goal is not supported, and earlier discussion alone never authorizes a new build. If the request explicitly needs current or live data, declare mode live; never satisfy a live request with fixtures. Declare only the capabilities the user's request actually requires plus their dependencies.
 
 New apps use the installed TanStack Start React/TypeScript starter derived from adityamiskin/web-starter. Read read_starter_reference for the exact SDK and toolkit. Use the supplied shadcn Base UI components before writing controls. Package/build configuration, SDK, router, shadcn source and financial modules belong to the platform and cannot be changed. Customize src/App.tsx and additional presentation components within the agreed scope, following the frontend design protocol delivered with the approved build record: deliberate choices grounded in the confirmed specification's subject matter, a settled design plan before presentation code, and restrained, accessible output. Use the default theme. Changing src/app.css requires an explicit theme override in the build record. Do not install packages or call providers, networks or LLMs directly.
 
