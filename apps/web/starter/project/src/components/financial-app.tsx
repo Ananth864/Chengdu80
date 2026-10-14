@@ -1,5 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { defineChart, lineY } from "@tanstack/charts";
+import { scaleLinear } from "@tanstack/charts/scales/linear";
+import { Chart } from "@tanstack/charts/react";
+import { tooltip } from "@tanstack/charts/tooltip";
+import { scaleUtc } from "d3-scale";
 import { cd80 } from "@/lib/cd80";
 import { buildContext } from "@/lib/build-context";
 import { Button } from "@/components/ui/button";
@@ -31,53 +36,102 @@ const metricNames: Record<string, string> = {
   roe: "ROE",
   interestCoverage: "Interest coverage",
 };
-const historyMetrics = [
-  "Current price",
-  "52-week high",
-  "52-week low",
-  "All-time high",
-  "All-time low",
-  "Maximum drawdown",
-  "Distance from 52-week high",
-  "Distance from 52-week low",
-  "Daily change",
-  "Daily change (%)",
-];
+// One-line plain-language explanations, shown as the row's tooltip.
+const metricHints: Record<string, string> = {
+  pe: "Share price divided by the company's yearly profit per share. Lower can mean cheaper, but it can also mean slower expected growth.",
+  ps: "Share price divided by yearly revenue per share. Useful when profits are thin or uneven.",
+  dividendYield:
+    "Cash dividends paid over the past year as a percentage of the share price.",
+  revenueGrowth: "How much the company's yearly income grew compared with the previous year.",
+  roe: "Profit earned per yuan of shareholders' capital — how efficiently the company uses its capital.",
+  interestCoverage: "How comfortably the company's profits cover its interest payments.",
+};
+function formatMetric(id: string, value: number) {
+  if (id === "dividendYield" || id === "revenueGrowth" || id === "roe") return `${value.toFixed(2)}%`;
+  return value.toFixed(2);
+}
+const money = (value: number) =>
+  `¥${value.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const signed = (value: number, format: (input: number) => string) =>
+  `${value >= 0 ? "+" : "−"}${format(Math.abs(value))}`;
+const percent = (value: number) => `${value.toFixed(2)}%`;
+
+type PriceRow = { date: string; close: number };
+// Standard price figures computed from the daily closes. The one-year window
+// uses the last 365 calendar days of trading; drawdown is the worst
+// peak-to-trough fall over the whole sourced period.
+function priceStats(rows: PriceRow[]) {
+  const last = rows[rows.length - 1]!;
+  const prev = rows[rows.length - 2]!;
+  const cutoff = new Date(Date.parse(`${last.date}T00:00:00Z`) - 365 * 86400000)
+    .toISOString()
+    .slice(0, 10);
+  const yearRows = rows.filter((row) => row.date >= cutoff);
+  const window = yearRows.length > 1 ? yearRows : rows;
+  let high52 = -Infinity;
+  let low52 = Infinity;
+  for (const row of window) {
+    high52 = Math.max(high52, row.close);
+    low52 = Math.min(low52, row.close);
+  }
+  let highAll = -Infinity;
+  let lowAll = Infinity;
+  let peak = rows[0]!.close;
+  let maxDrawdown = 0;
+  for (const row of rows) {
+    highAll = Math.max(highAll, row.close);
+    lowAll = Math.min(lowAll, row.close);
+    peak = Math.max(peak, row.close);
+    maxDrawdown = Math.max(maxDrawdown, (peak - row.close) / peak);
+  }
+  return {
+    last: last.close,
+    change: last.close - prev.close,
+    changePct: ((last.close - prev.close) / prev.close) * 100,
+    high52,
+    low52,
+    highAll,
+    lowAll,
+    maxDrawdownPct: maxDrawdown * 100,
+    distanceFromHighPct: ((high52 - last.close) / high52) * 100,
+    distanceFromLowPct: ((last.close - low52) / low52) * 100,
+  };
+}
+function priceChart(rows: PriceRow[]) {
+  const data = rows.map((row) => ({
+    date: new Date(`${row.date}T00:00:00Z`),
+    close: row.close,
+  }));
+  return defineChart({
+    marks: [lineY(data, { x: "date", y: "close" })],
+    scales: {
+      x: { scale: scaleUtc, nice: true },
+      y: { scale: scaleLinear, nice: true, grid: true },
+    },
+    svgAnimation: false,
+    tooltip,
+  });
+}
 
 export function FinancialDemo() {
   const capabilities: readonly string[] = buildContext.capabilities;
   return (
     <main
-      data-financial-module-version="financial-react-v3"
+      data-financial-module-version="financial-react-v4"
       className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-10"
     >
       <header className="space-y-3">
         <Badge variant="secondary">Live · Shanghai Stock Exchange</Badge>
         <h1 className="text-3xl font-semibold tracking-tight">{buildContext.name}</h1>
         <p className="text-muted-foreground">
-          Explore the confirmed financial workflow with real Shanghai Stock Exchange Class A
-          companies. Expert assessments are unavailable.
+          Real Shanghai Stock Exchange Class A companies and live market figures. Nothing here is
+          investment advice.
         </p>
       </header>
       {capabilities.includes("risk-industry-matching") && (
         <CompanySelection cards={capabilities.includes("company-cards")} />
       )}
-      {capabilities.includes("historical-analysis") && (
-        <section aria-label="Historical analysis" className="space-y-4">
-          <h2 className="text-xl font-semibold">Historical analysis and sourced price target</h2>
-          <p className="text-muted-foreground">
-            {buildContext.companies.join(", ")} · Tushare market data and the financial website
-            source are pending.
-          </p>
-          <div className="rounded-xl border p-8 text-muted-foreground">Price chart unavailable</div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {historyMetrics.map((label) => (
-              <MetricCard key={label} label={label} value={null} />
-            ))}
-            <MetricCard label="Sourced price target" value={null} />
-          </div>
-        </section>
-      )}
+      {capabilities.includes("historical-analysis") && <PriceHistorySection />}
       {capabilities.includes("market-research") && (
         <CompanyResearch companies={buildContext.companies} />
       )}
@@ -223,17 +277,43 @@ function CompanySelection({ cards }: { cards: boolean }) {
             <CardContent className="space-y-3">
               {"metrics" in company &&
                 company.metrics.map((metric) => (
-                  <div key={metric.id} className="flex justify-between gap-4 text-sm">
+                  <div
+                    key={metric.id}
+                    className="flex justify-between gap-4 text-sm"
+                    title={metric.reason ?? metricHints[metric.id]}
+                  >
                     <span>{metricNames[metric.id] ?? metric.id}</span>
-                    <span className="text-muted-foreground">Unavailable</span>
+                    <span
+                      className={
+                        metric.status === "available"
+                          ? "font-medium tabular-nums"
+                          : "text-muted-foreground"
+                      }
+                    >
+                      {metric.status === "available" && metric.value !== null
+                        ? formatMetric(metric.id, metric.value)
+                        : "Unavailable"}
+                    </span>
                   </div>
                 ))}
               <details>
-                <summary className="cursor-pointer text-sm font-medium">Company research</summary>
-                <p className="pt-2 text-sm text-muted-foreground">
-                  Company-specific research and relevant industry context will appear here when
-                  approved sources are connected.
-                </p>
+                <summary className="cursor-pointer text-sm font-medium">
+                  What do these numbers mean?
+                </summary>
+                <dl className="space-y-2 pt-2 text-sm text-muted-foreground">
+                  {Object.entries(metricHints)
+                    .filter(([id]) => company.metrics.some((metric) => metric.id === id))
+                    .map(([id, hint]) => (
+                      <div key={id}>
+                        <dt className="font-medium text-foreground">{metricNames[id] ?? id}</dt>
+                        <dd>{hint}</dd>
+                      </div>
+                    ))}
+                  <div>
+                    <dt className="font-medium text-foreground">Company research</dt>
+                    <dd>Verified company and industry facts appear in the research section.</dd>
+                  </div>
+                </dl>
               </details>
             </CardContent>
             {cards && (
@@ -289,6 +369,101 @@ function CompanySelection({ cards }: { cards: boolean }) {
     </section>
   );
 }
+
+function PriceHistorySection() {
+  const tickers: readonly string[] = buildContext.companies;
+  const [symbol, setSymbol] = useState<string | null>(tickers[0] ?? null);
+  const history = useQuery({
+    queryKey: ["price-history", symbol],
+    queryFn: () => cd80.finance.priceHistory(symbol!),
+    enabled: !!symbol,
+    retry: false,
+  });
+  const rows = history.data?.prices ?? [];
+  const stats = rows.length >= 2 ? priceStats(rows) : null;
+  const definition = useMemo(() => (rows.length ? priceChart(rows) : null), [rows]);
+  if (!tickers.length)
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Price history</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground">
+            Pin at least one company in the build plan to show its price history.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  return (
+    <section aria-label="Historical analysis" className="space-y-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <h2 className="text-xl font-semibold tracking-tight">How the price has moved</h2>
+        {tickers.length > 1 && (
+          <Select value={symbol ?? undefined} onValueChange={(value) => setSymbol(value)}>
+            <SelectTrigger aria-label="Company" className="w-56">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {tickers.map((ticker) => (
+                <SelectItem key={ticker} value={ticker}>
+                  {ticker}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+      <p className="text-muted-foreground">
+        Daily closing prices for {symbol} from the live exchange feed
+        {history.data ? ` · ${history.data.meta.coverage} · unadjusted closes` : ""}.
+      </p>
+      {history.isFetching && <p role="status">Loading prices…</p>}
+      {history.error && (
+        <Alert variant="destructive">
+          <AlertTitle>Prices could not load</AlertTitle>
+          <AlertDescription>{history.error.message}</AlertDescription>
+        </Alert>
+      )}
+      {history.data && stats && definition && (
+        <div className="space-y-4">
+          <div className="rounded-xl border p-4">
+            <Chart
+              definition={definition}
+              ariaLabel={`Daily closing prices for ${symbol}`}
+              height={280}
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <MetricCard label="Current price" value={money(stats.last)} />
+            <MetricCard
+              label="Daily change"
+              value={`${signed(stats.change, money)} (${signed(stats.changePct, percent)})`}
+            />
+            <MetricCard label="52-week high" value={money(stats.high52)} />
+            <MetricCard label="52-week low" value={money(stats.low52)} />
+            <MetricCard label="All-time high" value={money(stats.highAll)} />
+            <MetricCard label="All-time low" value={money(stats.lowAll)} />
+            <MetricCard label="Maximum drawdown" value={percent(stats.maxDrawdownPct)} />
+            <MetricCard
+              label="Distance from 52-week high"
+              value={percent(stats.distanceFromHighPct)}
+            />
+            <MetricCard
+              label="Distance from 52-week low"
+              value={percent(stats.distanceFromLowPct)}
+            />
+            <MetricCard label="Sourced price target" value={null} />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {history.data.meta.warning} An outside price target is not connected yet, so none is
+            shown. Figures describe the past; they are not predictions.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
 const pct = (value: number | null | undefined) =>
   value === null || value === undefined ? "Unavailable" : `${value.toFixed(1)}%`;
 const compactRmb = new Intl.NumberFormat("zh-CN", {
@@ -298,9 +473,7 @@ const compactRmb = new Intl.NumberFormat("zh-CN", {
   maximumFractionDigits: 2,
 });
 const day = (value: string | null | undefined) =>
-  value && value.length === 8
-    ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`
-    : (value ?? "—");
+  value && value.length === 8 ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}` : (value ?? "—");
 
 function CompanyResearch({ companies }: { companies: readonly string[] }) {
   const [tsCode, setTsCode] = useState<string | null>(companies[0] ?? null);
@@ -396,9 +569,7 @@ function CompanyResearch({ companies }: { companies: readonly string[] }) {
               )}
               {data.industry?.valuation && (
                 <div className="rounded-xl border p-4 text-sm">
-                  <p className="font-medium">
-                    Industry snapshot · as of {day(data.industry.valuation.asOf)}
-                  </p>
+                  <p className="font-medium">Industry snapshot · as of {day(data.industry.valuation.asOf)}</p>
                   <p className="text-muted-foreground">
                     Total market value {compactRmb.format(data.industry.valuation.totalMvRmb)} · P/E{" "}
                     {data.industry.valuation.pe ?? "unavailable"} · P/B{" "}
@@ -408,9 +579,7 @@ function CompanyResearch({ companies }: { companies: readonly string[] }) {
               )}
               {data.industry && data.industry.peers.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold">
-                    Industry peers ({data.industry.peers.length})
-                  </h3>
+                  <h3 className="text-sm font-semibold">Industry peers ({data.industry.peers.length})</h3>
                   <p className="mt-1 text-sm leading-6 text-muted-foreground">
                     {data.industry.peers.map((peer, index) => (
                       <span key={peer.tsCode}>

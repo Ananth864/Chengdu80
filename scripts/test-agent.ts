@@ -590,7 +590,7 @@ try {
   const latest = await appById(id);
   assert.equal(latest.current?.id, activeRelease);
   assert(!requests.at(-1)?.input.some((item) => item.name === "call_plugin"));
-  assert(built.current.buildRecord?.resolvedCapabilities.includes("news"));
+  assert(built.current.buildRecord?.resolvedCapabilities.includes("market-research"));
   assert(built.current.buildRecord?.protocolHashes.builder);
   assert.equal(built.current.buildRecord?.provider, "tushare");
   assert.equal(built.current.buildRecord?.readiness, "live");

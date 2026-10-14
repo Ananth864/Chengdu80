@@ -3,7 +3,6 @@ import { metricSelectionSchema } from "./company-capabilities";
 
 export const businessCapabilities = [
   "market-research",
-  "news",
   "historical-analysis",
   "price-target",
   "risk-assessment",

@@ -17,7 +17,6 @@ Exchange/symbol format and CSV identity mapping: TODO.
 Required output field → provider field → type/unit/date → transformation: TODO.
 History start/end, adjustment basis and reporting scope: TODO.
 Price targets: analyst/source, publication date, horizon, currency, individual/consensus method: TODO.
-News: company/industry matching, source/event dates, deduplication: TODO.
 Financial metrics: underlying fields and validated definitions: TODO.
 
 ## Failures and evidence

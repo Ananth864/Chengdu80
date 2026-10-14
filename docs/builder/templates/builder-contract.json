@@ -37,18 +37,20 @@
       "id": "market-research",
       "protocolVersion": "TODO",
       "readiness": "template"
-    },
-    {
-      "id": "news",
-      "protocolVersion": "TODO",
-      "readiness": "template"
     }
   ],
   "dependencies": {
-    "risk-industry-matching": ["risk-assessment", "industry-preference"],
-    "company-cards": ["risk-industry-matching"],
-    "company-research-detail": ["market-research"],
-    "market-research": ["news"]
+    "risk-industry-matching": [
+      "risk-assessment",
+      "industry-preference"
+    ],
+    "company-cards": [
+      "risk-industry-matching"
+    ],
+    "company-research-detail": [
+      "market-research"
+    ],
+    "market-research": []
   },
   "configuration": {
     "riskToSize": {
@@ -60,11 +62,22 @@
     "companyUniverseReference": "TODO",
     "cardsPerDay": 5,
     "timezone": "Asia/Shanghai",
-    "metricMenu": ["pe", "ps", "dividendYield", "revenueGrowth", "roe", "interestCoverage"],
-    "defaultMetrics": ["pe", "dividendYield", "roe", "interestCoverage"],
+    "metricMenu": [
+      "pe",
+      "ps",
+      "dividendYield",
+      "revenueGrowth",
+      "roe",
+      "interestCoverage"
+    ],
+    "defaultMetrics": [
+      "pe",
+      "dividendYield",
+      "roe",
+      "interestCoverage"
+    ],
     "selectedMetrics": null,
     "researchMode": "company-and-industry",
-    "newsMode": "once-per-research-run",
     "yesAction": "add-to-watchlist",
     "noAction": "dismiss",
     "brokerageIntegration": false
@@ -75,7 +88,10 @@
     "uiLibrary": "shadcn-base-ui",
     "theme": "starter-default",
     "themeVersion": "TODO",
-    "languages": ["en", "zh-CN"],
+    "languages": [
+      "en",
+      "zh-CN"
+    ],
     "requiredModules": [
       "company-lookup",
       "risk-assessment",
@@ -101,7 +117,7 @@
     "mode": "fixture",
     "adapters": [
       {
-        "id": "wind",
+        "id": "tushare",
         "product": "TODO",
         "readiness": "template",
         "requiredFieldsReference": "TODO"
@@ -110,7 +126,7 @@
     "fixturesReference": "TODO",
     "evidenceRequired": true,
     "missingValuePolicy": "unavailable-with-reason",
-    "officialProvider": "wind",
+    "officialProvider": "tushare",
     "allowAutomaticProviderFallback": false,
     "ownership": "platform-managed",
     "companyTableConfiguredBy": "product-team"
@@ -143,12 +159,16 @@
     "reuse-existing-ai-integration",
     "resolved-theme-matches-contract",
     "requested-companies-valid-in-table",
-    "wind-production-provider",
+    "tushare-production-provider",
     "plain-language-specification-review"
   ],
   "feasibility": {
     "status": "pending",
-    "blockers": ["expert-protocols", "company-csv", "provider-field-validation"],
+    "blockers": [
+      "expert-protocols",
+      "company-csv",
+      "provider-field-validation"
+    ],
     "supportedAlternatives": [],
     "companyValidation": {
       "universeReference": "TODO",
@@ -164,7 +184,11 @@
   },
   "userReview": {
     "level": "high-level",
-    "include": ["outcomes", "user-journey", "material-limitations"],
+    "include": [
+      "outcomes",
+      "user-journey",
+      "material-limitations"
+    ],
     "technicalDetailsInContractOnly": true
   }
 }

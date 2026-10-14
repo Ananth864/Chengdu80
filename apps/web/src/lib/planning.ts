@@ -16,7 +16,6 @@ export type WorkflowGraph = {
 
 const capabilityLabels: Record<BusinessCapability, string> = {
   "market-research": "Market research",
-  news: "News retrieval",
   "historical-analysis": "Historical analysis",
   "price-target": "Sourced price target",
   "risk-assessment": "Risk appetite assessment",
@@ -27,7 +26,6 @@ const capabilityLabels: Record<BusinessCapability, string> = {
 const capabilityDetails: Record<BusinessCapability, string> = {
   "market-research":
     "Research about an entire industry. The daily company cards then add detail about each company before a decision.",
-  news: "News is gathered once each time the research runs — it does not refresh on its own.",
   "historical-analysis":
     "Price chart, latest price, 52-week and all-time highs and lows, how far the price has fallen from its peak, and the daily change.",
   "price-target":

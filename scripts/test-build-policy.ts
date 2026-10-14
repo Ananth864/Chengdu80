@@ -38,7 +38,7 @@ try {
   globalThis.fetch = (async () => new Response(JSON.stringify(sample))) as typeof fetch;
   resetSseCompanyCache();
   const record = await prepareBuild(plan, "turn-1", 1);
-  assert.deepEqual(record.resolvedCapabilities, ["market-research", "news"]);
+  assert.deepEqual(record.resolvedCapabilities, ["market-research"]);
   assert.equal(record.theme, "starter-default");
   requireBuild(record, "turn-1");
   assert.throws(() => requireBuild({ ...record, provider: "wind" } as never, "turn-1"));

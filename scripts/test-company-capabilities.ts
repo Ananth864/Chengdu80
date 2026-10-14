@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import {
+  companyCardMetrics,
   dailyCompanyCards,
   decideCompanyCard,
   emptyCardState,
   matchCompanies,
   shanghaiDay,
-  unavailableCardMetrics,
 } from "../apps/web/src/lib/company-capabilities";
 import type { Company } from "../apps/web/src/lib/company-table";
 const companies: Company[] = Array.from({ length: 8 }, (_, i) => ({
@@ -78,15 +78,26 @@ assert(!revisited.state.batch!.tickers.includes(state.watchlist[0]!));
 assert.equal(shanghaiDay(new Date("2026-10-14T15:59:59Z")), "2026-10-14");
 assert.equal(shanghaiDay(new Date("2026-10-14T16:00:00Z")), "2026-10-15");
 assert.deepEqual(
-  unavailableCardMetrics().map((m) => m.id),
+  companyCardMetrics(undefined).map((m) => m.id),
   ["pe", "dividendYield", "roe", "interestCoverage"],
 );
 assert.deepEqual(
-  unavailableCardMetrics(["ps"]).map((m) => m.id),
+  companyCardMetrics(undefined, ["ps"]).map((m) => m.id),
   ["ps"],
 );
-assert.equal(unavailableCardMetrics(["roe"])[0]!.value, null);
-assert.throws(() => unavailableCardMetrics(["roe", "roe"]));
+assert.equal(companyCardMetrics(undefined, ["roe"])[0]!.value, null);
+assert.equal(companyCardMetrics(undefined, ["roe"])[0]!.status, "unavailable");
+const fed = companyCardMetrics({ peTtm: 6.4, psTtm: 1.2, dividendYieldTtm: 4.25 }, [
+  "pe",
+  "ps",
+  "dividendYield",
+  "roe",
+]);
+assert.equal(fed[0]!.value, 6.4);
+assert.equal(fed[0]!.status, "available");
+assert.equal(fed[2]!.value, 4.25);
+assert.equal(fed[3]!.status, "unavailable");
+assert.throws(() => companyCardMetrics(undefined, ["roe", "roe"]));
 console.log(
-  "PASS fixed matching, independent filters, five-card limit, stable reload/order, decisions, exclusion/exhaustion/revisit, China day, metric selection and missing values",
+  "PASS fixed matching, independent filters, five-card limit, stable reload/order, decisions, exclusion/exhaustion/revisit, China day, metric selection and fundamentals-sourced values",
 );

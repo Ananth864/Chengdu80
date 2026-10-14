@@ -25,7 +25,6 @@ export const agentProtocols = { communication, builder, "application-llm": appli
 export { frontendDesign };
 const capabilityProtocols: Record<BusinessCapability, string> = {
   "market-research": research,
-  news: research,
   "historical-analysis": history,
   "price-target": history,
   "risk-assessment": matching,
@@ -34,8 +33,7 @@ const capabilityProtocols: Record<BusinessCapability, string> = {
   "company-cards": matching,
 };
 export const capabilityDependencies: Record<BusinessCapability, BusinessCapability[]> = {
-  "market-research": ["news"],
-  news: ["market-research"],
+  "market-research": [],
   "historical-analysis": ["price-target"],
   "price-target": ["historical-analysis"],
   "risk-assessment": ["risk-industry-matching"],
@@ -155,6 +153,18 @@ export async function prepareBuild(
       ...resolvedCapabilities.map((id) => [id, capabilityProtocols[id]] as const),
     ].map(([id, content]) => [id, hash(content)]),
   );
+  // The build context scopes the shell's industry picker to the confirmed
+  // companies' industries; apps without pinned companies get the full table.
+  const confirmed = new Set(companyIds);
+  const companyIndustries = table.available
+    ? [
+        ...new Set(
+          table.companies
+            .filter((company) => confirmed.size === 0 || confirmed.has(company.ticker))
+            .map((company) => company.industry || "Other"),
+        ),
+      ].sort()
+    : [];
   const record = {
     id: crypto.randomUUID(),
     version: 1 as const,
@@ -168,9 +178,7 @@ export async function prepareBuild(
     protocolHashes,
     provider: "tushare" as const,
     moduleVersions: { companies: companyModuleVersion, starter: financialStarterVersion },
-    companyIndustries: table.available
-      ? [...new Set(table.companies.map((company) => company.industry || "Other"))].sort()
-      : [],
+    companyIndustries,
     theme: plan.themeOverride ?? "starter-default",
     readiness: blockers.length ? ("blocked" as const) : plan.mode,
     blockers,

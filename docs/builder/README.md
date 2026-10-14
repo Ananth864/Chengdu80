@@ -20,14 +20,14 @@ Preparing the internal record freezes its version for that build. A builder must
 
 | Capability                                   | Required behavior and dependencies                                                                                                                                                         |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Market research                              | Includes a one-time news retrieval for the demo. Standalone requests produce industry research. Company-card details use company-specific research plus relevant industry context.         |
+| Market research                              | Standalone requests produce industry research. Company-card details use company-specific research plus relevant industry context.         |
 | Historical analysis and sourced price target | Always offered together; may run without market research. Target price comes from an external financial source, never a builder-created prediction model.                                  |
 | Risk appetite assessment                     | Internal input to matching; not offered alone. Expert questions and scoring remain to be supplied.                                                                                         |
 | Industry preference                          | Separate assessment/input, not offered alone; uses the provided company-universe industries.                                                                                               |
 | Risk/industry matching                       | Requires both assessments. Fixed mapping: low risk → large cap, medium risk → medium cap, high risk → small cap; intersect with selected industries.                                       |
 | Company-card experience                      | Five random eligible companies per day, with financial metrics and yes/no interaction. Yes adds to watchlist. Optional research detail must include the research dependency when selected. |
 
-Matching may be combined with market research or with historical analysis and sourced targets. Selecting a research detail view adds market research and its news dependency; matching itself does not always require research.
+Matching may be combined with market research or with historical analysis and sourced targets. Selecting a research detail view adds market research; matching itself does not always require research.
 
 The company CSV has Company Name, Ticker Symbol, Industry, A-share Market Capitalisation (RMB), and Size Category. Preserve ticker leading zeros, reject ambiguous identities, and use the supplied category rather than inventing capitalization thresholds. Use deterministic lookups and filtering; the model interprets requests and explains evidence. CSV delivery, exchange disambiguation and category-value normalization remain outstanding.
 
@@ -35,7 +35,7 @@ The company CSV has Company Name, Ticker Symbol, Industry, A-share Market Capita
 
 Tushare is the official data provider for the platform. The platform server holds `TUSHARE_TOKEN`; builders and generated apps never see it and call data only through platform capabilities such as `market.prices`. Fixtures remain explicitly labeled demo data. Do not silently fall back to another provider.
 
-Reference endpoint: the documented Tushare HTTP API at `http://api.tushare.pro` with `{api_name, token, params, fields}` request bodies. The competition token's licensed tables, row limits and frequency limits must be verified with real calls before live builds open. Daily-price access does not establish fundamentals, target-price or news entitlements.
+Reference endpoint: the documented Tushare HTTP API at `http://api.tushare.pro` with `{api_name, token, params, fields}` request bodies. The competition token's licensed tables, row limits and frequency limits must be verified with real calls before live builds open. Daily-price access does not establish fundamentals or target-price entitlements.
 
 ## Required outputs
 
@@ -103,7 +103,7 @@ Use separate files/components for these work areas and agree contract/module int
 - Research protocol, evidence requirements, approved chatbot library and bilingual copy.
 - Historical metric conventions and reviewed calculation examples.
 - Financial-card calculation approval, industry classification/minimum peer count and freshness limits.
-- Verified Tushare field coverage, including whether price targets and news are covered by the competition token. Provider selection is settled; entitlement verification and scoped-build wiring remain pending.
+- Verified Tushare field coverage, including whether price targets are covered by the competition token. Provider selection is settled; entitlement verification and scoped-build wiring remain pending.
 - Full-history coverage for all-time values and financial fields for every required card.
 
 Missing items have placeholders below. Teammates may build against labeled fixtures while readiness stays `template`; do not present the capability as live-ready.

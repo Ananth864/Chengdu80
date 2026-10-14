@@ -14,7 +14,7 @@ Finish the transformation from fixture platform to live capability platform, one
 4. Implement the historical-analysis package as a versioned reusable platform module on approved conventions: chart, current price, 52-week and all-time extremes, maximum drawdown, distances, daily change, plus an externally sourced price target with attribution.
 5. Fill company-card metric values (P/E, P/S, dividend yield, revenue growth, ROE, interest coverage) from verified provider fields and approved formulas, keeping unavailable metrics visible with reasons.
 6. Add the expert risk-appetite questionnaire and scoring, feeding the already-implemented fixed risk-to-size/industry matching.
-7. Deliver market research with one-time demo news retrieval and approved analysis content, including the company-card research detail view.
+7. Deliver market research with approved analysis content, including the company-card research detail view.
 8. Activate the generated-app LLM tool only within an approved evidence library and server-side restrictions.
 9. Close UX gaps: real rendered-release thumbnails in the gallery and English/Simplified Chinese parity for platform and generated apps.
 
@@ -68,7 +68,6 @@ The synthetic fixture flow remains as the labeled fallback; live readiness is a 
 - Price targets are fetched from an approved external source with attribution (source, date, currency, horizon) and are never computed locally. Absence of a target renders unavailable.
 - All-time extremes require full-history coverage; when coverage is insufficient the field renders unavailable with the coverage reason rather than a partial-history value.
 - The risk-appetite questionnaire, scoring, missing-answer behavior, and industry-preference protocol are expert-supplied protocol content driving a fixed scoring module; the current synthetic risk selection remains only in fixture mode.
-- Market research uses a one-time news retrieval for the demo; a news provider must be selected and its matching, deduplication, and freshness rules recorded in the provider handoff before the capability opens.
 - The generated-app LLM tool (the application-llm protocol already bundled into instructions) stays disabled until the approved evidence library exists; activation adds server-side restrictions limiting it to that library.
 - Gallery thumbnails move from static layout previews to safely captured screenshots of rendered releases, still inside the sandbox with no scripts or data writes at thumbnail time.
 - Bilingual support is delivered as central message catalogs for the platform shell and the starter kit, with identical figures and qualifications across languages.
@@ -96,5 +95,5 @@ The synthetic fixture flow remains as the labeled fallback; live readiness is a 
 
 ## Further Notes
 
-- Blocking dependency reality: several items need inputs only humans can supply — the real company CSV, the risk questionnaire, historical/card-metric conventions, the approved research/explanation library, news provider selection, and price-target source approval. Engineering tickets below are sequenced so that provider plumbing, table loading, and doc reconciliation proceed immediately while expert-dependent modules land behind readiness flags.
+- Blocking dependency reality: several items need inputs only humans can supply — the real company CSV, the risk questionnaire, historical/card-metric conventions, the approved research/explanation library, and price-target source approval. Engineering tickets below are sequenced so that provider plumbing, table loading, and doc reconciliation proceed immediately while expert-dependent modules land behind readiness flags.
 - The ticket set for this spec is published as GitHub issues on this repository, one tracer-bullet ticket per seam, with blocking edges declared in each ticket body.
