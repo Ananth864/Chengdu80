@@ -20,7 +20,7 @@ bun run setup:env      # Creates ../.env only when absent, with local secrets
 bun run credentials    # Reports variable names, never values
 ```
 
-Set `GLM_API_KEY` in `../.env` and restart for live specification creation, source generation, iterative changes, and app explanations. `GLM_MODEL=GLM-5.3` and `GLM_BASE_URL=https://ai.gitee.com/v1` select the current Gitee AI provider. TanStack AI uses compatible Chat Completions with reasoning enabled and schema-validated JSON. Set `MODEL_PROVIDER=openai` to use the optional OpenAI Responses fallback.
+Set `OPENAI_API_KEY` in `../.env` and restart for live specification creation, source generation, iterative changes, and app explanations. `MODEL_PROVIDER=openai` (with `OPENAI_MODEL` and `OPENAI_BASE_URL`) selects the current OpenAI Responses provider. Set `MODEL_PROVIDER=glm` with `GLM_API_KEY`, `GLM_MODEL=GLM-5.3` and `GLM_BASE_URL=https://ai.gitee.com/v1` to use the Gitee AI Chat Completions fallback with reasoning enabled and schema-validated JSON.
 
 For Node 24+ using an HTTP proxy, set `NODE_USE_ENV_PROXY=1`, `HTTPS_PROXY`, `HTTP_PROXY`, and `NO_PROXY=127.0.0.1,localhost` before starting. Use your proxy's current URL. These affect this process, not system settings. Connectivity failures are reported in the UI.
 
