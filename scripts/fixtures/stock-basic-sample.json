@@ -1,0 +1,71 @@
+{
+  "code": 0,
+  "msg": "",
+  "data": {
+    "fields": ["ts_code", "name", "fullname", "enname", "industry"],
+    "items": [
+      [
+        "600000.SH",
+        "浦发银行",
+        "上海浦东发展银行股份有限公司",
+        "Shanghai Pudong Development Bank Co.,Ltd.",
+        "银行"
+      ],
+      ["600036.SH", "招商银行", "招商银行股份有限公司", "China Merchants Bank Co.,Ltd.", "银行"],
+      ["601988.SH", "中国银行", "中国银行股份有限公司", "Bank of China Limited", "银行"],
+      [
+        "601398.SH",
+        "工商银行",
+        "中国工商银行股份有限公司",
+        "Industrial and Commercial Bank of China Limited",
+        "银行"
+      ],
+      ["600519.SH", "贵州茅台", "中国贵州茅台酒股份有限公司", "Kweichow Moutai Co.,Ltd.", "白酒"],
+      [
+        "601857.SH",
+        "中国石油",
+        "中国石油天然气股份有限公司",
+        "PetroChina Company Limited",
+        "石油天然气"
+      ],
+      ["600900.SH", "长江电力", "中国长江电力股份有限公司", "China Yangtze Power Co.,Ltd.", "电力"],
+      [
+        "603288.SH",
+        "海天味业",
+        "佛山市海天调味食品股份有限公司",
+        "Foshan Haitian Flavouring and Food Co.,Ltd.",
+        "调味品"
+      ],
+      [
+        "605499.SH",
+        "东鹏饮料",
+        "东鹏饮料集团股份有限公司",
+        "Shenzhen Eastpai Drinks Co.,Ltd.",
+        "软饮料"
+      ],
+      [
+        "688981.SH",
+        "中芯国际",
+        "中芯国际集成电路制造股份有限公司",
+        "Semiconductor Manufacturing International Corporation",
+        "半导体"
+      ],
+      ["689009.SH", "九号公司", "九号有限公司", "Ninebot Limited", "电动代步车"],
+      [
+        "900901.SH",
+        "云赛B股",
+        "上海云赛信息股份有限公司",
+        "Yun Sai Information B Share",
+        "信息技术"
+      ],
+      ["000001.SZ", "平安银行", "平安银行股份有限公司", "Ping An Bank Co.,Ltd.", "银行"],
+      [
+        "600196.SH",
+        "",
+        "上海复星医药（集团）股份有限公司",
+        "Shanghai Fosun Pharmaceutical (Group) Co.,Ltd.",
+        "医药"
+      ]
+    ]
+  }
+}

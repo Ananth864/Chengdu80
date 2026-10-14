@@ -184,32 +184,11 @@ bun install
 # Fastest local check, no Docker/Convex required:
 bun run dev:local
 
-# Full self-hosted stack via Docker Compose (app + self-hosted Convex + dashboard):
-bun run setup:selfhosted   # scripts/setup-selfhosted.sh, idempotent
-
-# Full self-hosted stack on a local k3s cluster (via k3d), Ingress-routed,
-# Convex deployed from the Kubernetes manifests in k8s/:
-bun run setup:k3s          # scripts/setup-k3s.sh, requires: brew install k3d kubectl
+# Full self-hosted stack (app + self-hosted Convex + dashboard):
+docker compose up -d convex-backend convex-dashboard
+docker compose exec convex-backend ./generate_admin_key.sh   # copy the admin key
+cd packages/backend && bunx convex env set CD80_DEMO_MODE 1 --env-file .env.local
+bunx convex env set PLATFORM_INTERNAL_KEY <same key as the web app> --env-file .env.local
+bunx convex deploy --env-file .env.local
+cd ../.. && docker compose up -d --build web
 ```
-
-### k3s / Kubernetes manifests
-
-[`k8s/`](../k8s/) contains tested manifests:
-
-- `convex.yaml` — self-hosted Convex backend (PVC-backed) + dashboard Deployments/Services.
-- `web.yaml` — the app Deployment/Service. Note the `hostAliases` entry: `VITE_CONVEX_URL` is
-  inlined into the browser bundle at build time, so the _same_ hostname must also resolve from
-  inside this pod for server-side Convex calls. It's pointed at the Traefik Ingress ClusterIP so
-  both the browser (via Ingress + a real/`/etc/hosts` DNS entry) and the pod itself reach Convex
-  through the identical Ingress route — the same pattern a real public DNS hostname gives you for
-  free in production.
-- `ingress.yaml` — host-based routing for the app and Convex's two origins (cloud + site) plus the
-  dashboard, all multiplexed through the cluster's Ingress controller (Traefik, bundled with k3s).
-
-`scripts/setup-k3s.sh` automates: creating a k3d cluster with ports 80/443 mapped to the host,
-building/importing the app image, deploying the manifests above, generating a Convex admin key, and
-pushing Convex schema/functions — verified to work end-to-end from a fully torn-down state.
-
-For a real (non-local) k3s/k8s cluster: replace `k3d image import` with pushing to a real registry
-your cluster can pull from, and point real DNS records at your Ingress controller's external IP
-instead of `/etc/hosts` — the manifests themselves don't change.

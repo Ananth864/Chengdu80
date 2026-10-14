@@ -28,6 +28,14 @@ export async function sourceHash(bundle: AppBundle) {
     .join("");
 }
 export function inspectSource(bundle: AppBundle, spec: ProductSpec): Check[] {
+  if (bundle.manifest.schemaVersion === 3)
+    return [
+      {
+        name: "Financial project verification",
+        passed: false,
+        detail: "Use contract-bound project verification with a feasible build record.",
+      },
+    ];
   const checks: Check[] = [];
   const add = (name: string, passed: boolean, detail: string) =>
     checks.push({ name, passed, detail });
@@ -103,6 +111,10 @@ export function inspectSource(bundle: AppBundle, spec: ProductSpec): Check[] {
   return checks;
 }
 export async function execute(bundle: AppBundle, input: unknown) {
+  if (bundle.manifest.schemaVersion === 3)
+    throw new Error(
+      "React financial apps use approved fixed platform modules, not generated calculation code.",
+    );
   // A trusted entry-point change must not reuse an isolate from an older runtime.
   const key = "runtime-v2:" + (await sourceHash(bundle));
   let stub: { fetch: (request: Request) => Promise<Response> };
@@ -193,7 +205,24 @@ function matches(result: any, expected: Record<string, unknown>) {
     )
   );
 }
-export async function verify(bundle: AppBundle, spec: ProductSpec): Promise<Verification> {
+export async function verify(
+  bundle: AppBundle,
+  spec: ProductSpec,
+  record?: import("../lib/build-plan").BuildRecord,
+  signal?: AbortSignal,
+): Promise<Verification> {
+  if (bundle.manifest.schemaVersion === 3) {
+    const { checks, thumbnail } = await (
+      await import("./project-runtime")
+    ).verifyProject(bundle, spec, record, signal);
+    return {
+      passed: checks.length > 0 && checks.every((check) => check.passed),
+      checks,
+      checkedAt: new Date().toISOString(),
+      sourceHash: await sourceHash(bundle),
+      ...(thumbnail ? { thumbnail } : {}),
+    };
+  }
   const checks = inspectSource(bundle, spec);
   if (checks.every((c) => c.passed)) {
     const p = protocolFor(spec.protocol);

@@ -5,6 +5,22 @@ import { spawn } from "node:child_process";
 import { configuredEnvironment, platformRoot as root } from "./environment";
 
 const env = configuredEnvironment();
+if (process.platform === "darwin" && env.CD80_APP_FORMAT !== "legacy") {
+  const child = spawn("bun", ["scripts/dev-isolated.ts", ...process.argv.slice(2)], {
+    cwd: root,
+    env,
+    stdio: "inherit",
+  });
+  process.on("SIGINT", () => child.kill("SIGINT"));
+  process.on("SIGTERM", () => child.kill("SIGTERM"));
+  await new Promise<void>((resolve) =>
+    child.on("exit", (code) => {
+      process.exitCode = code ?? 1;
+      resolve();
+    }),
+  );
+  process.exit(process.exitCode ?? 0);
+}
 const dataDir = env.CD80_DATA_DIR || resolve(root, ".local");
 mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 Object.assign(env, {

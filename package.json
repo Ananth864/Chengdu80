@@ -4,7 +4,8 @@
   "workspaces": {
     "packages": [
       "apps/*",
-      "packages/*"
+      "packages/*",
+      "apps/web/starter/project"
     ],
     "catalog": {
       "zod": "^4.1.13",
@@ -44,11 +45,22 @@
     "fix": "vp check --fix",
     "docker:build": "docker build -t chengdu80-web -f apps/web/Dockerfile .",
     "setup:selfhosted": "bash scripts/setup-selfhosted.sh",
-    "setup:k3s": "bash scripts/setup-k3s.sh",
     "test:demo": "bun scripts/test-demo.ts",
     "test:glm-contract": "bun scripts/test-glm-contract.ts",
     "test:query-stream": "bun --conditions=development scripts/test-query-stream.ts",
-    "deploy:backend": "bun scripts/convex.ts push"
+    "deploy:backend": "bun scripts/convex.ts push",
+    "test:ui": "VITE_LOCAL_MODE=1 bun run build && bun scripts/test-ui.ts",
+    "test:build-policy": "bun scripts/test-build-policy.ts",
+    "test:company-lookup": "bun scripts/test-company-lookup.ts",
+    "test:agent": "VITE_LOCAL_MODE=1 bun run build && bun scripts/test-agent.ts",
+    "test:plugins": "VITE_LOCAL_MODE=1 bun run build && bun scripts/test-plugins.ts",
+    "test:company-capabilities": "bun scripts/test-company-capabilities.ts",
+    "test:requirements": "bun scripts/test-requirements.ts",
+    "test:conversation": "bun scripts/test-conversation.ts",
+    "starter:sync": "bun scripts/sync-app-starter.ts",
+    "test:chat-storage": "bun scripts/test-chat-storage.ts",
+    "test:financial-starter": "bun scripts/test-financial-starter.ts",
+    "dev:isolated": "bun scripts/dev-isolated.ts"
   },
   "dependencies": {
     "@web-starter/env": "workspace:*",
@@ -58,6 +70,7 @@
     "@types/node": "^22.13.14",
     "@web-starter/config": "workspace:*",
     "convex": "catalog:",
+    "playwright": "^1.64.0",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:"

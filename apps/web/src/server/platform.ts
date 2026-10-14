@@ -1,8 +1,21 @@
+import { managedCompanies, requireBuild, validateScopedBundle } from "./build-policy";
+import {
+  companyCardsInputSchema,
+  companyModuleVersion,
+  dailyCompanyCards,
+  decideCompanyCard,
+  emptyCardState,
+  matchCompanies,
+  shanghaiDay,
+  unavailableCardMetrics,
+  type CardState,
+} from "../lib/company-capabilities";
 import { modelConfiguration } from "./model-config";
 import { z } from "zod";
 import {
   bundleSchema,
   protocols,
+  requirementsSchema,
   specSchema,
   type Application,
   type AppBundle,
@@ -14,13 +27,43 @@ import { sampleBundle } from "../lib/samples";
 import { auth } from "../integrations/auth";
 import { clarify, explain, feasibility, generate } from "./models";
 import { assetUniverse, prices } from "./providers";
-import { event, findApp, listApps, saveApp, type Access } from "./repository";
+import {
+  event,
+  findApp,
+  listApps,
+  saveApp,
+  mutateApp,
+  deleteChat,
+  type Access,
+} from "./repository";
+import { projectStarterBundle } from "../lib/financial-starter";
 import { execute, sourceHash, verify } from "./runtime";
 import { demoMode, demoOwnerId, localMode, settings } from "./settings";
 
 const text = z.string().trim().min(1).max(4000);
 const requestSchema = z.discriminatedUnion("action", [
+  z
+    .object({
+      action: z.literal("delete-chat"),
+      appId: z.string(),
+      expectedRevision: z.number().int().positive(),
+    })
+    .strict(),
   z.object({ action: z.literal("clarify"), prompt: text }),
+  z.object({
+    action: z.literal("save-design"),
+    appId: z.string(),
+    spec: specSchema.optional(),
+    requirements: requirementsSchema,
+  }),
+  z.object({ action: z.literal("create-workspace"), prompt: z.string().trim().min(1).max(12000) }),
+  z.object({
+    action: z.literal("browser-log"),
+    appId: z.string(),
+    releaseId: z.string(),
+    level: z.literal("error"),
+    message: z.string().max(2000),
+  }),
   z.object({ action: z.literal("create"), spec: specSchema, mode: z.enum(["sample", "model"]) }),
   z.object({ action: z.literal("seed") }),
   z.object({
@@ -79,21 +122,23 @@ export async function snapshot(access: Access) {
       modelConfigured: !!modelConfiguration(config).apiKey,
       tushareConfigured: !!config.TUSHARE_TOKEN,
       hostedDatabaseConfigured: !!config.VITE_CONVEX_URL,
-      runtime: "Miniflare workerd sandbox",
+      runtime: "Linux-isolated TanStack projects; legacy workerd compatibility",
     },
   };
 }
-async function makeRelease(
+export async function makeRelease(
   spec: ProductSpec,
   bundle: AppBundle,
   origin: Release["origin"],
   notes: string,
+  record?: import("../lib/build-plan").BuildRecord,
+  signal?: AbortSignal,
 ): Promise<Release> {
   return {
     id: crypto.randomUUID(),
     bundle,
     spec,
-    verification: await verify(bundle, spec),
+    verification: await verify(bundle, spec, record, signal),
     createdAt: new Date().toISOString(),
     origin,
     notes,
@@ -113,6 +158,25 @@ function newApp(access: Access, spec: ProductSpec): Application {
     events: [],
     createdAt: new Date().toISOString(),
   };
+}
+// Verified source becomes active atomically; failed builds preserve the working release.
+export async function applyRelease(app: Application, release: Release) {
+  if (release.buildRecord) {
+    requireBuild(release.buildRecord, release.buildRecord.turnId);
+    validateScopedBundle(release.bundle, release.buildRecord);
+  }
+  if (!release.verification.passed) {
+    app.preview = release;
+    return false;
+  }
+  if (release.verification.sourceHash !== (await sourceHash(release.bundle)))
+    throw new Error("Source changed after verification.");
+  if (app.current) app.history = [app.current, ...app.history].slice(0, 2);
+  app.current = release;
+  app.preview = null;
+  app.spec = release.spec;
+  app.name = release.spec.name;
+  return true;
 }
 async function build(
   spec: ProductSpec,
@@ -144,6 +208,74 @@ async function build(
 }
 export async function dispatch(access: Access, raw: unknown) {
   const req = requestSchema.parse(raw);
+  if (
+    [
+      "create",
+      "update",
+      "import",
+      "seed",
+      "load-prices",
+      "test-provider",
+      "clarify",
+      "accept",
+      "reverify",
+    ].includes(req.action)
+  )
+    throw new Error(
+      "Use the financial-capability conversation to scope this request. Legacy direct builds, imports and provider tests are disabled until they support the internal capability contract.",
+    );
+  if (req.action === "delete-chat") return deleteChat(access, req.appId, req.expectedRevision);
+  if (req.action === "save-design") {
+    return mutateApp(access, req.appId, (latest) => {
+      if (req.spec) {
+        if (req.spec.protocol !== latest.spec.protocol)
+          throw new Error("An active app's calculation protocol cannot change.");
+        latest.workspaceSpec = req.spec;
+        if (!latest.current) {
+          latest.spec = req.spec;
+          latest.name = req.spec.name;
+        }
+      }
+      latest.requirements = req.requirements;
+      event(
+        latest,
+        req.spec
+          ? "Saved the reviewed specification and requirements."
+          : "Saved the reviewed requirements.",
+      );
+    });
+  }
+  if (req.action === "create-workspace") {
+    const app = newApp(access, {
+      ...protocols[0]!.defaultSpec,
+      name: "New chat",
+      purpose: req.prompt.length >= 10 ? req.prompt.slice(0, 4000) : `Conversation: ${req.prompt}`,
+    });
+    app.chatTitle = "New chat";
+    app.conversation = [];
+    const scaffold =
+      (await settings()).CD80_APP_FORMAT === "legacy"
+        ? sampleBundle(app.spec)
+        : projectStarterBundle(app.spec);
+    if (scaffold.manifest.schemaVersion === 1) {
+      scaffold.files["index.html"] = '<main id="app"></main>';
+      scaffold.files["app.js"] = "cd80.ready();";
+      scaffold.files["style.css"] =
+        "body{font-family:system-ui,sans-serif;color:#192638;background:#f5f7fa}main{max-width:960px;margin:auto;padding:24px}button{font:inherit}";
+      scaffold.manifest.permissions = ["finance.calculate", "storage.read", "storage.write"];
+    }
+    app.workspace = scaffold;
+    const saved = await saveApp(access, app, null);
+    const { generateChatTitle } = await import("./chat-title");
+    void generateChatTitle(req.prompt)
+      .then(async (title) => {
+        await mutateApp(access, saved.id, (current) => {
+          current.chatTitle = title;
+        });
+      })
+      .catch(() => {});
+    return saved;
+  }
   if (req.action === "clarify") {
     const gate = feasibility(req.prompt);
     if (!gate.allowed) throw new Error(gate.reason);
@@ -179,8 +311,16 @@ export async function dispatch(access: Access, raw: unknown) {
     const gate = feasibility(req.spec.purpose);
     if (!gate.allowed) throw new Error(gate.reason);
     const app = newApp(access, req.spec);
-    app.preview = await build(app.spec, req.mode, "Build the confirmed product specification");
-    event(app, "Built a preview from the confirmed specification. Acceptance required.");
+    const active = await applyRelease(
+      app,
+      await build(app.spec, req.mode, "Build the product specification"),
+    );
+    event(
+      app,
+      active
+        ? "Generated and activated the verified application."
+        : "Generation failed verification.",
+    );
     return saveApp(access, app, null);
   }
   if (req.action === "import") {
@@ -193,20 +333,45 @@ export async function dispatch(access: Access, raw: unknown) {
       throw new Error(
         "Changing an existing app's protocol requires a new app to protect its data.",
       );
-    app.preview = await makeRelease(spec, req.bundle, "import", "Imported application source");
-    event(app, "Imported source and verified a preview. Acceptance required.");
+    const active = await applyRelease(
+      app,
+      await makeRelease(spec, req.bundle, "import", "Imported application source"),
+    );
+    event(
+      app,
+      active
+        ? "Imported and activated verified source."
+        : "Imported source failed verification; working app retained.",
+    );
     return saveApp(access, app, req.appId ? app.revision : null);
   }
   const app = await findApp(access, req.appId);
+  if (req.action === "browser-log") {
+    if (![app.current?.id, app.preview?.id].includes(req.releaseId))
+      throw new Error("Unknown release");
+    await mutateApp(access, app.id, (current) => {
+      current.browserEvents = [
+        { releaseId: req.releaseId, at: new Date().toISOString(), message: req.message },
+        ...(current.browserEvents ?? []),
+      ].slice(0, 20);
+    });
+    return { recorded: true };
+  }
   if (req.action === "reverify") {
     if (app.preview?.id !== req.releaseId) throw new Error("Preview changed. Refresh first.");
     app.preview.verification = await verify(app.preview.bundle, app.preview.spec);
-    event(app, "Re-ran checks on unchanged preview source. Acceptance is still required.");
+    const active = await applyRelease(app, app.preview);
+    event(
+      app,
+      active
+        ? "Verified source activated."
+        : "Source still fails verification; working app retained.",
+    );
     return saveApp(access, app, app.revision);
   }
   if (req.action === "load-prices") {
     if (app.spec.protocol !== "strategy" || !app.current)
-      throw new Error("Accept a strategy app before loading a price series.");
+      throw new Error("Build a strategy app before loading a price series.");
     if (req.provider === "alpha-demo" && !(await localMode()))
       throw new Error(
         "The public demo provider is restricted to local technical tests. Configure a licensed hosted provider instead.",
@@ -236,8 +401,16 @@ export async function dispatch(access: Access, raw: unknown) {
       ...app.spec,
       constraints: [...app.spec.constraints, `Change: ${req.request}`].slice(-20),
     };
-    app.preview = await build(spec, req.mode, req.request, app.current ?? app.preview ?? undefined);
-    event(app, "Created an update preview. The accepted release and shared data remain available.");
+    const active = await applyRelease(
+      app,
+      await build(spec, req.mode, req.request, app.current ?? app.preview ?? undefined),
+    );
+    event(
+      app,
+      active
+        ? "Applied verified changes. Shared data retained."
+        : "Update failed verification; working app and data retained.",
+    );
     return saveApp(access, app, app.revision);
   }
   if (req.action === "accept") {
@@ -249,12 +422,8 @@ export async function dispatch(access: Access, raw: unknown) {
       release.verification.sourceHash !== (await sourceHash(release.bundle))
     )
       throw new Error("A verified, unchanged preview is required before accepting a release.");
-    if (app.current) app.history = [app.current, ...app.history].slice(0, 2);
-    app.current = release;
-    app.preview = null;
-    app.spec = release.spec;
-    app.name = release.spec.name;
-    event(app, "Accepted the verified preview. Shared data retained.");
+    await applyRelease(app, release);
+    event(app, "Activated verified source. Shared data retained.");
     return saveApp(access, app, app.revision);
   }
   if (req.action === "discard") {
@@ -269,8 +438,89 @@ export async function dispatch(access: Access, raw: unknown) {
     !release.bundle.manifest.permissions.includes(req.capability as any)
   )
     throw new Error("Verified release and declared capability permission required");
+  if (
+    !release.buildRecord ||
+    release.buildRecord.artifactHash !== release.verification.sourceHash ||
+    release.verification.sourceHash !== (await sourceHash(release.bundle))
+  )
+    throw new Error("A verified, unchanged financial contract is required for capability access");
+  validateScopedBundle(release.bundle, release.buildRecord);
   if (JSON.stringify(req.input ?? null).length > 150000)
     throw new Error("Capability input exceeds size limit");
+  if (req.capability === "plugin.call") {
+    const input = z
+      .object({
+        pluginId: z.string(),
+        operationId: z.string(),
+        parameters: z.record(z.string(), z.unknown()).default({}),
+      })
+      .parse(req.input);
+    if (!app.enabledPlugins?.includes(input.pluginId))
+      throw new Error("Plugin is not enabled for this app");
+    return (await import("./plugins")).callPlugin(
+      access,
+      input.pluginId,
+      input.operationId,
+      input.parameters,
+    );
+  }
+  if (["finance.match-companies", "finance.company-cards"].includes(req.capability)) {
+    if (!release.buildRecord || release.buildRecord.plan.mode !== "fixture")
+      throw new Error("Company modules currently support explicit synthetic builds only.");
+    const table = await managedCompanies("fixture");
+    if (!table.available || !table.synthetic)
+      throw new Error("The fixture company table is unavailable.");
+    if (req.capability === "finance.match-companies")
+      return { ...matchCompanies(table.companies, req.input), synthetic: true };
+    const input = companyCardsInputSchema.parse(req.input);
+    const day = shanghaiDay(new Date());
+    let response: unknown;
+    await mutateApp(access, app.id, (latest) => {
+      if (latest.current?.id !== release.id)
+        throw new Error("Only the active release can use company cards.");
+      let state = (latest.data._companyCards as CardState | undefined) ?? emptyCardState();
+      let exhausted = false;
+      if (input.action === "batch") {
+        const result = dailyCompanyCards(
+          table.companies,
+          { risk: input.risk, industries: input.industries },
+          state,
+          { day, appId: latest.id, revisitDismissed: input.revisitDismissed },
+        );
+        state = result.state;
+        exhausted = result.exhausted;
+      } else if (input.action === "decide")
+        state = decideCompanyCard(state, day, input.ticker, input.choice);
+      latest.data._companyCards = state;
+      if (JSON.stringify(latest.data).length > 150000)
+        throw new Error("Application data exceeds the storage limit.");
+      const tickers =
+        input.action === "watchlist"
+          ? state.watchlist
+          : state.batch?.day === day
+            ? state.batch.tickers
+            : [];
+      response = {
+        day,
+        criteria: state.batch?.day === day ? JSON.parse(state.batch.criteriaKey) : null,
+        synthetic: true,
+        moduleVersion: companyModuleVersion,
+        exhausted,
+        companies: tickers.map((ticker) => ({
+          ...table.companies.find((company) => company.ticker === ticker),
+          metrics: unavailableCardMetrics(release.buildRecord!.plan.cardMetrics),
+          choice: state.batch?.day === day ? (state.batch.decisions[ticker] ?? null) : null,
+        })),
+        watchlist: state.watchlist,
+        notice: exhausted
+          ? "No unseen eligible companies remain. You may explicitly revisit dismissed companies."
+          : tickers.length < 5 && input.action !== "watchlist"
+            ? "Fewer than five eligible companies. Your risk and industry filters were kept."
+            : null,
+      };
+    });
+    return response;
+  }
   if (req.capability === "finance.calculate") return execute(release.bundle, req.input);
   if (req.capability === "finance.portfolio") return calculate("portfolio", req.input);
   if (req.capability === "finance.screen") return calculate("screening", req.input);
@@ -288,9 +538,7 @@ export async function dispatch(access: Access, raw: unknown) {
   }
   if (req.capability === "storage.write") {
     if (app.current?.id !== release.id)
-      throw new Error(
-        "Preview storage is read-only. Accept the release before changing shared data.",
-      );
+      throw new Error("Only the active verified release can change shared data.");
     const { key, value } = z
       .object({ key: z.string().regex(/^[a-zA-Z0-9_-]{1,50}$/), value: z.unknown() })
       .parse(req.input);

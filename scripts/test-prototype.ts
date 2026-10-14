@@ -12,7 +12,7 @@ import {
   sourceHash,
   verify,
 } from "../apps/web/src/server/runtime";
-import { event, findApp, listApps, saveApp } from "../apps/web/src/server/repository";
+import { event, findApp, listApps, saveApp, deleteChat } from "../apps/web/src/server/repository";
 
 process.env.CD80_LOCAL_MODE = "1";
 const dir = await mkdtemp(join(tmpdir(), "chengdu80-tests-"));
@@ -135,6 +135,13 @@ try {
     await saveApp(owner, next, next.revision);
     await assert.rejects(saveApp(owner, app, 1), /changed/);
     assert.deepEqual((await findApp(owner, app.id)).data, { inputs: { cash: 10 } });
+    await assert.rejects(
+      deleteChat({ ownerId: "another-owner", accessToken: null }, app.id, 2),
+      /access denied/,
+    );
+    await assert.rejects(deleteChat(owner, app.id, 1), /changed/);
+    assert.equal((await deleteChat(owner, app.id, 2)).retainedBuild, false);
+    await assert.rejects(findApp(owner, app.id));
   });
   console.log(`${passed} meaningful prototype checks passed.`);
 } finally {

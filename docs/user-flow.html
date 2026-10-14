@@ -1,0 +1,989 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Chengdu80 · User flow and protocols</title>
+    <style>
+      :root {
+        --ink: #192638;
+        --muted: #576779;
+        --line: #dbe2ea;
+        --paper: #f5f7fa;
+        --blue: #2458a6;
+        --bluewash: #eaf1fc;
+        --green: #22634d;
+        --amber: #865415;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font:
+          16px/1.55 system-ui,
+          -apple-system,
+          sans-serif;
+      }
+      main {
+        max-width: 1180px;
+        margin: auto;
+        padding: 40px 28px;
+      }
+      h1 {
+        font-size: clamp(30px, 4vw, 46px);
+        letter-spacing: -1.5px;
+        line-height: 1.13;
+        margin: 12px 0;
+      }
+      h2 {
+        font-size: 26px;
+        letter-spacing: -0.6px;
+      }
+      h3 {
+        font-size: 18px;
+        margin: 0 0 8px;
+      }
+      p {
+        margin: 8px 0 14px;
+      }
+      .kicker {
+        font:
+          12px/1.4 ui-monospace,
+          monospace;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: var(--blue);
+      }
+      .intro {
+        max-width: 800px;
+        color: var(--muted);
+      }
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        font-size: 13px;
+        margin: 22px 0;
+      }
+      .label {
+        display: inline-block;
+        font-size: 12px;
+        font-weight: 650;
+        padding: 3px 9px;
+        border-radius: 5px;
+        background: var(--bluewash);
+        color: var(--blue);
+      }
+      .label.pending {
+        background: #fff0d9;
+        color: var(--amber);
+      }
+      .label.assumed {
+        background: #e7f1ec;
+        color: var(--green);
+      }
+      nav {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 14px;
+        margin: 26px 0;
+      }
+      button,
+      select {
+        font: inherit;
+      }
+      button {
+        background: white;
+        color: var(--ink);
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        padding: 10px 16px;
+        cursor: pointer;
+      }
+      button[aria-selected="true"] {
+        background: var(--ink);
+        color: white;
+        border-color: var(--ink);
+      }
+      button:focus-visible,
+      select:focus-visible,
+      a:focus-visible {
+        outline: 3px solid #5789de;
+        outline-offset: 3px;
+      }
+      .stage {
+        display: grid;
+        grid-template-columns: 180px 1fr;
+        gap: 28px;
+        margin: 28px 0;
+      }
+      .stage-title {
+        border-top: 3px solid var(--blue);
+        padding-top: 12px;
+      }
+      .stage-title p {
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .steps {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .step {
+        position: relative;
+        border-left: 2px solid var(--line);
+        padding: 0 0 24px 32px;
+      }
+      .step:before {
+        content: attr(data-n);
+        position: absolute;
+        left: -15px;
+        top: 0;
+        border: 1px solid var(--line);
+        background: white;
+        border-radius: 50%;
+        width: 28px;
+        height: 28px;
+        text-align: center;
+        font:
+          13px/28px ui-monospace,
+          monospace;
+      }
+      .step:last-child {
+        padding-bottom: 0;
+      }
+      .step p {
+        margin: 5px 0;
+        color: var(--muted);
+      }
+      .gate {
+        background: var(--bluewash);
+        padding: 16px;
+        border-radius: 8px;
+        margin-top: 10px;
+      }
+      .branch {
+        border-left: 3px solid #bc8a3c;
+        padding-left: 14px;
+        margin-top: 12px;
+        color: var(--amber);
+        font-size: 14px;
+      }
+      .protocol-ref {
+        font:
+          12px/1.5 ui-monospace,
+          monospace;
+        color: var(--blue);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 20px;
+      }
+      .panel {
+        background: white;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 22px;
+      }
+      details {
+        border-top: 1px solid var(--line);
+        padding: 14px 0;
+      }
+      summary {
+        cursor: pointer;
+        font-weight: 650;
+      }
+      details p,
+      details ul {
+        color: var(--muted);
+      }
+      ul {
+        padding-left: 22px;
+      }
+      .strip {
+        padding: 17px 20px;
+        background: var(--ink);
+        color: white;
+        border-radius: 8px;
+        margin: 20px 0;
+      }
+      .strip strong {
+        color: #a7c8ff;
+      }
+      .tablewrap {
+        overflow: auto;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        font-size: 14px;
+      }
+      th,
+      td {
+        text-align: left;
+        vertical-align: top;
+        border-bottom: 1px solid var(--line);
+        padding: 13px;
+      }
+      th {
+        color: var(--muted);
+        font-weight: 600;
+      }
+      select {
+        max-width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: white;
+        padding: 10px;
+        margin: 10px 0;
+      }
+      .dependency {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 14px 0;
+      }
+      .node {
+        padding: 10px 14px;
+        background: var(--bluewash);
+        border-radius: 6px;
+        color: var(--blue);
+        font-weight: 600;
+      }
+      .arrow {
+        color: var(--muted);
+      }
+      .samplecard {
+        max-width: 450px;
+        margin: 20px auto;
+        background: white;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 24px;
+      }
+      .metrics {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin: 18px 0;
+      }
+      .metric {
+        border-top: 1px solid var(--line);
+        padding: 10px 0;
+      }
+      .metric span {
+        display: block;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .metric b {
+        font-size: 15px;
+        font-weight: 500;
+      }
+      .actions {
+        display: flex;
+        gap: 10px;
+      }
+      .actions button {
+        flex: 1;
+      }
+      .note {
+        font-size: 14px;
+        color: var(--muted);
+      }
+      footer {
+        margin-top: 36px;
+        border-top: 1px solid var(--line);
+        padding-top: 18px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      @media (max-width: 720px) {
+        main {
+          padding: 24px 18px;
+        }
+        .stage {
+          grid-template-columns: 1fr;
+          gap: 16px;
+        }
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        .stage-title {
+          margin-bottom: 8px;
+        }
+        .stage-title p {
+          margin-bottom: 0;
+        }
+        .step {
+          padding-left: 24px;
+        }
+        th,
+        td {
+          padding: 10px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="kicker">Chengdu80 · Alignment walkthrough · 14 October 2026</div>
+        <h1>From a request to an app.<br />Then from a company card to a watchlist.</h1>
+        <p class="intro">
+          The product assembles supported capabilities. App 1 and App 2 are demo combinations; users
+          can combine their capabilities. The scoped synthetic build flow, fixed company rules and
+          build gallery are implemented. This map also shows the full intended product; Wind data,
+          expert content and generated React/shadcn assembly are still pending.
+        </p>
+        <div class="legend">
+          <span class="label">Agreed behavior</span
+          ><span class="label assumed">Engineering assumption</span
+          ><span class="label pending">Expert details pending</span>
+        </div>
+      </header>
+      <nav role="tablist" aria-label="Walkthrough sections">
+        <button role="tab" id="tab-build" aria-controls="build" aria-selected="true">
+          1. Design and build</button
+        ><button role="tab" id="tab-protocols" aria-controls="protocols" aria-selected="false">
+          2. Protocols and contract</button
+        ><button role="tab" id="tab-compose" aria-controls="compose" aria-selected="false">
+          3. Capability combinations</button
+        ><button role="tab" id="tab-use" aria-controls="use" aria-selected="false">
+          4. Use the app
+        </button>
+      </nav>
+      <section id="build" role="tabpanel" aria-labelledby="tab-build">
+        <div class="stage">
+          <div class="stage-title">
+            <h2>Stage A</h2>
+            <p>Platform agent + user<br />Agree what to build.</p>
+          </div>
+          <ol class="steps">
+            <li class="step" data-n="1">
+              <h3>User describes the app</h3>
+              <p>
+                Example: “Give me daily company suggestions based on my risk and industry
+                preferences, with research before I decide.”
+              </p>
+              <span class="protocol-ref">Scoping protocol</span>
+            </li>
+            <li class="step" data-n="2">
+              <h3>Agent clarifies scope and flow</h3>
+              <p>
+                Select supported capabilities, identify dependencies, ask meaningful questions and
+                capture allowed nuances. Both English and Simplified Chinese are supported.
+              </p>
+              <span class="protocol-ref">Scoping protocol + capability guidance</span>
+            </li>
+            <li class="step" data-n="3">
+              <h3>Clarify what would change the outcome</h3>
+              <p>
+                Ask only when the goal is materially ambiguous. A clear request proceeds directly;
+                the user can refine it in chat.
+              </p>
+            </li>
+            <li class="step" data-n="4">
+              <h3>Check feasibility</h3>
+              <p>
+                First validate the requested company against the platform-managed company table.
+                Resolve ambiguous names with the user. Then check supported capabilities,
+                dependencies and Wind data coverage.
+              </p>
+              <span class="protocol-ref"
+                >Structured registry + platform company table + validation rules</span
+              >
+              <div class="branch">
+                Unsupported → explain the limitation and suggest a supported alternative → return to
+                scoping.<br />Missing expert/provider input → mark pending; use labeled fixtures
+                only for an explicit demo.
+              </div>
+            </li>
+            <li class="step" data-n="5">
+              <h3>Summarize the intended app</h3>
+              <p>
+                Show a plain-language summary of what the app will do, the information it will show
+                and the user’s journey. Example: “Each day, see up to five companies matching your
+                preferences, open research, and save companies to your watchlist.” Clarify only
+                material ambiguity; proceed when intent is clear. Keep API fields, dependency
+                graphs, framework choices and contract internals out of this review. The working app
+                link appears after the build passes its checks.
+              </p>
+            </li>
+            <li class="step" data-n="6">
+              <div class="gate">
+                <h3>Prepare an internal build record</h3>
+                <p>
+                  The agent validates declared capabilities, company identity and readiness, saves a
+                  versioned record and proceeds automatically when feasible. No submit screen.
+                </p>
+              </div>
+            </li>
+          </ol>
+        </div>
+        <div class="stage">
+          <div class="stage-title">
+            <h2>Stage B</h2>
+            <p>Builder + verification + user<br />Build, verify and open the working app.</p>
+          </div>
+          <ol class="steps">
+            <li class="step" data-n="7">
+              <h3>Resolve the contract and starter kit</h3>
+              <p>
+                Load pinned capability protocols, provider interfaces, reusable modules and the
+                selected web-starter. Use shadcn, TanStack Start and the existing AI integration.
+              </p>
+              <span class="protocol-ref">Builder protocol + capability protocols</span>
+            </li>
+            <li class="step" data-n="8">
+              <h3>Compose and build</h3>
+              <p>
+                Reuse expected functionality. Apply the default theme unless the contract explicitly
+                overrides it. Customize permitted configuration and presentation; do not reinvent
+                fixed calculations.
+              </p>
+              <div class="branch">
+                Blocked dependency or incompatible contract → report the blocker. Scope changes
+                return to Stage A; the builder cannot silently rewrite the contract.
+              </div>
+            </li>
+            <li class="step" data-n="9">
+              <h3>Verify the build</h3>
+              <p>
+                Check contract compliance, calculation fixtures, dependencies, data handling,
+                bilingual parity, starter reuse and preview behavior.
+              </p>
+              <span class="protocol-ref">Verification rules + expert acceptance examples</span>
+              <div class="branch">
+                Verification fails → repair within the same contract → verify again. No deployment
+                while checks fail.
+              </div>
+            </li>
+            <li class="step" data-n="10">
+              <div class="gate">
+                <h3>Activate after passing verification</h3>
+                <p>
+                  Automatically make the verified release available in Built apps, with a layout
+                  thumbnail and working link. Select it to reopen its chat. Failed updates preserve
+                  the prior working app and data.
+                </p>
+              </div>
+            </li>
+            <li class="step" data-n="11">
+              <h3>User opens the working app</h3>
+              <p>
+                Show the working link only after successful activation. The user tries the app and
+                requests changes in the same conversation.
+              </p>
+            </li>
+          </ol>
+        </div>
+        <div class="strip">
+          <strong>Same conversational UX:</strong> Scope internally, build and verify, then show the
+          working link. No mandatory submit or deployment-approval step.
+        </div>
+      </section>
+      <section id="protocols" role="tabpanel" aria-labelledby="tab-protocols" hidden>
+        <h2>Which instructions govern which work?</h2>
+        <p class="intro">
+          The exact files below now load into the scoped agent. Detailed expert procedures, Wind
+          access and reusable financial modules remain pending.
+        </p>
+        <div class="grid">
+          <div class="panel">
+            <h3>Platform-level rules</h3>
+            <details open>
+              <summary>Scoping protocol</summary>
+              <p>
+                Guides the platform agent through material clarification and a plain-language
+                summary. Captures requirements without promising unsupported capabilities.
+              </p>
+              <span class="label pending">Exact expert questions pending</span>
+            </details>
+            <details open>
+              <summary>Feasibility rules</summary>
+              <p>
+                Validate company membership and identity against the supplied table, then check
+                structured capability IDs, inputs, outputs, dependencies and Wind readiness. A fresh
+                intent check runs outside the builder conversation. Server-side gates validate
+                declared dependencies, identity and readiness; failed attempts do not change the
+                last feasible goal. Markdown alone does not enforce these checks.
+              </p>
+            </details>
+            <details open>
+              <summary>Builder protocol</summary>
+              <p>
+                Consume the internal build record, reuse starter modules and libraries, preserve
+                invariant outputs, follow the theme policy and return a build result with blockers
+                and version evidence.
+              </p>
+            </details>
+            <details>
+              <summary>Verification and release rules</summary>
+              <p>
+                Verify before automatic activation and show the link only after success. Preserve
+                the prior working release when updates fail.
+              </p>
+            </details>
+          </div>
+          <div class="panel">
+            <h3>Capability-level guidance</h3>
+            <details open>
+              <summary>Research + one-time news</summary>
+              <p>
+                Industry-only mode for standalone research. Company-specific research plus industry
+                context for company details. Retain evidence; no continuous monitoring for the demo.
+              </p>
+            </details>
+            <details open>
+              <summary>Historical analysis + sourced target</summary>
+              <p>
+                Fixed historical outputs and a financial-source price target. Always packaged
+                together. No locally invented prediction model.
+              </p>
+            </details>
+            <details>
+              <summary>Risk assessment + industry preference</summary>
+              <p>
+                Separate internal inputs to matching. Expert questionnaire and scoring are pending.
+              </p>
+            </details>
+            <details>
+              <summary>Matching + daily company cards</summary>
+              <p>
+                Fixed risk-to-size mapping, selected industries, randomized companies, daily
+                persistence, financial metrics, decisions and watchlist.
+              </p>
+            </details>
+            <details>
+              <summary>Financial metrics + prepared chatbot</summary>
+              <p>
+                Six allowed metric choices, specified defaults, evidence and unavailable reasons.
+                Chat answers only from prepared analysis and approved explanation material. Detailed
+                calculation approval and explanation library remain pending.
+              </p>
+            </details>
+          </div>
+        </div>
+        <h2>The contract connects both stages</h2>
+        <div class="dependency">
+          <div class="node">Expert guidance · Markdown</div>
+          <span class="arrow">+</span>
+          <div class="node">Capability definitions · structured data</div>
+          <span class="arrow">+</span>
+          <div class="node">Confirmed user requirements</div>
+          <span class="arrow">→</span>
+          <div class="node">Internal builder record</div>
+        </div>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Fixed structure</th>
+                <th>Allowed application nuances</th>
+                <th>Builder returns</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  Internal record ID/version; capability and protocol versions; dependencies;
+                  inputs/outputs; data readiness; acceptance checks
+                </td>
+                <td>
+                  Selected capabilities, companies/industries, metric choices, supported options,
+                  layout and explicit theme override
+                </td>
+                <td>
+                  Source artifact, resolved versions/theme, verification report, working preview,
+                  data status and blockers
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">
+          A protocol defines reusable behavior. A contract describes one requested application. A
+          starter module implements expected functionality once.
+        </p>
+        <h2>Verbatim protocol files</h2>
+        <p class="note">
+          These are the exact version 1 files used by the first scope-controlled implementation.
+          Expert procedures and live modules marked pending are not finalized. Instructions guide
+          the model; tool gates enforce declared readiness and scope.
+        </p>
+        <details>
+          <summary>application-llm.md</summary>
+          <!-- prettier-ignore -->
+          <pre data-protocol="application-llm.md" style="white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.6 ui-monospace,monospace"># Generated application LLM protocol v1
+
+The application LLM answers only from prepared dated asset analysis and reviewed explanations supplied by the platform. General definitions do not establish a company-specific fact. Answer supported portions of mixed questions and identify gaps. Financial numbers come from validated data and calculations, not model memory.
+
+Retain sources, asset identity, periods and uncertainty. Explain missing, stale and conflicting evidence. Give no buy, hold or sell recommendation. Keep English and Simplified Chinese figures and qualifications identical.
+
+Research generation is a separate capability run. Company-card research includes the company plus industry context. Standalone research is industry-level. News retrieval is once per demo research run. Chat answers perform no new external research. Brokerage execution and continuous monitoring are outside current scope.
+
+The reviewed explanation library and research procedure are pending expert inputs. A fixture app may demonstrate the interface; it must not claim that prepared live analysis exists.
+</pre>
+        </details>
+        <details>
+          <summary>builder.md</summary>
+          <!-- prettier-ignore -->
+          <pre data-protocol="builder.md" style="white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.6 ui-monospace,monospace"># Builder protocol v1
+
+Follow the versioned internal build record and selected capability protocols. The platform validates dependencies and company identities. Reuse expected functionality, calculation definitions and approved interfaces.
+
+The target starter is adityamiskin/web-starter. Use TanStack Start, shadcn components and the installed TanStack AI integration in reusable platform modules. Use the default theme unless an override is explicit in the build record. Record missing starter functionality rather than claiming it is present. The current generated-source transport remains plain isolated HTML/JS/CSS; it cannot import shadcn or install packages. Fixture builds through this transport are a transitional demo, not proof of React/shadcn reuse. Live builds stay blocked until the supported modules and provider access are ready.
+
+Preserve the provided pure calculation scaffold where a fixture does not implement a financial calculation. Display unavailable rather than fabricating outputs. Keep fixtures labeled. Every metric needs units, dates, source and status. Use approved server interfaces for data access and keep credentials server-side.
+
+Use deploy_preview to run verification and activate on success. Repair reported failures within the same scope; use a new prepare_build record when scope changes. Activation is automatic after checks; there is no separate user acceptance gate. Include the actual working link only when deployment succeeds.
+
+Fixed company modules v1 implement low/medium/high risk to large/medium/small cap matching intersected with table industries, stable China-day batches up to five, decisions and watchlists. Use finance.match-companies and finance.company-cards only when selected capabilities permit. Do not recreate these rules in app.js or generic storage. The server owns _companyCards and the calendar day. Revisit dismissed companies only with explicit consent after the eligible pool is exhausted. Demo profile selection does not perform the pending expert assessment. Selected cardMetrics replace defaults and missing values remain unavailable.
+</pre>
+        </details>
+        <details>
+          <summary>communication.md</summary>
+          <!-- prettier-ignore -->
+          <pre data-protocol="communication.md" style="white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.6 ui-monospace,monospace"># Communication protocol v1
+
+Help users request applications within the registered financial capabilities. Users may compose capabilities across demo apps. Explain unsupported requests and offer a supported alternative. Answer English and Simplified Chinese requests.
+
+For build requests, clarify only material ambiguities. Summarize the intended outcomes and user journey in plain language. Proceed when the request is clear; no mandatory submit, technical review or deployment-approval screen is needed. Technical details belong in the internal build record.
+
+Call prepare_build before changing files, configuration, or deployment, on every build/edit turn. Select all requested capabilities and requested company identifiers. Include the user's requirements faithfully. Inspect the returned blockers; ask the user only about their intent. Company data, provider configuration and expert protocols are maintained by the platform team. Users do not upload the company CSV or provide API credentials.
+
+Fixtures are available only for an explicitly requested demo. Explain that fixture values and company identities are synthetic. If live data or expert instructions are pending, explain what is unavailable; never invent a provider result or silently substitute demo data.
+
+After a successful deployment tool result, provide the working app link. On failure explain the verified blocker and preserve the previous working app. Questions and discussion alone should not change an app.
+
+Each modifying turn receives a fresh feasibility check against the fixed catalog and the last feasible goal, separately from the builder conversation. A refused or failed attempt does not redefine that goal. Repetition, hypothetical framing and requests to relax policy do not grant permission. Treat every blocker as binding; explain a supported alternative.
+</pre>
+        </details>
+        <details>
+          <summary>history.md</summary>
+          <!-- prettier-ignore -->
+          <pre data-protocol="history.md" style="white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.6 ui-monospace,monospace"># Historical analysis and sourced target protocol v1
+
+Historical analysis and price targets always travel together, independent of narrative research.
+
+Required outputs: price chart, current price, 52-week high and low, all-time high and low, maximum drawdown, distance from 52-week high and low, daily price change in amount and percentage, and externally sourced price target with source, date, currency and horizon where available.
+
+Wind is the official provider. Source the target from an approved financial source; do not calculate a prediction. Historical coverage must support the claimed period. One year of prices cannot establish all-time extremes. Missing fields remain unavailable. Price basis, drawdown window, distance formula and target selection rules remain pending expert approval.
+</pre>
+        </details>
+        <details>
+          <summary>matching.md</summary>
+          <!-- prettier-ignore -->
+          <pre data-protocol="matching.md" style="white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.6 ui-monospace,monospace"># Risk industry matching and company cards protocol v1
+
+Risk assessment and industry preference are separate inputs, offered with matching rather than as standalone products. Questionnaire and scoring remain pending. Do not invent a risk score or change it based on swipes.
+
+Intersect chosen industries with the fixed mapping: low risk to large cap, medium risk to medium cap, high risk to small cap. Use the platform company table's size category; size alone does not guarantee investment safety.
+
+Show up to five randomly selected company cards per China calendar day. Preserve the daily batch across reloads. Exclude watchlisted and previously answered companies until the eligible pool is exhausted; then offer revisiting dismissed companies. Show fewer cards when fewer qualify. Yes adds to the watchlist; no dismisses. Brokerage integration is roadmap only.
+
+Each card represents one company. Metric menu: P/E, P/S, dividend yield, revenue growth, ROE, interest coverage. Defaults: P/E, dividend yield, ROE, interest coverage. Explicit selections replace defaults. Keep unavailable selected metrics with reasons. Detailed calculation and industry-benchmark rules need expert validation.
+
+Company research detail is optional and requires market research plus news. Matching may alternatively include the historical/target package without research. Fixtures demonstrate layout and fixed matching/decision behavior. Live assessment and financial data remain pending.
+
+The platform provides company-capabilities-v1. Reuse its matching, daily selection and decision APIs. Questionnaire scoring remains pending; fixture apps must label manually selected demo profiles. Never write module data via storage.write. Financial values are unavailable until approved fields and definitions are wired.
+</pre>
+        </details>
+        <details>
+          <summary>research.md</summary>
+          <!-- prettier-ignore -->
+          <pre data-protocol="research.md" style="white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.6 ui-monospace,monospace"># Market research protocol v1
+
+Include news retrieval with market research. Standalone research is industry-level. When supporting company-card details, prepare company-specific research plus relevant industry context before the user decides yes or no.
+
+Resolve a requested company and its industry from the platform-managed company table. Keep research evidence and dates; distinguish verified events from possible implications. Demo news is retrieved once; there is no recurring monitoring.
+
+Detailed research procedure, source coverage, freshness and bilingual explanation material remain pending. Display unavailable for unsupported facts. Fixture research must be synthetic and clearly identified.
+</pre>
+        </details>
+        <h2>What experts still need to provide</h2>
+        <ul>
+          <li>Risk questions and scoring; industry-preference instructions.</li>
+          <li>Research procedure, approved chatbot material and bilingual explanations.</li>
+          <li>
+            Historical/calculation conventions, reviewed examples, freshness rules and benchmark
+            eligibility.
+          </li>
+          <li>
+            Product team’s internal company CSV and validated Wind fields/access. Price-target and
+            news coverage still need confirmation.
+          </li>
+        </ul>
+        <p class="note">App 3 and brokerage integration are excluded from this build scope.</p>
+      </section>
+      <section id="compose" role="tabpanel" aria-labelledby="tab-compose" hidden>
+        <h2>Compose capabilities, not fixed demo apps</h2>
+        <label for="scenario">Explore a supported combination</label><br /><select id="scenario">
+          <option value="research">Standalone industry research</option>
+          <option value="history">Historical analysis + price target</option>
+          <option value="matching">Daily companies matched to risk and industries</option>
+          <option value="combined">Matched companies + research detail</option>
+          <option value="full">Matched companies + history/target + research</option>
+        </select>
+        <div id="scenario-output" aria-live="polite"></div>
+        <p class="note">
+          Wind is the selected official data provider. Exact product, field access and license
+          remain to be confirmed. Fixtures are for labeled demos only; do not silently fall back to
+          Tushare or another provider.
+        </p>
+        <h2>Dependency rules</h2>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Request</th>
+                <th>Must include</th>
+                <th>Does not automatically include</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Market research</td>
+                <td>
+                  One-time news retrieval; company CSV industry lookup where a company is specified
+                </td>
+                <td>Historical analysis or price target</td>
+              </tr>
+              <tr>
+                <td>Historical analysis or price target</td>
+                <td>Both historical analysis and sourced target</td>
+                <td>Industry narrative research</td>
+              </tr>
+              <tr>
+                <td>Risk/industry matching</td>
+                <td>Risk assessment + industry preference + company CSV</td>
+                <td>Research or historical package</td>
+              </tr>
+              <tr>
+                <td>Company research detail</td>
+                <td>Company-specific research + industry context + news</td>
+                <td>Historical package unless requested</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">
+          Financial-card industry benchmarks are calculation context. They do not by themselves
+          activate the broader research capability.
+        </p>
+      </section>
+      <section id="use" role="tabpanel" aria-labelledby="tab-use" hidden>
+        <h2>After deployment: the daily company experience</h2>
+        <div class="dependency">
+          <div class="node">Risk assessment</div>
+          <span class="arrow">+</span>
+          <div class="node">Industry preference</div>
+          <span class="arrow">→</span>
+          <div class="node">CSV matching</div>
+          <span class="arrow">→</span>
+          <div class="node">Up to 5 daily cards</div>
+        </div>
+        <p>
+          Low risk → large cap · Medium risk → medium cap · High risk → small cap. Then intersect
+          with the chosen industries. Size is the agreed matching rule; it is not a guarantee of
+          investment safety.
+        </p>
+        <div class="samplecard">
+          <span class="label">Illustrative company card · no fabricated values</span>
+          <h3 style="margin-top: 16px">Company name from CSV</h3>
+          <p class="note">Ticker · industry · market capitalization · size category</p>
+          <div class="metrics">
+            <div class="metric"><span>P/E</span><b>Verified value or unavailable</b></div>
+            <div class="metric">
+              <span>Dividend yield</span><b>Verified value or unavailable</b>
+            </div>
+            <div class="metric"><span>ROE</span><b>Verified value or unavailable</b></div>
+            <div class="metric">
+              <span>Interest coverage</span><b>Verified value or unavailable</b>
+            </div>
+          </div>
+          <button id="more">Open research detail</button>
+          <div id="research-detail" hidden>
+            <h3 style="margin-top: 18px">Prepared research detail</h3>
+            <ul>
+              <li>Company-specific research</li>
+              <li>Relevant industry context</li>
+              <li>One-time news, sources and dates</li>
+            </ul>
+            <p class="note">
+              Shown when research is included in the app contract. This walkthrough contains no
+              actual company analysis.
+            </p>
+          </div>
+          <div class="actions" style="margin-top: 18px">
+            <button id="dismiss">No / swipe left</button
+            ><button id="save">Yes / swipe right</button>
+          </div>
+          <p id="decision" class="note" aria-live="polite">
+            Try either action to see its agreed meaning.
+          </p>
+        </div>
+        <div class="grid">
+          <div class="panel">
+            <h3>Inside each company card</h3>
+            <p>
+              Selectable metrics: P/E, P/S, dividend yield, revenue growth, ROE and interest
+              coverage.
+            </p>
+            <p>
+              Defaults: P/E, dividend yield, ROE and interest coverage. An explicit selection
+              replaces defaults. Missing selected values keep their place with an explanation.
+            </p>
+            <p class="note">
+              Five cards means five companies. Metric choices are fields inside those cards.
+            </p>
+          </div>
+          <div class="panel">
+            <h3>Daily behavior</h3>
+            <span class="label assumed">Engineering assumptions</span>
+            <ul>
+              <li>Stable batch per China calendar day; preserve it across reloads.</li>
+              <li>Exclude watchlisted companies and answered companies.</li>
+              <li>After exhaustion, offer revisiting dismissed companies.</li>
+              <li>Show fewer cards if fewer than five qualify.</li>
+            </ul>
+            <p>Yes adds to watchlist. No dismisses. Brokerage integration is roadmap only.</p>
+          </div>
+        </div>
+      </section>
+      <footer>
+        Source: agreed design discussion and builder handoff. Platform and generated apps support
+        English and Simplified Chinese; this alignment document is in English. Protocol loading and
+        internal record/tool gates are implemented for synthetic demos; live financial modules and
+        Wind remain pending. <a href="builder/README.md">Builder handoff</a> ·
+        <a href="https://github.com/adityamiskin/web-starter">Required web-starter</a>
+      </footer>
+    </main>
+    <script>
+      const tabs = [...document.querySelectorAll('[role="tab"]')];
+      tabs.forEach((tab, i) => {
+        tab.addEventListener("click", () => {
+          tabs.forEach((t) => {
+            const active = t === tab;
+            t.setAttribute("aria-selected", active);
+            document.getElementById(t.getAttribute("aria-controls")).hidden = !active;
+          });
+        });
+        tab.addEventListener("keydown", (e) => {
+          if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+            e.preventDefault();
+            const next = tabs[(i + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
+            next.focus();
+            next.click();
+          }
+        });
+      });
+      const scenarios = {
+        research: {
+          nodes: [
+            "Industry request",
+            "Industry research",
+            "One-time news",
+            "Evidence-backed industry analysis",
+          ],
+          note: "A company search can use the CSV to identify its industry. Standalone output remains industry-level.",
+        },
+        history: {
+          nodes: [
+            "Selected company",
+            "Wind historical data",
+            "Fixed historical metrics + sourced target",
+          ],
+          note: "These outputs always travel together. Targets need an external financial source; market research is optional.",
+        },
+        matching: {
+          nodes: [
+            "Risk assessment + industry preference",
+            "CSV filtering",
+            "Random eligible companies",
+            "Daily cards + watchlist",
+          ],
+          note: "Risk assessment and industry preference are internal prerequisites. No research or history is automatically required.",
+        },
+        combined: {
+          nodes: [
+            "Risk + industries",
+            "CSV matching",
+            "Daily company cards",
+            "Company research + industry context + news",
+          ],
+          note: "The user can open prepared research before deciding yes or no.",
+        },
+        full: {
+          nodes: [
+            "Risk + industries",
+            "Matched company cards",
+            "Research + news",
+            "Historical analysis + sourced target",
+          ],
+          note: "Capabilities can cross demo-app boundaries. Feasibility still checks every required protocol and provider.",
+        },
+      };
+      function showScenario() {
+        const s = scenarios[document.getElementById("scenario").value];
+        const output = document.getElementById("scenario-output");
+        output.replaceChildren();
+        const flow = document.createElement("div");
+        flow.className = "dependency";
+        s.nodes.forEach((n, i) => {
+          if (i) {
+            const arrow = document.createElement("span");
+            arrow.className = "arrow";
+            arrow.textContent = "→";
+            flow.append(arrow);
+          }
+          const node = document.createElement("div");
+          node.className = "node";
+          node.textContent = n;
+          flow.append(node);
+        });
+        const note = document.createElement("p");
+        note.textContent = s.note;
+        output.append(flow, note);
+      }
+      document.getElementById("scenario").addEventListener("change", showScenario);
+      showScenario();
+      document.getElementById("more").addEventListener("click", () => {
+        const detail = document.getElementById("research-detail");
+        detail.hidden = !detail.hidden;
+        document.getElementById("more").textContent = detail.hidden
+          ? "Open research detail"
+          : "Close research detail";
+      });
+      document
+        .getElementById("save")
+        .addEventListener(
+          "click",
+          () =>
+            (document.getElementById("decision").textContent =
+              "Yes → add this company to the app watchlist. No trade or broker action."),
+        );
+      document
+        .getElementById("dismiss")
+        .addEventListener(
+          "click",
+          () =>
+            (document.getElementById("decision").textContent =
+              "No → dismiss this company. Risk and industry preferences stay unchanged."),
+        );
+    </script>
+  </body>
+</html>

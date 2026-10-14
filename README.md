@@ -81,15 +81,9 @@ share apps and data. WorkOS stays available for account mode when demo mode is e
 set the `WORKOS_*` variables and point `WORKOS_REDIRECT_URI` at your deployed domain.
 
 For Coolify: point it at this repo with `apps/web/Dockerfile`, add the self-hosted Convex backend as a
-second service (same image/env as in `docker-compose.yml`), and set env vars in its UI.
-
-For k3s: [`k8s/`](k8s/) has tested manifests (`convex.yaml`, `web.yaml`, `ingress.yaml`) and
-[`scripts/setup-k3s.sh`](scripts/setup-k3s.sh) (`bun run setup:k3s`) spins up a local
-[k3d](https://k3d.io) cluster, builds/imports the web image, deploys Convex + the app behind a
-Traefik Ingress, and pushes Convex functions — verified end to end on a clean machine. For a real
-cluster, replace the local image import with a registry push and point DNS at your Ingress instead
-of `/etc/hosts`. Argo CD can manage the same manifests via a standard `Application` resource pointing
-at `k8s/` in this repo.
+second service (same image/env as in `docker-compose.yml`), and set env vars in its UI. For k3s/Argo CD:
+translate `docker-compose.yml`'s two services into Deployments/Services/Ingress manifests and an
+Argo CD Application pointing at this repo.
 
 ### Historical Cloudflare deployment
 

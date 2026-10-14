@@ -1,7 +1,9 @@
 import { capabilityContracts, protocolFor, type AppBundle, type ProductSpec } from "./contracts";
 
 const validator = `function finite(v, min = 0) { if(typeof v !== 'number' || !Number.isFinite(v) || v < min) throw new Error('Invalid numeric input'); return v; }\n`;
-export function sampleBundle(spec: ProductSpec): AppBundle {
+export function sampleBundle(spec: ProductSpec): AppBundle & {
+  files: { "index.html": string; "app.js": string; "calculations.js": string; "style.css": string };
+} {
   const implementations = {
     portfolio: `export function analyze(d) { if (!Array.isArray(d.holdings)) throw new Error('Holdings required'); const cash=finite(d.cash??0); const p=d.holdings.map(h=>({symbol:h.symbol,value:finite(h.units)*finite(h.price),invested:finite(h.units)*finite(h.cost)})); const totalValue=p.reduce((s,h)=>s+h.value,cash); const invested=p.reduce((s,h)=>s+h.invested,0); const profit=totalValue-cash-invested; return {totalValue,profit,returnPct:invested?profit/invested*100:0,concentrationPct:totalValue?Math.max(0,...p.map(h=>h.value))/totalValue*100:0,positions:p.map(h=>({...h,weightPct:totalValue?h.value/totalValue*100:0}))}; }`,
     screening: `export function analyze(d) { if(!Array.isArray(d.assets)) throw new Error('Assets required'); const maxPE=finite(d.maxPE),minYield=finite(d.minYield); return {selected:d.assets.filter(a=>typeof a.pe==='number'&&Number.isFinite(a.pe)&&a.pe>0&&a.pe<=maxPE&&typeof a.dividendYield==='number'&&Number.isFinite(a.dividendYield)&&a.dividendYield>=minYield).map(a=>a.symbol),missing:d.assets.filter(a=>a.pe==null||a.dividendYield==null).length}; }`,

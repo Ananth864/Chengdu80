@@ -46,139 +46,61 @@ try {
     }
   }
   assert.ok(ready, "Test server failed to start");
-  const spec = { ...protocols[0]!.defaultSpec, name: "Lifecycle test" };
-  let app = await request({ action: "create", spec, mode: "sample" });
-  assert.equal(app.current, null);
-  assert.equal(app.preview.verification.passed, true);
-  pass("Confirmed specification produces verified preview, not active release");
-  await request(
+  const before = await request();
+  const spec = { ...protocols[0]!.defaultSpec, name: "Bypass test" };
+  const bundle = sampleBundle(spec);
+  const attempts = [
+    { action: "create", spec, mode: "sample" },
+    { action: "seed" },
+    { action: "import", spec, bundle },
+    { action: "update", appId: "missing", request: "Build an unrelated app", mode: "model" },
+    { action: "clarify", prompt: "Build an unrelated app" },
+    { action: "test-provider", provider: "tushare" },
+    { action: "load-prices", appId: "missing", provider: "alpha-demo" },
+    { action: "accept", appId: "missing", releaseId: "missing" },
+    { action: "reverify", appId: "missing", releaseId: "missing" },
+  ];
+  for (let round = 0; round < 3; round++) {
+    for (const attempt of attempts) {
+      const rejected = await request(attempt, false);
+      assert(rejected.error.includes("internal capability contract"));
+    }
+  }
+  const after = await request();
+  assert.deepEqual(after.apps, before.apps);
+  pass("Repeated legacy API calls cannot bypass the capability contract or activate a release");
+  const unknown = await request({ action: "build-anything" }, false);
+  assert(unknown.error);
+  pass("Unknown platform actions fail closed");
+  const workspace = await request({
+    action: "create-workspace",
+    prompt: "Build a demo matching app with five daily company cards",
+  });
+  const designed = await request({
+    action: "save-design",
+    appId: workspace.id,
+    requirements: {
+      analysisPeriod: "Past year",
+      assumptions: ["Synthetic demo data only"],
+      missingInputs: [],
+      questions: [{ id: "q1", question: "Which industries matter to you?", answer: "" }],
+    },
+  });
+  assert.equal(designed.requirements.questions[0]!.question, "Which industries matter to you?");
+  assert.equal(designed.requirements.questions[0]!.answer, "");
+  pass("Requirements persist through save-design for the pre-build review");
+  const protocolChange = await request(
     {
-      action: "rpc",
-      appId: app.id,
-      releaseId: app.preview.id,
-      capability: "storage.write",
-      input: { key: "note", value: "preview" },
+      action: "save-design",
+      appId: workspace.id,
+      spec: { ...designed.spec, protocol: "strategy" },
+      requirements: { analysisPeriod: "", assumptions: [], missingInputs: [], questions: [] },
     },
     false,
   );
-  pass("Preview cannot mutate shared storage");
-  app = await request({ action: "accept", appId: app.id, releaseId: app.preview.id });
-  const first = app.current.id;
-  assert.equal(app.preview, null);
-  pass("Acceptance activates the verified source");
-  const inputs = { ...app.data.inputs, cash: 12345 };
-  await request({
-    action: "rpc",
-    appId: app.id,
-    releaseId: first,
-    capability: "storage.write",
-    input: { key: "inputs", value: inputs },
-  });
-  app = await request({
-    action: "update",
-    appId: app.id,
-    request: "Improve the explanation layout",
-    mode: "sample",
-  });
-  assert.equal(app.current.id, first);
-  assert.deepEqual(app.data.inputs, inputs);
-  assert.ok(app.preview);
-  pass("Update keeps accepted release and shared inputs available");
-  const result = await request({
-    action: "rpc",
-    appId: app.id,
-    releaseId: first,
-    capability: "finance.calculate",
-    input: inputs,
-  });
-  assert.ok(result.totalValue > 0);
-  pass("Accepted app remains executable during an update");
-  app = await request({ action: "accept", appId: app.id, releaseId: app.preview.id });
-  assert.notEqual(app.current.id, first);
-  assert.deepEqual(app.data.inputs, inputs);
-  pass("Accepting an update retains shared data");
-  const provenance = await request({
-    action: "rpc",
-    appId: app.id,
-    releaseId: app.current.id,
-    capability: "storage.read",
-    input: { key: "_provenance" },
-  });
-  assert.equal(provenance.provider, "User-entered inputs");
-  await request(
-    {
-      action: "rpc",
-      appId: app.id,
-      releaseId: app.current.id,
-      capability: "storage.write",
-      input: { key: "_provenance", value: { synthetic: false, provider: "Fabricated provider" } },
-    },
-    false,
-  );
-  pass("Input edits reset provenance and app code cannot falsify platform metadata");
-  const goodId = app.current.id;
-  const broken = sampleBundle(spec);
-  broken.files["calculations.js"] =
-    "export function analyze(){return {totalValue:0,profit:0,returnPct:0,concentrationPct:0};}";
-  app = await request({ action: "import", appId: app.id, bundle: broken });
-  assert.equal(app.preview.verification.passed, false);
-  const failedPreviewId = app.preview.id;
-  app = await request({ action: "reverify", appId: app.id, releaseId: failedPreviewId });
-  assert.equal(app.preview.id, failedPreviewId);
-  assert.equal(app.preview.verification.passed, false);
-  assert.equal(app.current.id, goodId);
-  assert.deepEqual(app.data.inputs, inputs);
-  await request({ action: "reverify", appId: app.id, releaseId: "stale-preview" }, false);
-  pass(
-    "Reverification cannot approve wrong source or a stale preview and preserves the release and data",
-  );
-  await request({ action: "accept", appId: app.id, releaseId: app.preview.id }, false);
-  assert.equal(app.current.id, goodId);
-  pass("Incorrect imported calculations block acceptance and preserve working release");
-  const custom = sampleBundle(spec);
-  custom.files["app.js"] +=
-    "\ndocument.getElementById('chart-title').textContent='Imported custom portfolio view';";
-  app = await request({ action: "import", appId: app.id, bundle: custom });
-  assert.equal(app.preview.origin, "import");
-  assert.equal(app.preview.verification.passed, true);
-  app = await request({ action: "accept", appId: app.id, releaseId: app.preview.id });
-  assert.ok(app.current.bundle.files["app.js"].includes("Imported custom portfolio view"));
-  assert.deepEqual(app.data.inputs, inputs);
-  pass("External source import verifies, releases, and retains app data");
-  await request(
-    {
-      action: "rpc",
-      appId: app.id,
-      releaseId: app.current.id,
-      capability: "secrets.read",
-      input: {},
-    },
-    false,
-  );
-  await request(
-    {
-      action: "rpc",
-      appId: "unknown-app",
-      releaseId: app.current.id,
-      capability: "storage.read",
-      input: { key: "inputs" },
-    },
-    false,
-  );
-  pass("Undeclared capability and unknown app access fail closed");
-  const r = await fetch(endpoint, {
-    method: "POST",
-    headers: { "content-type": "application/json", origin: "https://outside.invalid" },
-    body: JSON.stringify({ action: "seed" }),
-  });
-  assert.equal(r.status, 403);
-  await request({ action: "clarify", prompt: "Automatically buy stocks and place orders" }, false);
-  pass("Cross-origin writes and unsupported execution requests are rejected");
-  const docs = await fetch(`http://127.0.0.1:${port}/api/docs`);
-  assert.ok(docs.ok);
-  assert.equal(((await docs.json()) as { version: number }).version, 1);
-  pass("Public source contract and protocol documentation are available");
-  console.log(`${passed} release-lifecycle integration checks passed.`);
+  assert(protocolChange.error.toLowerCase().includes("protocol"));
+  pass("save-design rejects changing the app's calculation protocol");
+  console.log(`${passed} scoped API flow checks passed, including 27 bypass attempts.`);
 } finally {
   if (server.pid) process.kill(-server.pid, "SIGTERM");
   await new Promise((r) => setTimeout(r, 500));

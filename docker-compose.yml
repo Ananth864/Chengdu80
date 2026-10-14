@@ -1,3 +1,5 @@
+version: "3.9"
+
 # Fully self-hosted stack: the app (built from apps/web/Dockerfile) plus an
 # open-source self-hosted Convex backend (https://github.com/get-convex/convex-backend).
 # No Cloudflare, Alchemy, or Convex Cloud account required.
@@ -24,8 +26,8 @@ services:
       CONVEX_SITE_ORIGIN: ${CONVEX_SITE_ORIGIN:-http://127.0.0.1:3211}
       DISABLE_BEACON: "true"
     ports:
-      - "127.0.0.1:3210:3210"
-      - "127.0.0.1:3211:3211"
+      - "3210:3210"
+      - "3211:3211"
     volumes:
       - convex_data:/convex/data
 
@@ -37,21 +39,22 @@ services:
     environment:
       NEXT_PUBLIC_DEPLOYMENT_URL: ${CONVEX_CLOUD_ORIGIN:-http://127.0.0.1:3210}
     ports:
-      - "127.0.0.1:6791:6791"
+      - "6791:6791"
 
   web:
+    # Bubblewrap creates the inner PID/user/mount/network namespaces and drops all capabilities.
+    cap_add: [SYS_ADMIN]
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
+      - systempaths=unconfined
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-      args:
-        VITE_DEMO_MODE: ${CD80_DEMO_MODE:-1}
-        VITE_CONVEX_URL: ${VITE_CONVEX_URL:-http://127.0.0.1:3210}
     restart: unless-stopped
     depends_on:
       - convex-backend
     environment:
-      HOST: 0.0.0.0
-      CONVEX_SERVER_URL: http://convex-backend:3210
       CD80_DEMO_MODE: ${CD80_DEMO_MODE:-1}
       VITE_DEMO_MODE: ${CD80_DEMO_MODE:-1}
       VITE_CONVEX_URL: ${VITE_CONVEX_URL:-http://127.0.0.1:3210}
@@ -65,7 +68,7 @@ services:
       PLATFORM_INTERNAL_KEY: ${PLATFORM_INTERNAL_KEY:?set a random key}
       TUSHARE_TOKEN: ${TUSHARE_TOKEN:-}
     ports:
-      - "127.0.0.1:3001:3001"
+      - "3001:3001"
 
 volumes:
   convex_data:
