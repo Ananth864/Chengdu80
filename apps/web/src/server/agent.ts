@@ -561,7 +561,7 @@ export async function startAgentTurn(
       toolDefinition({
         name: "set_specification",
         description:
-          "Set the site name, purpose and supported calculation protocol before building a new site. Keep the existing protocol when editing an active app.",
+          "Set the site name, purpose and supported calculation protocol. Requires prepare_build earlier in the same turn; a specification change is a modifying turn like any other. Keep the existing protocol when editing an active app.",
         inputSchema: specSchema,
       }).server(async (next) => {
         await requirePlan();
