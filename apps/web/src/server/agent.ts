@@ -406,7 +406,11 @@ export async function startAgentTurn(
           if (latest.agentTurn?.id !== user.id || latest.agentTurn.status !== "running")
             throw new Error("This financial build turn is no longer active.");
           latest.buildRecords = [...(latest.buildRecords ?? []), record].slice(-40);
-          latest.buildProposal = undefined;
+          // A blocked validation keeps the proposal: the user's approval covers
+          // the plan, not the platform's mechanical checks. Fixing mechanics in
+          // a later turn must not force re-confirmation; a changed plan still
+          // fails the proposal match above.
+          if (record.readiness !== "blocked") latest.buildProposal = undefined;
           if (record.readiness === "blocked")
             latest.rejectedBuildTurns = [
               ...new Set([...(latest.rejectedBuildTurns ?? []), user.id]),

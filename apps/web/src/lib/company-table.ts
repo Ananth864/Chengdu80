@@ -146,6 +146,13 @@ function scoreTicker(query: string, ticker: string): number {
   if (normalized === bare || normalized === full || normalized === full.replace(".", ""))
     return 100;
   if (normalized.length >= 3 && bare.startsWith(normalized)) return 90;
+  // The identifier may be embedded in a longer submitted string, such as a
+  // company name pasted together with its ticker.
+  if (
+    new RegExp(`(?:^|[^0-9])${full.replace(".", "\\.")}(?:[^0-9]|$)`).test(normalized) ||
+    new RegExp(`(?:^|[^0-9])${bare}(?:[^0-9]|$)`).test(normalized)
+  )
+    return 92;
   return 0;
 }
 function scoreChineseField(query: string, field: string, minContains: number): number {
@@ -157,6 +164,14 @@ function scoreChineseField(query: string, field: string, minContains: number): n
   if (!comparableField) return 0;
   if (comparableQuery === comparableField || strippedQuery === strippedField) return 100;
   if (comparableField.startsWith(comparableQuery) && comparableQuery.length >= 2) return 88;
+  // The name may be embedded in a longer submitted string, such as a company
+  // name pasted together with its ticker.
+  if (
+    strippedField.length >= 2 &&
+    !genericTerms.has(strippedField) &&
+    comparableQuery.includes(strippedField)
+  )
+    return 90;
   if (
     comparableQuery.length >= minContains &&
     !genericTerms.has(comparableQuery) &&
@@ -179,6 +194,7 @@ function scoreEnglishField(query: string, field: string): number {
     .replace(/[^A-Z]/g, "");
   if (queryInitials.length >= 2 && initials === queryInitials) return 95;
   if (queryInitials.length >= 3 && initials.startsWith(queryInitials)) return 85;
+  if (comparableField.length >= 3 && comparableQuery.includes(comparableField)) return 75;
   if (
     comparableQuery.length >= 3 &&
     !genericEnglishTerms.has(comparableQuery) &&

@@ -15,7 +15,12 @@ import frontendDesign from "./protocols/frontend-design.md?raw";
 import { buildPlanSchema, type BusinessCapability, type BuildRecord } from "../lib/build-plan";
 import type { AppBundle } from "../lib/contracts";
 import { sseACompanies } from "./providers";
-import { type Company, type CompanyLookupInput, type LiveCompany } from "../lib/company-table";
+import {
+  type Company,
+  type CompanyLookupInput,
+  type LiveCompany,
+  rankCompanyMatches,
+} from "../lib/company-table";
 
 export const agentProtocols = { communication, builder, "application-llm": applicationLlm };
 export { frontendDesign };
@@ -127,6 +132,22 @@ function identityMatches(normalized: string, company: CompanyLookupInput) {
     normalized === (company.enname ?? "").toLocaleLowerCase()
   );
 }
+// Build-time identity resolves with the same ranked matcher the
+// lookup_companies tool uses, so the identity the search surfaced is the
+// identity that gets pinned; strict equality stays as a fast path. Only a
+// genuinely ambiguous or absent company blocks.
+function resolveQueryIdentity(
+  query: string,
+  companies: CompanyLookupInput[],
+): { ticker: string; ambiguous: false } | { ticker: null; ambiguous: boolean } {
+  const normalized = query.trim().toLocaleLowerCase();
+  const exact = companies.filter((company) => identityMatches(normalized, company));
+  if (exact.length === 1) return { ticker: exact[0]!.ticker, ambiguous: false };
+  const ranked = rankCompanyMatches(query, companies);
+  const top = ranked[0];
+  if (ranked.length === 1 && top?.ticker) return { ticker: top.ticker, ambiguous: false };
+  return { ticker: null, ambiguous: ranked.length > 1 };
+}
 export async function prepareBuild(
   raw: unknown,
   turnId: string,
@@ -141,15 +162,16 @@ export async function prepareBuild(
   const companyIds: string[] = [];
   for (const query of plan.companyQueries) {
     if (!table.available) continue;
-    const normalized = query.trim().toLocaleLowerCase();
-    const matches = table.companies.filter((company) => identityMatches(normalized, company));
-    if (matches.length !== 1)
-      blockers.push(
-        matches.length
-          ? `Ambiguous company: ${query}. Ask which ticker is intended.`
-          : `Company is outside the SSE Class A scope: ${query}. The platform currently supports Shanghai Stock Exchange Class A companies only.`,
-      );
-    else companyIds.push(matches[0].ticker);
+    const resolved = resolveQueryIdentity(query, table.companies);
+    if (resolved.ticker) {
+      companyIds.push(resolved.ticker);
+      continue;
+    }
+    blockers.push(
+      resolved.ambiguous
+        ? `Ambiguous company: ${query}. Ask which ticker is intended.`
+        : `Company is outside the SSE Class A scope: ${query}. The platform currently supports Shanghai Stock Exchange Class A companies only.`,
+    );
   }
   if (resolvedCapabilities.includes("historical-analysis") && !plan.companyQueries.length)
     blockers.push(
