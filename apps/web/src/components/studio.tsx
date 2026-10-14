@@ -139,36 +139,49 @@ export function Studio() {
   const messagesReady = !reactive || !selected || subscribedMessages?.appId === selected;
   const release = app && (app.preview ?? app.current);
   const pendingPreview = app ? (app.preview?.id !== app.current?.id ? app.preview : null) : null;
+  const proposal = app?.buildProposal;
+  // Mirrors the workflow card's own approvable check so the bar button never
+  // offers an approval the workflow view cannot complete.
+  const workflowNeedsReview =
+    !!proposal &&
+    !proposal.approvedAt &&
+    !!proposal.id &&
+    !!proposal.specification &&
+    !!proposal.plan;
   const lastReleaseId = useRef<string | null>(null);
   useEffect(() => {
     const id = release?.id ?? null;
-    // Anything new lands in the preview panel — a staged preview, an activation,
-    // a fresh build — so open the panel whenever its content changes.
+    // Anything new lands in the preview panel — a staged preview, an
+    // activation, a fresh build — so open the panel and the preview tab
+    // whenever its content changes.
     if (id && id !== lastReleaseId.current) {
       lastReleaseId.current = id;
       setPreviewCollapsed(false);
+      setTab("preview");
+      setMobilePane("preview");
     }
   }, [release?.id]);
-  const lastWorkflowRecord = useRef<{ appId: string | null; recordId: string | null }>({
+  const lastProposal = useRef<{ appId: string | null; proposalId: string | null }>({
     appId: null,
-    recordId: null,
+    proposalId: null,
   });
   useEffect(() => {
     const appId = app?.id ?? null;
-    const recordId = app?.buildRecords?.at(-1)?.id ?? null;
-    const seen = lastWorkflowRecord.current;
-    // Selecting an app seeds from its existing build so opening an old chat
-    // never yanks the tab; a build landing during the session switches the
-    // workspace to the workflow view, mirroring the preview panel above.
+    const proposalId = app?.buildProposal?.id ?? null;
+    const seen = lastProposal.current;
+    // Selecting an app seeds from its pending proposal so opening an old chat
+    // never yanks the tab; a proposal arriving during the session opens the
+    // workflow view for review, mirroring the preview switch above.
     if (appId !== seen.appId) {
-      lastWorkflowRecord.current = { appId, recordId };
+      lastProposal.current = { appId, proposalId };
       return;
     }
-    if (recordId && recordId !== seen.recordId) {
-      lastWorkflowRecord.current = { appId, recordId };
+    if (proposalId && proposalId !== seen.proposalId && !app?.buildProposal?.approvedAt) {
+      lastProposal.current = { appId, proposalId };
       setTab("workflow");
+      setMobilePane("preview");
     }
-  }, [app?.id, app?.buildRecords]);
+  }, [app?.id, app?.buildProposal]);
   const refreshVersion = useRef(0);
   async function refresh() {
     const version = ++refreshVersion.current;
@@ -342,6 +355,13 @@ export function Studio() {
       setImported(bundleSchema.parse(bundle));
     });
     if (file.current) file.current.value = "";
+  }
+  async function approveWorkflow(proposalId: string) {
+    if (!app) return;
+    await run("Approving workflow...", async () => {
+      await api<Application>({ action: "approve-workflow", appId: app.id, proposalId });
+      await refresh();
+    });
   }
   async function confirmImport() {
     if (!imported) return;
@@ -636,13 +656,27 @@ export function Studio() {
                     className="min-h-0 min-w-0 flex-1 gap-0"
                   >
                     <div className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] md:grid-cols-3 items-center gap-2 px-3 py-2">
-                      <TabsList aria-label="Workspace views">
-                        {workspaceTabs.map(({ value, label, Icon }) => (
-                          <TabsTrigger value={value} key={value} aria-label={label} title={label}>
-                            <Icon />
-                          </TabsTrigger>
-                        ))}
-                      </TabsList>
+                      <div className="flex items-center gap-2">
+                        <TabsList aria-label="Workspace views">
+                          {workspaceTabs.map(({ value, label, Icon }) => (
+                            <TabsTrigger value={value} key={value} aria-label={label} title={label}>
+                              <Icon />
+                            </TabsTrigger>
+                          ))}
+                        </TabsList>
+                        {workflowNeedsReview && proposal && (
+                          <Button
+                            size="sm"
+                            className="studio-approve-throb"
+                            aria-label="Approve workflow"
+                            disabled={!!busy || agentBusy || app.agentTurn?.status === "running"}
+                            onClick={() => void approveWorkflow(proposal.id)}
+                          >
+                            <ShieldCheck data-icon="inline-start" />
+                            <span className="hidden sm:inline">Approve workflow</span>
+                          </Button>
+                        )}
+                      </div>
                       <div className="flex min-w-0 items-center justify-center gap-2">
                         <span className="truncate text-sm font-mono" title={app.name}>
                           {app.name}
@@ -772,16 +806,7 @@ export function Studio() {
                       <WorkflowView
                         app={app}
                         disabled={!!busy || agentBusy}
-                        onApprove={async (proposalId) => {
-                          await run("Approving workflow...", async () => {
-                            await api<Application>({
-                              action: "approve-workflow",
-                              appId: app.id,
-                              proposalId,
-                            });
-                            await refresh();
-                          });
-                        }}
+                        onApprove={approveWorkflow}
                       />
                     </TabsContent>
                   </Tabs>

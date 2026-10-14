@@ -423,9 +423,42 @@
     font-size: 44px;
   }
 }
+/* Pending workflow approval: a quiet breathing halo invites review. The pulse
+   lives entirely on a pseudo-element so the button's own box never moves
+   (stable for pointer targeting and assistive tech) and its focus ring
+   box-shadow is left alone for keyboard users. */
+.studio-approve-throb {
+  position: relative;
+}
+.studio-approve-throb::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: approve-throb-halo 2.4s ease-in-out infinite;
+}
+@keyframes approve-throb-halo {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--primary) 30%, transparent);
+  }
+  55% {
+    box-shadow: 0 0 0 7px transparent;
+  }
+}
+/* The throb is an idle cue; settle it the moment the user reaches for the
+   button so it reads as found, not still calling. */
+.studio-approve-throb:hover::after,
+.studio-approve-throb:focus-visible::after {
+  animation: none;
+}
 @media (prefers-reduced-motion: reduce) {
   .build-cover {
     transition: none;
+  }
+  .studio-approve-throb::after {
+    animation: none;
   }
 }
 

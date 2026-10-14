@@ -667,7 +667,9 @@ try {
       response.request().method() === "POST" &&
       response.request().postDataJSON()?.action === "approve-workflow",
   );
-  await page.getByRole("button", { name: "Approve workflow", exact: true }).click();
+  // The tab bar offers the same approval as the workflow card; the bar button
+  // is first in DOM order.
+  await page.getByRole("button", { name: "Approve workflow", exact: true }).first().click();
   const approvalResult = await approvalResponse;
   assert(approvalResult.ok());
   const approved = (await approvalResult.json()) as Application;
