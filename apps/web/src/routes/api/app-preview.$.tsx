@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { resolvePreviewSession, previewBridge } from "../../server/preview-session";
 import { requestWorkspace } from "../../server/app-workspaces";
+import { withDisclaimerFooter } from "../../lib/disclaimer";
 
 const previewHeaders = {
   "cache-control": "private, no-store",
@@ -84,6 +85,7 @@ async function previewRequest({ request }: { request: Request }) {
       /<head\b[^>]*>/i,
       (head) => `${head}<script nonce="${grant.nonce}">${previewBridge(grant.nonce)}</script>`,
     );
+    html = withDisclaimerFooter(html, release.bundle.manifest.name);
     return new Response(html, { status: upstream.status, headers });
   } catch {
     return Response.json(

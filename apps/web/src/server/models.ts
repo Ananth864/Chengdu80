@@ -26,7 +26,10 @@ export async function modelAdapter() {
     maxRetries: 2,
   });
 }
-export async function modelOptions(reasoning: "low" | "max" = "low", maxTokens = 4096) {
+export async function modelOptions(
+  reasoning: "low" | "medium" | "high" | "max" = "low",
+  maxTokens = 4096,
+) {
   return modelConfiguration(await settings()).provider === "glm"
     ? { thinking: { type: "enabled" }, reasoning_effort: reasoning, max_tokens: maxTokens }
     : { max_output_tokens: maxTokens };

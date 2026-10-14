@@ -71,6 +71,7 @@ import {
   type Application,
   type Release,
 } from "../lib/contracts";
+import { disclaimerText } from "../lib/disclaimer";
 import { CodeWorkspace, type SourcePath } from "./code-workspace";
 import { AppFrame } from "./app-frame";
 
@@ -786,13 +787,14 @@ export function Studio() {
                                 : "Describe a supported financial app in the conversation."}
                             </EmptyDescription>
                           </EmptyHeader>
-                          {release && (
-                            <EmptyContent>
+                          <EmptyContent>
+                            {release && (
                               <Button variant="outline" onClick={() => setReview("checks")}>
                                 View checks
                               </Button>
-                            </EmptyContent>
-                          )}
+                            )}
+                            <p className="text-sm text-muted-foreground">{disclaimerText()}</p>
+                          </EmptyContent>
                         </Empty>
                       )}
                     </TabsContent>
@@ -847,6 +849,9 @@ export function Studio() {
                         Your preview appears here when the build is ready.
                       </EmptyDescription>
                     </EmptyHeader>
+                    <EmptyContent>
+                      <p className="text-sm text-muted-foreground">{disclaimerText()}</p>
+                    </EmptyContent>
                   </Empty>
                 )}
               </main>

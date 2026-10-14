@@ -21,7 +21,15 @@ export const buildPlanSchema = z
       error: () =>
         "The platform builds only in live mode on real Shanghai Stock Exchange Class A data. Never propose fixture or synthetic demo data; if the requested company is unsupported, reject it and propose a different real company instead.",
     }),
-    themeOverride: z.string().trim().min(1).max(300).nullable(),
+    themeOverride: z
+      .string()
+      .trim()
+      .min(1)
+      .max(300)
+      .nullable()
+      .describe(
+        "Visual identity for this app when the subject warrants more than the starter default: a short theme name followed by its 4-6 named hex colors, grounded in the confirmed specification. Set it in propose_build and repeat the same value in prepare_build; a recorded override authorizes editing the starter's src/app.css. Null keeps the starter default theme (then src/app.css must not change).",
+      ),
     cardMetrics: metricSelectionSchema.optional(),
   })
   .strict();

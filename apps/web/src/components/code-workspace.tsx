@@ -100,7 +100,11 @@ export function CodeWorkspace({
   onSelectFile: (path: SourcePath) => void;
 }) {
   const files: Record<string, string> = bundle.files;
-  const selected = Object.hasOwn(files, activeFile) ? activeFile : (Object.keys(files)[0] ?? "");
+  const selected = Object.hasOwn(files, activeFile)
+    ? activeFile
+    : (Object.keys(files).find((file) => file === "src/routes/index.tsx") ??
+      Object.keys(files)[0] ??
+      "");
   const content = files[selected] ?? "";
   const tree = sourceTree(Object.keys(files).sort());
   return (
