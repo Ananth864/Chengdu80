@@ -78,7 +78,7 @@ try {
   assert.equal(withoutCompany.readiness, "blocked");
   await assert.rejects(() => prepareBuild({ ...plan, capabilities: ["weather"] }, "turn-1", 1));
   // There is no synthetic company table: fixture plans are rejected outright.
-  assert.throws(() => prepareBuild({ ...plan, mode: "fixture" }, "turn-1", 5));
+  await assert.rejects(() => prepareBuild({ ...plan, mode: "fixture" }, "turn-1", 5), /live mode/);
   const bundle = sampleBundle(protocols[0]!.defaultSpec);
   assert.throws(() => validateScopedBundle(bundle, record));
   bundle.manifest.permissions = ["finance.calculate", "storage.read", "storage.write"];
