@@ -10,7 +10,10 @@ import { auth } from "./integrations/auth";
 import { routeTree } from "./routeTree.gen";
 
 export function getRouter() {
-  const convexClient = env.VITE_CONVEX_URL ? new ConvexReactClient(env.VITE_CONVEX_URL) : null;
+  const convexClient =
+    import.meta.env.VITE_LOCAL_MODE !== "1" && env.VITE_CONVEX_URL
+      ? new ConvexReactClient(env.VITE_CONVEX_URL)
+      : null;
   const convexQueryClient = convexClient ? new ConvexQueryClient(convexClient) : null;
 
   const queryClient: QueryClient = new QueryClient({

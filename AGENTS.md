@@ -24,8 +24,19 @@ Bun monorepo:
 - Run `bun run codegen` after adding or renaming Convex functions.
 - New generated apps use `apps/web/starter/project`. Keep its financial SDK/modules, shadcn source and build configuration protected. Regenerate `app-project-template.ts` with `bun run starter:sync` after starter changes.
 - Generated Node/Bash/SSR code must run only in the Linux Bubblewrap sandbox. On macOS use the Docker launcher; never add a host execution fallback.
-- Retain independent per-turn financial feasibility checks and server-key-protected writes. Markdown policies do not replace those gates.
+- Retain per-turn capability, dependency, company and permission checks and server-key-protected writes. The builder assesses semantic feasibility; there is no separate intent-classifier model. Require prior-turn proposals and explicit Preview activation. Markdown policies do not replace executable gates.
 - Keep the existing gallery, retained discussion, chat-only deletion and studio UI.
+
+## Specification Integrity
+
+- Scaffold and sample metadata are not user requirements. New conversations must start with unconfigured inputs and outputs, not portfolio sample fields. A transport protocol does not imply that its sample product fits the user's goal.
+- Before deploying a new application, record an application-specific specification through `set_specification`: name, purpose, actual inputs, requested outputs and constraints. Map only the financial capabilities needed by the request; preserve independent feasibility and activation gates.
+- Give each output its own `outputDetails` entry keyed by its label, describing content, source requirements and availability limitations. Never reuse the original prompt or overall purpose as every output's description. Do not invent details, metrics or features merely to populate the workflow.
+- Keep workflow metadata aligned with the displayed release: active release specification and build record belong together; blocked attempts must not replace the active workflow. Draft outputs describe intended behavior, not verified execution or live-data availability.
+- Test new-workspace defaults, missing-specification deployment rejection, app-specific output labels and distinct output details. Include a non-portfolio request to catch inherited portfolio metadata. Local model fixtures prove wiring and enforcement, not live-model semantic correctness.
+- Root `AGENTS.md` instructs repository coding agents, not the application LLM. Mirror relevant generation rules in `apps/web/src/server/protocols/builder.md` and the dashboard skill; keep tool descriptions and executable validation consistent. Markdown alone is not enforcement.
+- Building requires explicit Workflow-stage approval recorded server-side for the exact proposal. A later chat reply alone is not approval. Changed plan fields require new approval; Preview activation remains a separate user action.
+- UI and CLI workflow approval use the same server action and automatically start one bounded builder turn. Preserve approval receipt deduplication, persisted progress and separate Preview activation; do not require a second chat message or claim durable crash recovery for the in-process task.
 
 ## Environment
 

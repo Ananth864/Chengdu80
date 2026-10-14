@@ -17,6 +17,7 @@ import {
   protocols,
   requirementsSchema,
   specSchema,
+  draftSpecSchema,
   type Application,
   type AppBundle,
   type ProductSpec,
@@ -44,6 +45,13 @@ const text = z.string().trim().min(1).max(4000);
 const requestSchema = z.discriminatedUnion("action", [
   z
     .object({
+      action: z.literal("approve-workflow"),
+      appId: z.string(),
+      proposalId: z.string().uuid(),
+    })
+    .strict(),
+  z
+    .object({
       action: z.literal("delete-chat"),
       appId: z.string(),
       expectedRevision: z.number().int().positive(),
@@ -53,7 +61,7 @@ const requestSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("save-design"),
     appId: z.string(),
-    spec: specSchema.optional(),
+    spec: draftSpecSchema.optional(),
     requirements: requirementsSchema,
   }),
   z.object({ action: z.literal("create-workspace"), prompt: z.string().trim().min(1).max(12000) }),
@@ -217,7 +225,6 @@ export async function dispatch(access: Access, raw: unknown) {
       "load-prices",
       "test-provider",
       "clarify",
-      "accept",
       "reverify",
     ].includes(req.action)
   )
@@ -225,9 +232,32 @@ export async function dispatch(access: Access, raw: unknown) {
       "Use the financial-capability conversation to scope this request. Legacy direct builds, imports and provider tests are disabled until they support the internal capability contract.",
     );
   if (req.action === "delete-chat") return deleteChat(access, req.appId, req.expectedRevision);
+  if (req.action === "approve-workflow") {
+    const current = await findApp(access, req.appId);
+    if (current.workflowApproval?.proposalId === req.proposalId) return current;
+    const { startAgentTurn } = await import("./agent");
+    const stream = await startAgentTurn(
+      access,
+      req.appId,
+      {
+        id: `workflow-${req.proposalId}`,
+        content: "Workflow approved. Continue building the approved workflow now.",
+      },
+      new AbortController().signal,
+      req.proposalId,
+    );
+    // Approval owns this bounded server task, not the lifetime of the HTTP client.
+    void (async () => {
+      for await (const _chunk of stream) {
+        /* Persisted by the agent. */
+      }
+    })().catch(() => {});
+    return findApp(access, req.appId);
+  }
   if (req.action === "save-design") {
     return mutateApp(access, req.appId, (latest) => {
       if (req.spec) {
+        if (latest.current) specSchema.parse(req.spec);
         if (req.spec.protocol !== latest.spec.protocol)
           throw new Error("An active app's calculation protocol cannot change.");
         latest.workspaceSpec = req.spec;
@@ -247,9 +277,12 @@ export async function dispatch(access: Access, raw: unknown) {
   }
   if (req.action === "create-workspace") {
     const app = newApp(access, {
-      ...protocols[0]!.defaultSpec,
+      protocol: "portfolio",
       name: "New chat",
       purpose: req.prompt.length >= 10 ? req.prompt.slice(0, 4000) : `Conversation: ${req.prompt}`,
+      inputs: [],
+      outputs: [],
+      constraints: [],
     });
     app.chatTitle = "New chat";
     app.conversation = [];
@@ -415,6 +448,8 @@ export async function dispatch(access: Access, raw: unknown) {
   }
   if (req.action === "accept") {
     const release = app.preview;
+    if (!release?.buildRecord)
+      throw new Error("A scoped build record is required before accepting a release.");
     if (
       !release ||
       release.id !== req.releaseId ||

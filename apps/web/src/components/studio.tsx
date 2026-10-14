@@ -172,6 +172,13 @@ export function Studio() {
     };
   }, []);
   useEffect(() => {
+    if (reactive || !app) return;
+    const timer = setInterval(() => {
+      void refresh().catch(() => {});
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [app?.id, reactive]);
+  useEffect(() => {
     if (reactive || !app || app.chatTitle !== "New chat") return;
     let stopped = false;
     let attempts = 0;
@@ -781,7 +788,20 @@ export function Studio() {
                       />
                     </TabsContent>
                     <TabsContent value="workflow" className="flex min-h-0 flex-col overflow-y-auto">
-                      <WorkflowView app={app} />
+                      <WorkflowView
+                        app={app}
+                        disabled={!!busy || agentBusy}
+                        onApprove={async (proposalId) => {
+                          await run("Approving workflow...", async () => {
+                            await api<Application>({
+                              action: "approve-workflow",
+                              appId: app.id,
+                              proposalId,
+                            });
+                            await refresh();
+                          });
+                        }}
+                      />
                     </TabsContent>
                   </Tabs>
                 ) : (

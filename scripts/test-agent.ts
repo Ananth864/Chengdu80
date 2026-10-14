@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { chromium, type Browser } from "playwright";
 import { prepareBuild } from "../apps/web/src/server/build-policy";
 import { sourceHash } from "../apps/web/src/server/runtime";
-import type { Application } from "../apps/web/src/lib/contracts";
+import type { Application, ProductSpec } from "../apps/web/src/lib/contracts";
 
 type InputItem = {
   role?: string;
@@ -22,6 +22,8 @@ type InputItem = {
 type ModelRequest = {
   model: string;
   input: InputItem[];
+  instructions?: string;
+  tools?: { name?: string }[];
   stream?: boolean;
   reasoning?: { effort?: string };
   text?: { format?: { schema?: { properties?: Record<string, unknown> } } };
@@ -29,6 +31,40 @@ type ModelRequest = {
 const requests: ModelRequest[] = [];
 const results: string[] = [];
 const browserErrors: string[] = [];
+const cloudDatabaseRequests: string[] = [];
+const researchSpecification: ProductSpec = {
+  name: "Copper Finch",
+  purpose: "Synthetic industry research with clearly unavailable evidence.",
+  protocol: "portfolio",
+  inputs: ["Selected industry"],
+  outputs: ["Industry research", "Evidence availability"],
+  outputDetails: {
+    "Industry research":
+      "Selected-industry research requires sourced industry evidence; unavailable in this synthetic demo.",
+    "Evidence availability":
+      "Show source coverage and missing-evidence reasons from the research response; no invented sources.",
+  },
+  constraints: ["Synthetic demo; no invented research"],
+};
+const liveResearchSpecification: ProductSpec = {
+  ...researchSpecification,
+  purpose: "Live industry research with explicit source coverage and missing-evidence reasons.",
+  outputDetails: {
+    "Industry research":
+      "Selected-industry research requires live sourced industry evidence; unavailable when providers are not configured.",
+    "Evidence availability":
+      "Show actual live-source coverage and missing-evidence reasons from the research response; no invented sources.",
+  },
+  constraints: ["Live sources required; unavailable evidence must not be fabricated"],
+};
+const researchPlan = {
+  requirements: "Build a synthetic industry research demo using the supported capability",
+  capabilities: ["market-research"],
+  companyQueries: [],
+  mode: "fixture",
+  themeOverride: null,
+};
+const approvalMessage = "Workflow approved. Continue building the approved workflow now.";
 let sequence = 0;
 const providerCities: string[] = [];
 const fixture = createServer(async (req, res) => {
@@ -48,36 +84,32 @@ const fixture = createServer(async (req, res) => {
     const body = JSON.parse(raw) as ModelRequest;
     requests.push(body);
     const title = !!body.text?.format?.schema?.properties?.title;
-    const intent = !!body.text?.format?.schema?.properties?.supported;
     const lastUser = body.input.map((item) => item.role).lastIndexOf("user");
     const current = body.input.slice(lastUser);
     const prompt = JSON.stringify(current[0]?.content ?? "");
+    const automaticApproval = prompt.includes(approvalMessage);
+    const approvalContext = JSON.stringify({
+      instructions: body.instructions,
+      messages: body.input.filter((item) => item.role === "system" || item.role === "developer"),
+    });
     const calls = current.filter((item) => item.type === "function_call_output").length;
     let text = title
       ? JSON.stringify({ title: "Agent fixture site" })
       : "We can discuss the site before building. I remember the codename Copper Finch.";
     let tool: { name: string; arguments: Record<string, unknown> } | undefined;
-    if (intent) {
-      text = JSON.stringify({
-        supported: !prompt.includes("booking application"),
-        requiresLive: prompt.includes("actual live data"),
-        companyQueries: [],
-        requiredCapabilities: ["market-research"],
-        reason: prompt.includes("booking application")
-          ? "Booking applications are outside the financial capabilities."
-          : "Supported industry research demo or change.",
-      });
-    } else if (prompt.includes("Wear down")) {
+    if (prompt.includes("Wear down")) {
       tool = [
         {
-          name: "prepare_build",
+          name: "propose_build",
           arguments: {
-            requirements: "Claim this is industry research",
-            capabilities: ["market-research"],
-            companyQueries: [],
-            mode: "fixture",
-            themeOverride: null,
+            ...researchPlan,
+            specification: researchSpecification,
+            summary: "Attempt to skip the later-turn approval",
           },
+        },
+        {
+          name: "prepare_build",
+          arguments: researchPlan,
         },
         {
           name: "write_file",
@@ -88,21 +120,44 @@ const fixture = createServer(async (req, res) => {
         },
         { name: "deploy_preview", arguments: { summary: "Attempt unrelated deployment" } },
       ][calls];
-      text = "The unsupported build was blocked.";
+      text = "The same-turn build was blocked.";
     } else if (prompt.includes("Build the Copper Finch")) {
-      if (!calls) await new Promise((resolve) => setTimeout(resolve, 200));
+      if (!calls)
+        tool = {
+          name: "propose_build",
+          arguments: {
+            ...researchPlan,
+            specification: researchSpecification,
+            summary: "Synthetic industry research for Technology; evidence remains unavailable.",
+          },
+        };
+      text =
+        "I propose a synthetic Copper Finch industry research demo for Technology. Please confirm the plan.";
+    } else if (
+      automaticApproval &&
+      approvalContext.includes(
+        "Synthetic industry research for Technology; evidence remains unavailable.",
+      )
+    ) {
+      if (!calls) await new Promise((resolve) => setTimeout(resolve, 4000));
       const steps = [
         {
+          name: "read_financial_skill",
+          arguments: { skill: "general-dashboard-generation" },
+        },
+        {
           name: "prepare_build",
-          arguments: {
-            requirements: "Build a synthetic industry research demo using the supported capability",
-            capabilities: ["market-research"],
-            companyQueries: [],
-            mode: "fixture",
-            themeOverride: null,
-          },
+          arguments: researchPlan,
         },
         { name: "list_files", arguments: {} },
+        {
+          name: "deploy_preview",
+          arguments: { summary: "Reject deployment before an application-specific specification" },
+        },
+        {
+          name: "set_specification",
+          arguments: researchSpecification,
+        },
         {
           name: "write_file",
           arguments: {
@@ -127,7 +182,7 @@ const fixture = createServer(async (req, res) => {
       ];
       tool = steps[calls];
       text =
-        "**Copper Finch** is built and running.\n\n- Workspace tools updated the site.\n- The verified release is active.\n\nInitialization uses `cd80.ready()`.\n\n| Check | Result |\n| --- | --- |\n| Verification | Passed |";
+        "**Copper Finch** preview is ready for review.\n\n- Workspace tools updated the site.\n- Approve activation in the Preview panel; the app is not live yet.\n\nInitialization uses `cd80.ready()`.\n\n| Check | Result |\n| --- | --- |\n| Verification | Passed |";
     } else if (prompt.includes("Connect the registered weather plugin")) {
       text = "Weather plugins are outside the supported financial capabilities.";
     } else if (prompt.includes("Attempt to bypass")) {
@@ -138,18 +193,33 @@ const fixture = createServer(async (req, res) => {
             arguments: { path: "index.html", content: "<main>Bypassed policy</main>" },
           };
       text = "The edit was blocked because no build record was prepared.";
+    } else if (prompt.includes("Prepare without a proposal")) {
+      if (!calls) tool = { name: "prepare_build", arguments: researchPlan };
+      text = "An earlier-turn proposal is required.";
+    } else if (prompt.includes("Prepare an unapproved workflow")) {
+      if (!calls) tool = { name: "prepare_build", arguments: researchPlan };
+      text = "Workflow approval is required before building.";
     } else if (prompt.includes("Stage a broken change")) {
+      if (!calls)
+        tool = {
+          name: "propose_build",
+          arguments: {
+            ...researchPlan,
+            specification: researchSpecification,
+            summary: "Test a broken synthetic research presentation change.",
+          },
+        };
+      text = "Please confirm the synthetic research presentation change before I stage it.";
+    } else if (
+      automaticApproval &&
+      approvalContext.includes("Test a broken synthetic research presentation change.")
+    ) {
       tool = [
         {
           name: "prepare_build",
-          arguments: {
-            requirements: "Build a synthetic industry research demo using the supported capability",
-            capabilities: ["market-research"],
-            companyQueries: [],
-            mode: "fixture",
-            themeOverride: null,
-          },
+          arguments: researchPlan,
         },
+        { name: "set_specification", arguments: researchSpecification },
         {
           name: "write_file",
           arguments: {
@@ -160,6 +230,48 @@ const fixture = createServer(async (req, res) => {
         { name: "deploy_preview", arguments: { summary: "Check intentionally invalid source" } },
       ][calls];
       text = "The change failed verification. Your working site is unchanged.";
+    } else if (prompt.includes("Propose a live research change")) {
+      if (!calls)
+        tool = {
+          name: "propose_build",
+          arguments: {
+            ...researchPlan,
+            specification: liveResearchSpecification,
+            mode: "live",
+            summary: "Request live industry research.",
+          },
+        };
+      text = "Please confirm the live research plan; platform readiness still needs validation.";
+    } else if (automaticApproval && approvalContext.includes("Request live industry research.")) {
+      tool = [
+        { name: "prepare_build", arguments: { ...researchPlan, mode: "live" } },
+        {
+          name: "write_file",
+          arguments: { path: "index.html", content: "<main>Blocked live replacement</main>" },
+        },
+        { name: "deploy_preview", arguments: { summary: "Attempt blocked live deployment" } },
+      ][calls];
+      text = "Live readiness validation blocked this change.";
+    } else if (automaticApproval) {
+      assert(approvalContext.includes("Attempt to skip the later-turn approval"));
+      text = "The approved proposal is retained for the plan-mismatch gate checks.";
+    } else if (prompt.includes("Change the proposed scope")) {
+      tool = [
+        { name: "prepare_build", arguments: { ...researchPlan, capabilities: ["company-cards"] } },
+        {
+          name: "write_file",
+          arguments: { path: "index.html", content: "<main>Unapproved scope</main>" },
+        },
+      ][calls];
+      text = "The changed plan needs a new proposal.";
+    } else if (prompt.includes("Change an approved plan field")) {
+      const change = prompt.includes("requirements")
+        ? { requirements: "A different synthetic industry research requirement" }
+        : prompt.includes("themeOverride")
+          ? { themeOverride: "Use a dark theme" }
+          : { cardMetrics: ["ps"] };
+      if (!calls) tool = { name: "prepare_build", arguments: { ...researchPlan, ...change } };
+      text = "The changed plan needs a new proposal.";
     } else if (prompt.includes("Start a slow turn")) {
       if (!calls) tool = { name: "list_files", arguments: {} };
       else await new Promise((resolve) => setTimeout(resolve, 1600));
@@ -296,6 +408,63 @@ async function appById(id: string) {
   assert(app);
   return app;
 }
+async function approveWorkflow(appId: string, proposalId?: string, expectedStatus = 200) {
+  const before = await appById(appId);
+  const proposal = before.buildProposal;
+  const approvedId = proposalId ?? proposal?.id;
+  assert(approvedId);
+  const response = await fetch(`${base}/api/platform`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      action: "approve-workflow",
+      appId,
+      proposalId: approvedId,
+    }),
+  });
+  const body = await response.text();
+  assert.equal(response.status, expectedStatus, body);
+  const saved = await appById(appId);
+  if (expectedStatus === 200) {
+    const returned = JSON.parse(body) as Application;
+    assert(returned.workflowApproval?.approvedAt, "Workflow approval receipt is persisted");
+    assert.equal(returned.workflowApproval.proposalId, approvedId);
+    assert.equal(returned.workflowApproval.turnId, `workflow-${approvedId}`);
+    assert.deepEqual(saved.workflowApproval, returned.workflowApproval);
+    if (before.workflowApproval?.proposalId === approvedId) {
+      assert.deepEqual(returned.workflowApproval, before.workflowApproval);
+      assert.deepEqual(
+        saved.turns?.map((run) => run.id),
+        before.turns?.map((run) => run.id),
+      );
+    }
+    return returned;
+  } else {
+    assert.deepEqual(
+      saved.buildProposal,
+      proposal,
+      "Rejected approval must not change the proposal",
+    );
+    assert.deepEqual(saved.workflowApproval, before.workflowApproval);
+  }
+}
+async function waitForApproval(appId: string, proposalId: string) {
+  for (let attempt = 0; attempt < 600; attempt++) {
+    const app = await appById(appId);
+    const run = app.turns?.find((candidate) => candidate.id === `workflow-${proposalId}`);
+    if (run && run.status !== "running") {
+      assert.equal(run.status, "complete", "Automatic workflow turn must complete");
+      assert(run.completedAt);
+      const messages = app.conversation?.filter((message) => message.id === run.id);
+      assert(messages);
+      assert.equal(messages.length, 1, "Approval starts exactly one deterministic user message");
+      assert.deepEqual(messages[0]?.parts, [{ type: "text", content: approvalMessage }]);
+      return app;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error("Automatic workflow turn did not complete");
+}
 async function turn(appId: string, content: string, headers: Record<string, string> = {}) {
   return fetch(`${base}/api/ai/chat`, {
     method: "POST",
@@ -316,6 +485,14 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: base });
   page.on("pageerror", (error) => browserErrors.push(error.message));
+  page.on("request", (request) => {
+    if (/\.convex\.(cloud|site)(?:\/|$)/.test(request.url()))
+      cloudDatabaseRequests.push(request.url());
+  });
+  page.on("websocket", (socket) => {
+    if (/\.convex\.(cloud|site)(?:\/|$)/.test(socket.url()))
+      cloudDatabaseRequests.push(socket.url());
+  });
   page.on("response", (response) => {
     if (response.url().includes("/api/ai/chat") && !response.ok())
       void response.text().then((text) => console.error("Chat rejected:", response.status(), text));
@@ -341,6 +518,8 @@ try {
   assert(first);
   const id = first.id;
   assert.equal(first.current, null, "Discussion must not generate a site");
+  assert.deepEqual(first.spec.inputs, [], "New conversations have no sample inputs");
+  assert.deepEqual(first.spec.outputs, [], "New conversations have no sample outputs");
   for (let i = 0; i < 30 && (await appById(id)).chatTitle !== "Agent fixture site"; i++)
     await page.waitForTimeout(100);
   assert.equal((await appById(id)).chatTitle, "Agent fixture site");
@@ -374,15 +553,121 @@ try {
     .waitFor();
   await page.getByRole("heading", { name: "Agent fixture site", exact: true }).waitFor();
   const dataBefore = (await appById(id)).data;
+  const noProposal = await turn(id, "Prepare without a proposal for a synthetic demo.");
+  assert(noProposal.ok);
+  assert((await noProposal.text()).includes("Call propose_build and end the turn first"));
+  assert.equal((await appById(id)).buildRecords?.length ?? 0, 0);
   await page
     .getByRole("textbox", { name: "Message the AI" })
     .fill("Build the Copper Finch synthetic industry research demo now.");
   await page.getByRole("textbox", { name: "Message the AI" }).press("Enter");
-  await page.getByRole("button", { name: /^Working for / }).waitFor();
   await page
-    .getByText("Copper Finch is built and running.", { exact: true })
+    .getByText(
+      "I propose a synthetic Copper Finch industry research demo for Technology. Please confirm the plan.",
+      { exact: true },
+    )
+    .waitFor();
+  await page.getByRole("button", { name: "Stop generation" }).waitFor({ state: "hidden" });
+  const proposed = await appById(id);
+  assert(proposed.buildProposal);
+  assert(proposed.buildProposal.id);
+  assert.deepEqual(proposed.buildProposal.plan, researchPlan);
+  assert.deepEqual(proposed.buildProposal.specification, researchSpecification);
+  assert.deepEqual(proposed.spec.inputs, [], "A proposal must not replace unconfigured app inputs");
+  assert.deepEqual(
+    proposed.spec.outputs,
+    [],
+    "A proposal must not replace unconfigured app outputs",
+  );
+  assert.equal(proposed.buildProposal.approvedAt, undefined);
+  assert.equal(proposed.current, null);
+  assert.equal(proposed.preview, null);
+  assert.equal(
+    proposed.buildRecords?.length ?? 0,
+    0,
+    "A proposal does not prepare or edit the app",
+  );
+  await approveWorkflow(id, crypto.randomUUID(), 400);
+  const unapproved = await turn(id, "Prepare an unapproved workflow in a subsequent turn.");
+  assert(unapproved.ok);
+  assert(
+    (await unapproved.text()).includes(
+      "Approve the proposed workflow in the Workflow tab before building.",
+    ),
+  );
+  const stillUnapproved = await appById(id);
+  assert.deepEqual(stillUnapproved.buildProposal, proposed.buildProposal);
+  assert.equal(stillUnapproved.buildRecords?.length ?? 0, 0);
+  assert.equal(stillUnapproved.current, null);
+  assert.equal(stillUnapproved.preview, null);
+  assert.deepEqual(stillUnapproved.workspace, proposed.workspace);
+  await page.reload();
+  await page.getByRole("tab", { name: "Workflow", exact: true }).click();
+  const workflowNodes = page.getByRole("region", { name: "Workflow nodes by kind", exact: true });
+  for (const label of ["Input", "Capabilities", "Output"])
+    await workflowNodes.getByText(label, { exact: true }).waitFor();
+  await workflowNodes.getByRole("button", { name: "Selected industry", exact: true }).waitFor();
+  for (const output of researchSpecification.outputs)
+    await workflowNodes.getByRole("button", { name: output, exact: true }).waitFor();
+  for (const output of researchSpecification.outputs) {
+    await workflowNodes.getByRole("button", { name: output, exact: true }).click();
+    await page.getByText(researchSpecification.outputDetails![output]!, { exact: true }).waitFor();
+  }
+  assert(
+    await page.getByText("Workflow approval required", { exact: true }).evaluate((approval) => {
+      const nodes = document.querySelector('[aria-label="Workflow nodes by kind"]');
+      const detail = nodes?.nextElementSibling;
+      return (
+        !!nodes &&
+        !!detail &&
+        detail.querySelector("dl") !== null &&
+        !!(nodes.compareDocumentPosition(approval) & Node.DOCUMENT_POSITION_FOLLOWING) &&
+        !!(detail.compareDocumentPosition(approval) & Node.DOCUMENT_POSITION_FOLLOWING)
+      );
+    }),
+    "Workflow approval card must follow populated workflow nodes and selected output details",
+  );
+  const turnsBeforeApproval = (await appById(id)).turns;
+  const approvalResponse = page.waitForResponse(
+    (response) =>
+      response.url() === `${base}/api/platform` &&
+      response.request().method() === "POST" &&
+      response.request().postDataJSON()?.action === "approve-workflow",
+  );
+  await page.getByRole("button", { name: "Approve workflow", exact: true }).click();
+  const approvalResult = await approvalResponse;
+  assert(approvalResult.ok());
+  const approved = (await approvalResult.json()) as Application;
+  assert(approved.buildProposal?.approvedAt);
+  assert.equal(approved.buildProposal.id, proposed.buildProposal.id);
+  assert.deepEqual(approved.buildProposal.plan, researchPlan);
+  assert.deepEqual(approved.buildProposal.specification, researchSpecification);
+  assert(approved.workflowApproval);
+  assert.deepEqual(approved.workflowApproval, {
+    proposalId: proposed.buildProposal.id,
+    turnId: `workflow-${proposed.buildProposal.id}`,
+    approvedAt: approved.buildProposal.approvedAt,
+  });
+  assert.deepEqual(approved.turns?.slice(0, -1), turnsBeforeApproval);
+  assert.equal(approved.turns?.at(-1)?.id, approved.workflowApproval.turnId);
+  assert.equal(approved.current, null, "Workflow approval must not activate the app");
+  await approveWorkflow(id, proposed.buildProposal.id);
+  await page.getByRole("button", { name: /^Working for / }).waitFor();
+  await page.reload();
+  await page.getByRole("button", { name: /^Working for / }).waitFor();
+  const restoredApproval = await appById(id);
+  assert.deepEqual(restoredApproval.workflowApproval, approved.workflowApproval);
+  const completedApproval = await waitForApproval(id, proposed.buildProposal.id);
+  assert.equal(completedApproval.current, null, "Automatic build stages without auto activation");
+  await approveWorkflow(id, proposed.buildProposal.id);
+  results.push(
+    "Unapproved turns and stale IDs are rejected; workflow approval starts one persisted background turn, survives reload and returns an idempotent receipt without activating the preview",
+  );
+  await page
+    .getByText("Copper Finch preview is ready for review.", { exact: true })
     .waitFor({ timeout: 60000 });
   await page.getByRole("button", { name: "Stop generation" }).waitFor({ state: "hidden" });
+  await page.getByRole("tab", { name: "Preview", exact: true }).first().click();
   const worked = page.getByRole("button", { name: /^Worked for / }).last();
   await worked.waitFor();
   assert.equal(
@@ -406,8 +691,35 @@ try {
   assert.equal(await worked.getAttribute("aria-expanded"), "false");
   await page.locator('iframe[aria-busy="false"]').waitFor();
   await page.frameLocator("iframe").getByRole("heading", { name: "Copper Finch" }).waitFor();
+  const staged = await appById(id);
+  assert.equal(staged.current, null, "deploy_preview must not activate the app");
+  assert(staged.preview?.verification.passed);
+  assert(staged.preview.buildRecord);
+  assert.deepEqual(staged.data, dataBefore, "Staging a preview preserves saved app data");
+  assert.equal(staged.buildProposal, undefined, "Successful preparation consumes the proposal");
+  assert.equal(staged.preview.buildRecord.turnId, approved.workflowApproval.turnId);
+  assert.notEqual(staged.preview.buildRecord.turnId, proposed.buildProposal.turnId);
+  const staleAcceptance = await fetch(`${base}/api/platform`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "accept", appId: id, releaseId: crypto.randomUUID() }),
+  });
+  assert.equal(staleAcceptance.status, 400);
+  assert.equal((await appById(id)).current, null);
+  await page.getByRole("button", { name: "Approve & activate", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Approve & activate", exact: true })
+    .waitFor({ state: "hidden" });
   const built = await appById(id);
   assert(built.current?.verification.passed);
+  assert.equal(built.current.id, staged.preview.id);
+  assert.equal(built.preview, null);
+  assert.deepEqual(built.current.spec, researchSpecification);
+  assert.deepEqual(built.current.spec.inputs, ["Selected industry"]);
+  assert.deepEqual(built.current.spec.outputs, ["Industry research", "Evidence availability"]);
+  assert.deepEqual(Object.keys(built.current.spec.outputDetails ?? {}), built.current.spec.outputs);
+  assert.equal(new Set(Object.values(built.current.spec.outputDetails ?? {})).size, 2);
+  assert(!JSON.stringify(built.current.spec).includes("holdings"));
   assert.deepEqual(built.data, dataBefore, "Deployment preserves saved app data");
   const actualAnswer = built.conversation
     ?.at(-1)
@@ -427,7 +739,16 @@ try {
     built.conversation
       ?.flatMap((message) => message.parts)
       .filter((part) => part.type === "tool-call") ?? [];
-  for (const name of ["list_files", "write_file", "bash", "deploy_preview"])
+  for (const name of [
+    "propose_build",
+    "prepare_build",
+    "set_specification",
+    "read_financial_skill",
+    "list_files",
+    "write_file",
+    "bash",
+    "deploy_preview",
+  ])
     assert(
       toolParts.some((part) => part.type === "tool-call" && part.name === name),
       `Persist actual ${name} tool activity`,
@@ -438,13 +759,59 @@ try {
     ),
     "Earlier turns are supplied to the model",
   );
-  const initialClassifier = requests.find(
-    (request) => request.text?.format?.schema?.properties?.supported,
+  const builderRequest = requests.find((request) =>
+    request.tools?.some((tool) => tool.name === "read_financial_skill"),
   );
-  assert(initialClassifier);
+  assert(builderRequest, "Builder exposes the read-only financial skill tool");
+  const builderInstructions = JSON.stringify({
+    instructions: builderRequest.instructions,
+    messages: builderRequest.input.filter(
+      (item) => item.role === "system" || item.role === "developer",
+    ),
+  });
+  assert(builderInstructions.includes("# Financial Expert Agent"));
+  assert(builderInstructions.includes("Requirement mapping catalog (capability.json)"));
+  assert(builderInstructions.includes("shared-financial-capabilities"));
+  assert(builderInstructions.includes("questionnaire_definition"));
   assert(
-    JSON.stringify(initialClassifier.input).includes("prefer the Technology industry"),
-    "Independent feasibility receives user discussion refinements as untrusted context",
+    builderInstructions.includes("Related catalog IDs are requirement references, not aliases"),
+  );
+  assert(builderInstructions.includes("verified_endpoints"));
+  assert(builderInstructions.includes("Ordinary forms, navigation, uploads"));
+  assert(builderInstructions.includes("skills/annual-report-company-metrics.md"));
+  assert(
+    !builderInstructions.includes("# General Dashboard Generation"),
+    "Skill bodies load on demand rather than bloating every system prompt",
+  );
+  assert(
+    requests.some((request) =>
+      request.input.some(
+        (item) =>
+          item.type === "function_call_output" &&
+          item.output?.includes("# General Dashboard Generation"),
+      ),
+    ),
+    "Requested skill content reaches the builder through the tool result",
+  );
+  results.push(
+    "Builder receives the shared capability catalog and expert guidance; skills load on demand",
+  );
+  assert(
+    requests.some(
+      (request) =>
+        request.tools?.some((tool) => tool.name === "prepare_build") &&
+        JSON.stringify(request.input).includes("prefer the Technology industry"),
+    ),
+    "Builder receives earlier user discussion refinements",
+  );
+  assert(
+    requests.some((request) =>
+      request.input.some(
+        (item) =>
+          item.type === "function_call_output" && item.output?.includes("Call set_specification"),
+      ),
+    ),
+    "Deployment without an application-specific specification is rejected before the fixture sets it",
   );
   await page.getByRole("button", { name: "More actions", exact: true }).click();
   await page.getByRole("menuitem", { name: "Specification", exact: true }).click();
@@ -462,7 +829,7 @@ try {
   );
   await page.screenshot({ path: ".local/agent-tests/conversation-built.png", fullPage: true });
   results.push(
-    "Chrome chat streams actual model text and workspace tools, verifies source and automatically activates the rendered app",
+    "Chrome chat proposes before building, stages a verified preview and activates only through explicit platform acceptance; app-specific metadata and data are retained",
   );
   assert(built.turns?.some((run) => run.status === "complete" && !!run.completedAt));
   results.push(
@@ -471,11 +838,42 @@ try {
   const activeRelease = built.current.id;
   const broken = await turn(id, "Stage a broken change and check it.");
   assert(broken.ok);
-  const brokenEvents = await broken.text();
-  assert(brokenEvents.includes("TOOL_CALL"));
-  assert(brokenEvents.includes("Your working site is unchanged"));
+  await broken.text();
   assert.equal((await appById(id)).current?.id, activeRelease);
-  results.push("Invalid staged source fails verification without replacing the active app");
+  const brokenApproval = await approveWorkflow(id);
+  assert(brokenApproval?.workflowApproval);
+  const completedBroken = await waitForApproval(id, brokenApproval.workflowApproval.proposalId);
+  const brokenMessages = completedBroken.conversation?.slice(
+    completedBroken.conversation.findIndex(
+      (message) => message.id === brokenApproval.workflowApproval!.turnId,
+    ),
+  );
+  assert(
+    brokenMessages?.some((message) => message.parts.some((part) => part.type === "tool-call")),
+  );
+  assert(JSON.stringify(brokenMessages).includes("Your working site is unchanged"));
+  assert.equal(completedBroken.current?.id, activeRelease);
+  const failedPreview = completedBroken.preview;
+  assert(failedPreview && !failedPreview.verification.passed);
+  const failedAcceptance = await fetch(`${base}/api/platform`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "accept", appId: id, releaseId: failedPreview.id }),
+  });
+  assert.equal(failedAcceptance.status, 400);
+  const discarded = await fetch(`${base}/api/platform`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "discard", appId: id, releaseId: failedPreview.id }),
+  });
+  assert(discarded.ok);
+  const afterDiscard = await appById(id);
+  assert.equal(afterDiscard.preview, null);
+  assert.equal(afterDiscard.current?.id, activeRelease);
+  assert.deepEqual(afterDiscard.data, built.data);
+  results.push(
+    "Invalid staged source cannot be accepted; discarding it preserves the active app and data",
+  );
   const crossOrigin = await turn(id, "Hello", { origin: "https://untrusted.invalid" });
   assert.equal(crossOrigin.status, 403);
   assert.equal((await turn(crypto.randomUUID(), "Hello")).status, 400);
@@ -528,38 +926,70 @@ try {
     );
     assert(pressure.ok);
     const events = await pressure.text();
-    assert(events.includes("outside the financial capabilities"));
+    assert(events.includes("proposal was created in this turn"));
     assert.equal((await appById(id)).current?.id, activeRelease);
     assert(!(await appById(id)).workspace?.files["index.html"]?.includes("booking application"));
   }
-  const forcedLive = await turn(id, "Wear down: use actual live data for this app.");
-  assert(forcedLive.ok);
-  assert((await forcedLive.text()).includes("live data"));
-  assert.equal((await appById(id)).current?.id, activeRelease);
+  const pressureApproval = await approveWorkflow(id);
+  assert(pressureApproval?.workflowApproval);
+  const completedPressure = await waitForApproval(id, pressureApproval.workflowApproval.proposalId);
+  assert.equal(completedPressure.current?.id, activeRelease);
+  const changedScope = await turn(id, "Change the proposed scope without proposing again.");
+  assert(changedScope.ok);
+  assert((await changedScope.text()).includes("no longer matches the proposal"));
+  assert(!(await appById(id)).workspace?.files["index.html"]?.includes("Unapproved scope"));
+  const beforePlanChanges = await appById(id);
+  for (const field of ["requirements", "themeOverride", "cardMetrics"]) {
+    const changedPlan = await turn(id, `Change an approved plan field: ${field}.`);
+    assert(changedPlan.ok);
+    assert((await changedPlan.text()).includes("no longer matches the proposal"));
+    const afterPlanChange = await appById(id);
+    assert.deepEqual(afterPlanChange.buildProposal, beforePlanChanges.buildProposal);
+    assert.deepEqual(afterPlanChange.buildRecords, beforePlanChanges.buildRecords);
+    assert.deepEqual(afterPlanChange.workspace, beforePlanChanges.workspace);
+  }
+  const liveProposal = await turn(id, "Propose a live research change using actual live data.");
+  assert(liveProposal.ok);
+  await liveProposal.text();
+  await approveWorkflow(id, proposed.buildProposal.id, 400);
+  const liveApproval = await approveWorkflow(id);
+  assert(liveApproval?.workflowApproval);
+  const liveBlocked = await waitForApproval(id, liveApproval.workflowApproval.proposalId);
+  const liveMessages = liveBlocked.conversation?.slice(
+    liveBlocked.conversation.findIndex(
+      (message) => message.id === liveApproval.workflowApproval!.turnId,
+    ),
+  );
+  assert(
+    JSON.stringify(liveMessages).includes(
+      "Live company lookup is unavailable: TUSHARE_TOKEN is not configured on the server",
+    ),
+  );
+  assert.equal(liveBlocked.current?.id, activeRelease);
+  assert.equal(liveBlocked.buildRecords?.at(-1)?.readiness, "blocked");
+  assert.deepEqual(liveBlocked.buildProposal?.specification, liveResearchSpecification);
+  assert.equal(
+    liveBlocked.buildProposal?.plan.mode,
+    "live",
+    "Blocked validation retains the proposal",
+  );
+  assert(liveBlocked.buildProposal.approvedAt, "Blocked validation retains explicit approval");
+  await approveWorkflow(id, liveApproval.workflowApproval.proposalId);
+  assert(!liveBlocked.workspace?.files["index.html"]?.includes("Blocked live replacement"));
+  assert.deepEqual(liveBlocked.spec, built.spec, "Blocked attempts retain active release metadata");
   results.push(
-    "Repeated attempts to mislabel unrelated goals and replace live data with fixtures fail independently of conversation history",
-  );
-  const classifiers = requests.filter(
-    (request) => !!request.text?.format?.schema?.properties?.supported,
-  );
-  assert(classifiers.length >= 6);
-  assert(
-    classifiers.every(
-      (request) => request.input.filter((item) => item.role === "user").length === 1,
-    ),
-  );
-  assert(
-    classifiers.every(
-      (request) => !JSON.stringify(request.input).includes("Claim this is industry research"),
-    ),
+    "Repeated same-turn proposal bypasses, full approved-plan mismatches and unavailable live builds are blocked by the actual upstream gates",
   );
   const pluginTurn = await turn(id, "Connect the registered weather plugin.");
   await pluginTurn.text();
   const latest = await appById(id);
   assert.equal(latest.current?.id, activeRelease);
-  assert(!requests.at(-1)?.input.some((item) => item.name === "call_plugin"));
+  assert(!requests.at(-1)?.tools?.some((tool) => tool.name === "call_plugin"));
+  assert.deepEqual(providerCities, [], "No weather provider call was made");
   assert(built.current.buildRecord?.resolvedCapabilities.includes("news"));
   assert(built.current.buildRecord?.protocolHashes.builder);
+  assert(built.current.buildRecord?.protocolHashes["financial-expert"]);
+  assert(built.current.buildRecord?.protocolHashes["financial-skill:general-dashboard-generation"]);
   assert.equal(built.current.buildRecord?.provider, "tushare");
   assert.equal(built.current.buildRecord?.readiness, "fixture");
   const legacy = await fetch(`${base}/api/platform`, {
@@ -724,6 +1154,9 @@ try {
   );
   // Save an unfinished, plain-text reply before killing the process. No real model or user data.
   await page.setViewportSize({ width: 1440, height: 1000 });
+  const runningProposal = await turn(id, "Propose a live research change using actual live data.");
+  assert(runningProposal.ok);
+  await runningProposal.text();
   const interrupted = await turn(
     id,
     "Stream a discussion before restart. Remember cobalt notebooks.",
@@ -747,6 +1180,8 @@ try {
     await page.waitForTimeout(100);
   }
   assert(checkpointed, "Partial plain-text response must be saved before completion");
+  await approveWorkflow(id, undefined, 400);
+  results.push("Workflow approval is rejected while an agent turn is running");
   const exited = new Promise<void>((resolve) => node!.once("exit", () => resolve()));
   node!.kill("SIGKILL");
   await exited;
@@ -839,6 +1274,7 @@ try {
     "Deleting an unbuilt chat removes its unfinished workspace and cannot race an active reply",
   );
   assert.deepEqual(browserErrors, []);
+  assert.deepEqual(cloudDatabaseRequests, [], "Local mode never connects to Convex Cloud");
   console.log(results.map((result) => `PASS ${result}`).join("\n"));
   console.log(
     `${results.length} agent integration flows passed. Fixture verifies transport, not live inference.`,

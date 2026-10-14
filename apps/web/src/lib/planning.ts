@@ -1,8 +1,9 @@
-import type { BuildRecord, BusinessCapability } from "./build-plan";
-import type { ProductSpec, Requirements } from "./contracts";
+import type { BuildPlan, BuildRecord, BusinessCapability } from "./build-plan";
+import type { Application, ProductSpec, Requirements } from "./contracts";
+import { capabilityDefinitions } from "./capability-catalog";
 
 export type WorkflowGraph = {
-  basis: "draft" | "build-record";
+  basis: "draft" | "build-record" | "active-release" | "proposal";
   nodes: {
     id: string;
     kind: "data" | "capability" | "output";
@@ -14,34 +15,32 @@ export type WorkflowGraph = {
   edges: { from: string; to: string; label: string }[];
 };
 
-const capabilityLabels: Record<BusinessCapability, string> = {
-  "market-research": "Market research",
-  news: "News retrieval",
-  "historical-analysis": "Historical analysis",
-  "price-target": "Sourced price target",
-  "risk-assessment": "Risk appetite assessment",
-  "industry-preference": "Industry preference",
-  "risk-industry-matching": "Risk/industry matching",
-  "company-cards": "Daily company cards",
-};
-const capabilityDetails: Record<BusinessCapability, string> = {
-  "market-research":
-    "Industry-level research; company-card details add company-specific context before each decision.",
-  news: "Demo news is retrieved once per research run; there is no recurring monitoring.",
-  "historical-analysis":
-    "Price chart, current price, 52-week/all-time extremes, drawdown and daily change.",
-  "price-target":
-    "Externally sourced target with source, date, currency and horizon; never locally predicted.",
-  "risk-assessment":
-    "Expert questionnaire and scoring are pending; only explicit synthetic demo profiles exist.",
-  "industry-preference": "Industries come from the platform-managed company table.",
-  "risk-industry-matching":
-    "Fixed mapping: low to large, medium to medium, high to small cap, intersected with chosen industries.",
-  "company-cards":
-    "Up to five random eligible companies per China day with yes/no decisions and a watchlist.",
-};
 export function capabilityLabel(id: BusinessCapability) {
-  return capabilityLabels[id];
+  return capabilityDefinitions[id].label;
+}
+
+export function applicationWorkflow(app: Application): WorkflowGraph {
+  if (app.buildProposal?.specification && app.buildProposal.plan)
+    return {
+      ...workflowGraph(
+        app.buildProposal.specification,
+        app.requirements,
+        undefined,
+        app.buildProposal.plan,
+      ),
+      basis: "proposal",
+    };
+  if (app.current)
+    return {
+      ...workflowGraph(app.current.spec, undefined, app.current.buildRecord),
+      basis: "active-release",
+    };
+  const record = app.buildRecords?.at(-1);
+  return workflowGraph(
+    app.workspaceSpec ?? app.spec,
+    app.requirements,
+    record?.readiness === "blocked" ? undefined : record,
+  );
 }
 
 // Conceptual explanation for review; not an executable graph or proven execution order.
@@ -49,6 +48,7 @@ export function workflowGraph(
   spec: ProductSpec,
   requirements: Requirements | undefined,
   record: BuildRecord | undefined,
+  proposal?: BuildPlan,
 ): WorkflowGraph {
   const nodes: WorkflowGraph["nodes"] = [
     {
@@ -75,6 +75,22 @@ export function workflowGraph(
         : "Normalized application inputs",
     },
   ];
+  if (proposal && spec.inputs.length) {
+    nodes[0] = {
+      ...nodes[0]!,
+      label: spec.inputs[0]!,
+      detail: "Proposed application input; not verified runtime data.",
+    };
+    for (const [index, input] of spec.inputs.slice(1).entries())
+      nodes.push({
+        id: `input-${index + 1}`,
+        kind: "data",
+        label: input,
+        detail: "Proposed application input; not verified runtime data.",
+        inputs: input,
+        outputs: "Application input",
+      });
+  }
   if (record?.companyIds.length)
     nodes.push({
       id: "companies",
@@ -85,28 +101,49 @@ export function workflowGraph(
       outputs: "Table identities with industry and size category",
     });
   const sourceIds = record?.companyIds.length ? ["data", "companies"] : ["data"];
-  const capabilities = record?.resolvedCapabilities ?? [];
+  const capabilities = proposal
+    ? [...new Set(proposal.capabilities)]
+    : record
+      ? [...new Set(record.plan.capabilities)].filter((id) =>
+          record.resolvedCapabilities.includes(id),
+        )
+      : [];
+  const dependencies =
+    record?.resolvedCapabilities.filter((id) => !capabilities.includes(id)) ?? [];
   for (const id of capabilities)
     nodes.push({
       id,
       kind: "capability",
-      label: capabilityLabels[id],
-      detail: capabilityDetails[id],
+      label: capabilityLabel(id),
+      detail: [
+        capabilityDefinitions[id].description,
+        capabilityDefinitions[id].availability,
+        dependencies.length
+          ? `Build supporting dependencies: ${dependencies.map(capabilityLabel).join(", ")}.`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
       inputs:
         sourceIds.includes("companies") && id !== "market-research"
           ? "Application and company-table inputs"
           : "Application inputs",
       outputs: "Capability results",
     });
-  nodes.push({
-    id: "output",
-    kind: "output",
-    label: spec.name,
-    detail: spec.purpose,
-    inputs: "Capability results",
-    outputs: spec.outputs.join("; "),
-  });
+  const outputs = spec.outputs.map((output) => output.trim()).filter(Boolean);
+  for (const [index, output] of (outputs.length ? outputs : ["No outputs specified yet"]).entries())
+    nodes.push({
+      id: `output-${index}`,
+      kind: "output",
+      label: output,
+      detail: outputs.length
+        ? (spec.outputDetails?.[output] ?? "No additional detail recorded for this output.")
+        : "The application specification has not defined any outputs yet.",
+      inputs: "As defined by the application specification; not verified runtime results",
+      outputs: outputs.length ? output : "None recorded.",
+    });
   const middle = nodes.filter((node) => node.kind === "capability");
+  const outputNodes = nodes.filter((node) => node.kind === "output");
   return {
     basis: record ? "build-record" : "draft",
     nodes,
@@ -115,8 +152,16 @@ export function workflowGraph(
           ...sourceIds.flatMap((from) =>
             middle.map((node) => ({ from, to: node.id, label: "Provides inputs" })),
           ),
-          ...middle.map((node) => ({ from: node.id, to: "output", label: "Contributes results" })),
+          ...middle.flatMap((node) =>
+            outputNodes.map((output) => ({
+              from: node.id,
+              to: output.id,
+              label: "Contributes results",
+            })),
+          ),
         ]
-      : sourceIds.map((from) => ({ from, to: "output", label: "Conceptual input" })),
+      : sourceIds.flatMap((from) =>
+          outputNodes.map((output) => ({ from, to: output.id, label: "Conceptual input" })),
+        ),
   };
 }

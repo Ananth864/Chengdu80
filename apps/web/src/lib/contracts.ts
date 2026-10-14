@@ -1,4 +1,4 @@
-import type { BuildRecord, BusinessCapability } from "./build-plan";
+import type { BuildRecord, BuildPlan, BusinessCapability } from "./build-plan";
 import type { UIMessage } from "@tanstack/ai";
 import { z } from "zod";
 import { isProjectFile } from "./project-files";
@@ -85,10 +85,16 @@ export const specSchema = z
     protocol: z.enum(protocolIds),
     inputs: z.array(z.string().max(300)).min(1).max(12),
     outputs: z.array(z.string().max(300)).min(1).max(12),
+    outputDetails: z.record(z.string().min(1).max(300), z.string().min(1).max(2000)).optional(),
     constraints: z.array(z.string().max(500)).min(1).max(20),
   })
   .strict();
 export type ProductSpec = z.infer<typeof specSchema>;
+export const draftSpecSchema = specSchema.extend({
+  inputs: z.array(z.string().max(300)).max(12),
+  outputs: z.array(z.string().max(300)).max(12),
+  constraints: z.array(z.string().max(500)).max(20),
+});
 export const requirementsQuestionSchema = z
   .object({
     id: z.string().regex(/^[a-zA-Z0-9_-]{1,50}$/),
@@ -192,6 +198,10 @@ export type Application = {
   rejectedBuildTurns?: string[];
   // A plan awaiting the user's confirmation; prepare_build consumes it.
   buildProposal?: {
+    id: string;
+    plan: BuildPlan;
+    specification: ProductSpec;
+    approvedAt?: string;
     turnId: string;
     createdAt: string;
     mode: "fixture" | "live";
@@ -199,6 +209,7 @@ export type Application = {
     companyQueries: string[];
     summary: string;
   };
+  workflowApproval?: { proposalId: string; turnId: string; approvedAt: string };
   chatTitle?: string;
   chatDeletedAt?: string;
   conversation?: UIMessage[];

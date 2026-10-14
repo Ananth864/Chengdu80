@@ -6,12 +6,16 @@ const convexUrlSchema = (exampleHost: string) =>
     message: `Replace the ${exampleHost} placeholder before running the app`,
   });
 
+const runtimeEnv = (import.meta as any).env ?? {};
 export const env = createEnv({
   clientPrefix: "VITE_",
   client: {
     VITE_CONVEX_URL: convexUrlSchema("example.convex.cloud").optional(),
   },
-  runtimeEnv: (import.meta as any).env,
+  runtimeEnv: {
+    ...runtimeEnv,
+    VITE_CONVEX_URL: runtimeEnv.VITE_LOCAL_MODE === "1" ? undefined : runtimeEnv.VITE_CONVEX_URL,
+  },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
   emptyStringAsUndefined: true,
 });

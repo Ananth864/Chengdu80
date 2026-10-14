@@ -76,7 +76,11 @@ for (const permission of [
 }
 assert(!bundle.files["src/lib/cd80.ts"]!.includes("tushare"));
 assert(!bundle.files["src/lib/cd80.ts"]!.includes("ai.explain"));
-assert(bundle.files["src/routes/__root.tsx"]!.includes("<FinancialDemo"));
+assert(!bundle.files["src/routes/__root.tsx"]!.includes("<FinancialDemo"));
+assert(bundle.files["src/App.tsx"]!.includes("<FinancialDemo"));
+assert(
+  bundle.files["src/components/financial-app.tsx"]!.includes("export function FinancialModules"),
+);
 assert(bundle.files["src/components/financial-app.tsx"]!.includes("Synthetic demo"));
 assert(bundle.files["src/components/financial-app.tsx"]!.includes("@/components/ui/card"));
 const themed = await prepareBuild(

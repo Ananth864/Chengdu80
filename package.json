@@ -26,6 +26,7 @@
   },
   "type": "module",
   "scripts": {
+    "workflow": "bun scripts/workflow.ts",
     "dev:local": "bun scripts/dev-local.ts",
     "credentials": "bun scripts/credentials.ts",
     "setup:env": "bun scripts/setup-env.ts",

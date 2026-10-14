@@ -53,6 +53,7 @@ import {
 import { companyMatchLimit, companyMatchThreshold, rankCompanyMatches } from "../lib/company-table";
 import { defaultData } from "../lib/finance";
 import { localMode, settings } from "./settings";
+import { financialSkillSchema, readFinancialSkill } from "./financial-expert";
 
 const filePath = z
   .string()
@@ -171,27 +172,49 @@ export async function startAgentTurn(
   appId: string,
   user: { id: string; content: string },
   requestSignal: AbortSignal,
+  approvalProposalId?: string,
 ) {
   const turnKey = `${access.ownerId}:${appId}`;
   if (activeTurns.has(turnKey)) throw new Error("This conversation is already replying.");
   activeTurns.add(turnKey);
   const controller = new AbortController();
+  let deadlineReached = false;
+  const timeoutMessage =
+    "The build turn reached its time limit. Saved source changes were retained, but a preview is available only if verification and staging completed. Review the saved progress before retrying; nothing was activated automatically.";
   const abort = () => controller.abort();
   requestSignal.addEventListener("abort", abort, { once: true });
   if (requestSignal.aborted) abort();
-  const deadline = setTimeout(() => {
+  const expireTurn = () => {
+    deadlineReached = true;
     abort();
-    activeTurns.delete(turnKey);
-  }, 240000);
+  };
+  let deadline = setTimeout(expireTurn, approvalProposalId ? 600000 : 240000);
   let processor!: StreamProcessor;
   let persisted = false;
   let project: AppWorkspace | undefined;
   try {
     const singleOwnerLocal = await localMode();
     const app = await mutateApp(access, appId, (latest) => {
+      if (approvalProposalId) {
+        if (latest.workflowApproval?.proposalId === approvalProposalId)
+          throw new Error("This workflow approval has already started a build turn.");
+        const proposal = latest.buildProposal;
+        if (
+          !proposal ||
+          proposal.id !== approvalProposalId ||
+          !proposal.plan ||
+          !specSchema.safeParse(proposal.specification).success
+        )
+          throw new Error("Workflow proposal changed. Refresh and review the latest plan.");
+        if (latest.agentTurn?.status === "running")
+          throw new Error("Wait for the active reply to finish before approving the workflow.");
+        const approvedAt = new Date().toISOString();
+        proposal.approvedAt = approvedAt;
+        latest.workflowApproval = { proposalId: approvalProposalId, turnId: user.id, approvedAt };
+      }
       if (latest.agentTurn?.status === "running") {
         const interruptedLocal = singleOwnerLocal && latest.agentTurn.runtimeId !== agentRuntime.id;
-        if (!interruptedLocal && Date.now() - Date.parse(latest.agentTurn.startedAt) < 300000)
+        if (!interruptedLocal && Date.now() - Date.parse(latest.agentTurn.startedAt) < 660000)
           throw new Error("This conversation is already replying.");
         const previousId = latest.agentTurn.id;
         latest.conversation = compactTranscript(latest.conversation ?? [], true);
@@ -230,6 +253,16 @@ export async function startAgentTurn(
     });
     let spec = app.workspaceSpec ?? app.spec;
     let buildRecord: BuildRecord | undefined;
+    let approvedSpecification: ProductSpec | undefined;
+    const specificationMatches = (value: ProductSpec) => {
+      const canonical = (item: unknown): string =>
+        JSON.stringify(item, (_key, entry) =>
+          entry && typeof entry === "object" && !Array.isArray(entry)
+            ? Object.fromEntries(Object.entries(entry).sort(([a], [b]) => a.localeCompare(b)))
+            : entry,
+        );
+      return canonical(value) === canonical(approvedSpecification);
+    };
     const prior =
       app.current?.buildRecord ??
       [...(app.buildRecords ?? [])].reverse().find((record) => record.readiness !== "blocked");
@@ -315,6 +348,12 @@ export async function startAgentTurn(
     }
     const tools = [
       toolDefinition({
+        name: "read_financial_skill",
+        description:
+          "Load a bundled financial expert skill before working on its task. Use the agent routing table; skill IDs are filenames without skills/ or .md. Load linked skills as needed. Guidance does not grant financial capabilities or bypass prepare_build, protected files or sandbox controls.",
+        inputSchema: z.object({ skill: financialSkillSchema }),
+      }).server(async ({ skill }) => readFinancialSkill(skill)),
+      toolDefinition({
         name: "lookup_companies",
         description:
           "Fuzzy-search companies by ticker, name, full registered name, English name or industry. Live mode covers Shanghai Stock Exchange Class A listed companies only, through the platform-managed Tushare token; fixture mode covers the synthetic DEMO001/DEMO002/DEMO003 table. Returns scored matches only.",
@@ -342,10 +381,22 @@ export async function startAgentTurn(
       toolDefinition({
         name: "propose_build",
         description:
-          "Present the build plan for the user's confirmation before any build or edit turn: business capabilities, data mode, companies and the assumptions you would build on. End the turn immediately after this call; prepare_build only works in a later turn after the user explicitly agrees.",
-        inputSchema: buildPlanSchema.extend({ summary: z.string().min(1).max(2000) }),
+          "Generate the full Input -> Capabilities -> Output workflow before requesting approval: include an application-specific specification with inputs, outputs, constraints and a distinct outputDetails entry for each output, plus business capabilities, data mode, companies and assumptions. The Workflow tab renders this proposal before its approval button. End the turn immediately after this call; prepare_build requires Workflow-stage approval in a later turn.",
+        inputSchema: buildPlanSchema.extend({
+          summary: z.string().min(1).max(2000),
+          specification: specSchema,
+        }),
       }).server(async (proposal) => {
         buildRecord = undefined;
+        const { summary: _summary, specification, ...proposedPlan } = proposal;
+        if (specification.protocol !== app.spec.protocol)
+          throw new Error(
+            "Retain the application's transport protocol in the proposed specification.",
+          );
+        if (specification.outputs.some((output) => !specification.outputDetails?.[output]?.trim()))
+          throw new Error(
+            "Generate an outputDetails entry for every proposed output before requesting Workflow approval.",
+          );
         if (proposal.mode === "fixture" && !fixtureAuthorized)
           throw new Error(
             "Ask whether the user wants a clearly labeled synthetic demo. Live data must not silently become fixtures.",
@@ -355,6 +406,9 @@ export async function startAgentTurn(
           if (latest.agentTurn?.id !== user.id || latest.agentTurn.status !== "running")
             throw new Error("This financial build turn is no longer active.");
           latest.buildProposal = {
+            id: crypto.randomUUID(),
+            plan: proposedPlan,
+            specification,
             turnId: user.id,
             createdAt: new Date().toISOString(),
             mode: proposal.mode,
@@ -365,7 +419,7 @@ export async function startAgentTurn(
         });
         return {
           recorded: true,
-          next: "End your turn now with a short proposal message: what you will build, the capabilities, data mode, company and assumptions. Wait for the user's explicit confirmation; do not call prepare_build in this turn.",
+          next: "End your turn now. Ask the user to review and approve the workflow through the Workflow tab or CLI. Approval automatically starts the build; no additional chat message is required. Do not call prepare_build in this turn.",
         };
       }),
       toolDefinition({
@@ -388,7 +442,15 @@ export async function startAgentTurn(
           throw new Error(
             "The proposal was created in this turn. End the turn and wait for the user's confirmation before building.",
           );
+        if (!proposal.approvedAt)
+          throw new Error("Approve the proposed workflow in the Workflow tab before building.");
+        if (!specSchema.safeParse(proposal.specification).success)
+          throw new Error(
+            "Generate a complete Input, Capabilities and Output workflow and propose it again before approval.",
+          );
         if (
+          !proposal.plan ||
+          JSON.stringify(proposal.plan) !== JSON.stringify(plan) ||
           proposal.mode !== plan.mode ||
           JSON.stringify(resolveCapabilities(proposal.capabilities)) !==
             JSON.stringify(resolveCapabilities(plan.capabilities))
@@ -417,6 +479,11 @@ export async function startAgentTurn(
             ];
         });
         buildRecord = record;
+        if (!approvalProposalId && record.readiness !== "blocked") {
+          clearTimeout(deadline);
+          deadline = setTimeout(expireTurn, 600000);
+        }
+        approvedSpecification = proposal.specification;
         if (projectFormat && record.readiness !== "blocked") {
           const manifest = JSON.parse(files["cd80.json"]);
           files["cd80.json"] = JSON.stringify({
@@ -439,15 +506,12 @@ export async function startAgentTurn(
                 designNotice:
                   "The frontend design protocol loads with an approved build record, not a blocked one.",
               }),
-          ...(record.readiness === "live"
+          ...(record.readiness === "fixture"
             ? {
-                liveNotice:
-                  "Live build: market data comes from the platform's verified Tushare feed (SSE Class A daily data). Sections the feed does not cover must display as unavailable (暂无数据), never estimates. No buy/sell recommendations.",
-              }
-            : {
                 fixtureNotice:
                   "Synthetic demo: approved React/shadcn starter and fixed company modules; live financial outputs remain unavailable.",
-              }),
+              }
+            : {}),
         };
       }),
       toolDefinition({
@@ -613,10 +677,14 @@ export async function startAgentTurn(
       toolDefinition({
         name: "set_specification",
         description:
-          "Set the site name, purpose and supported calculation protocol. Requires prepare_build earlier in the same turn; a specification change is a modifying turn like any other. Keep the existing protocol when editing an active app.",
+          "Set the application-specific name, purpose, inputs, outputs and constraints before deploying a new site. Requires prepare_build earlier in the same turn after a confirmed proposal. Include outputDetails keyed by output label with each output's content, source and availability requirements; do not repeat the overall prompt or inherit sample outputs. Keep the existing protocol when editing an active app.",
         inputSchema: specSchema,
       }).server(async (next) => {
         await requirePlan();
+        if (!specificationMatches(next))
+          throw new Error(
+            "The specification must match the approved workflow. Propose and approve changes before building.",
+          );
         if (next.protocol !== app.spec.protocol)
           throw new Error(
             "Retain the current transport scaffold. Business capabilities belong in prepare_build.",
@@ -636,6 +704,7 @@ export async function startAgentTurn(
         spec = next;
         const manifest = JSON.parse(files["cd80.json"]);
         files["cd80.json"] = JSON.stringify({ ...manifest, name: next.name });
+        if (!projectFormat) await shell.fs.writeFile("/app/cd80.json", files["cd80.json"]);
         if (projectFormat)
           files[buildContextPath] = buildContextSource(await requirePlan(), next.name);
         if (project) {
@@ -652,6 +721,14 @@ export async function startAgentTurn(
         inputSchema: z.object({ summary: z.string().min(1).max(500) }),
       }).server(async ({ summary }) => {
         const record = await requirePlan();
+        if (!specSchema.safeParse(spec).success)
+          throw new Error(
+            "Call set_specification with this application's actual inputs, outputs and constraints before deployment.",
+          );
+        if (!specificationMatches(spec))
+          throw new Error(
+            "Call set_specification with the approved workflow specification before deployment.",
+          );
         const bundle = fileBundle(files);
         validateScopedBundle(bundle, record);
         const release = await makeRelease(
@@ -693,9 +770,16 @@ export async function startAgentTurn(
       agentLoopStrategy: maxIterations(18),
       messages: processor.getMessages(),
       systemPrompts: [
+        "Compose exactly one requested application in src/App.tsx. The protected root no longer renders a starter page. For custom layouts import FinancialModules from @/components/financial-app, render the protected modules within your layout, and include a visible Synthetic demo label. Do not stack a generic FinancialDemo page above the user's requested app. Reuse the protected financial SDK and algorithms unchanged.",
+        ...(approvalProposalId
+          ? [
+              `The user approved workflow ${approvalProposalId} through the UI or CLI. Continue building now using this exact approved proposal, without another approval request: ${JSON.stringify(app.buildProposal)}. Call prepare_build, then set_specification with its specification and build. Preview activation still requires separate approval.`,
+            ]
+          : []),
+        "Workflow approval is an executable gate through the Workflow tab or workflow CLI. Approval automatically starts a new build turn. A chat reply alone cannot approve a plan; do not ask the user to send another message after approval. Changed plan fields require a new proposal and approval. Preview activation remains separate.",
         ...Object.values(agentProtocols),
         ...selected,
-        `Available financial capability IDs: ${JSON.stringify(Object.keys((await import("./build-policy")).capabilityDependencies))}. Current internal build record: ${JSON.stringify(prior ?? null)}. Current draft requirements for the Requirements tab: ${JSON.stringify(app.requirements ?? null)}.`,
+        `Map requirements using the shared capability.json catalog above. Current internal build record: ${JSON.stringify(prior ?? null)}. Current draft requirements for the Requirements tab: ${JSON.stringify(app.requirements ?? null)}.`,
         "Every build or edit is two-phase and needs two user approvals: call propose_build with the plan and assumptions and end the turn; after the user confirms, call prepare_build and build; deploy_preview stages a pending preview that the user reviews and activates from the Preview panel. Never state that an app is live or provide its link before the user approves the preview. Before fixture edits use prepare_build; read its selected protocols and apply the returned frontend design guidance (designGuidance) when writing presentation source. Preserve the Synthetic demo label. New React apps use fixed financial modules in the protected root route. Fixture apps may use storage.read and storage.write. Legacy fixtures also preserve finance.calculate. Matching builds may also use finance.match-companies; company-card builds may also use finance.company-cards. Use these fixed platform modules for matching, daily batches, decisions and watchlists; do not recreate their logic. Metric selection is pinned in prepare_build.cardMetrics, with omitted selection using defaults. Demo risk selection is an explicit synthetic profile, not a completed expert assessment. Market APIs, LLM explanations and plugins are not enabled for this first scoped flow. Keep unsupported financial outputs unavailable. Fixture company table uses synthetic DEMO001/DEMO002/DEMO003 companies. Live companies come from lookup_companies in live mode: Shanghai Stock Exchange Class A listed companies only, scored fuzzy matches. When the user writes a company name, an exact match is not required. If the top match clearly captures the user's intent (high score, one clear winner), state the assumed company and ticker and proceed with that assumption. If several companies match equally, ask the user to choose. If the company does not exist in the list, tell the user the platform currently supports only SSE Class A companies. Live company data uses the platform-managed Tushare token; users never provide API keys.",
         projectFormat
           ? "This app is an actual TanStack Start React/TypeScript checkout with installed libraries and local shadcn Base UI source. Call read_starter_reference to inspect exact SDK types and toolkit imports. The platform renders confirmed financial modules in its protected root. Customize src/App.tsx and presentation components only after prepare_build approves this turn. Package/build configuration, SDK, financial modules and shadcn source are immutable. Use installed shadcn components; do not recreate controls or financial logic. Use the default theme; src/app.css changes require a recorded theme override. No direct provider/LLM/network calls, generic plugins or package installation. Permissions and src/lib/build-context.ts are derived from the contract. Keep missing financial outputs unavailable. deploy_preview uses platform-owned build/type checks and financial render checks in Linux isolation."
@@ -742,12 +826,12 @@ export async function startAgentTurn(
           else yield chunk;
         }
       } catch (error) {
-        status = controller.signal.aborted ? "stopped" : "error";
+        status = deadlineReached ? "error" : controller.signal.aborted ? "stopped" : "error";
         if (status === "error")
           yield {
             type: EventType.RUN_ERROR,
             timestamp: Date.now(),
-            message: await safeAgentError(error),
+            message: deadlineReached ? timeoutMessage : await safeAgentError(error),
           };
       } finally {
         clearInterval(saveTimer);
@@ -756,11 +840,19 @@ export async function startAgentTurn(
           project = undefined;
         }
         await pendingSave;
-        if (controller.signal.aborted) status = "stopped";
+        if (controller.signal.aborted) status = deadlineReached ? "error" : "stopped";
         try {
           await mutateApp(access, appId, (latest) => {
             if (latest.agentTurn?.id !== user.id) return;
             latest.conversation = compactTranscript(processor.getMessages(), true);
+            if (deadlineReached) {
+              latest.conversation.push({
+                id: `${user.id}-deadline`,
+                role: "assistant",
+                parts: [{ type: "text", content: timeoutMessage }],
+              });
+              latest.events.push({ at: new Date().toISOString(), message: timeoutMessage });
+            }
             const settledTurn = {
               id: user.id,
               startedAt: latest.agentTurn?.startedAt ?? new Date().toISOString(),

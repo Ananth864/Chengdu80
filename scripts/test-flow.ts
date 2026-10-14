@@ -57,7 +57,6 @@ try {
     { action: "clarify", prompt: "Build an unrelated app" },
     { action: "test-provider", provider: "tushare" },
     { action: "load-prices", appId: "missing", provider: "alpha-demo" },
-    { action: "accept", appId: "missing", releaseId: "missing" },
     { action: "reverify", appId: "missing", releaseId: "missing" },
   ];
   for (let round = 0; round < 3; round++) {
@@ -76,6 +75,8 @@ try {
     action: "create-workspace",
     prompt: "Build a demo matching app with five daily company cards",
   });
+  assert.deepEqual(workspace.spec.inputs, []);
+  assert.deepEqual(workspace.spec.outputs, []);
   const designed = await request({
     action: "save-design",
     appId: workspace.id,

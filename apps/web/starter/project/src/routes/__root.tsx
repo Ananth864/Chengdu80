@@ -1,4 +1,3 @@
-import { FinancialDemo } from "@/components/financial-app";
 import { buildContext } from "@/lib/build-context";
 import { useEffect } from "react";
 import type { QueryClient } from "@tanstack/react-query";
@@ -31,7 +30,6 @@ function RootDocument() {
         <HeadContent />
       </head>
       <body>
-        <FinancialDemo />
         <Outlet />
         <Scripts />
       </body>
