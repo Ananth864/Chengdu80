@@ -14,7 +14,7 @@ import { sampleBundle } from "../lib/samples";
 import { auth } from "../integrations/auth";
 import { clarify, explain, generate, planCapabilities } from "./models";
 import { validateCapabilityPlan, parseCapabilityMarkdown } from "@web-starter/capabilities";
-import { runCapabilityPlan } from "@web-starter/capabilities/runtime";
+import { runCapabilityPlan, publicCapabilityResult } from "@web-starter/capabilities/runtime";
 import { assertCapabilityArtifact, makeCapabilityRelease } from "./capability-release";
 import { assertFeasible, assessDesign } from "./feasibility";
 import {
@@ -31,6 +31,7 @@ import { assetUniverse, prices } from "./providers";
 import { event, findApp, listApps, saveApp, mutateApp, type Access } from "./repository";
 import { execute, sourceHash, verify } from "./runtime";
 import { demoMode, demoOwnerId, localMode, settings } from "./settings";
+import { verifyApplication, applicationDataHash } from "./browser-verification";
 
 const text = z.string().trim().min(1).max(4000);
 const requestSchema = z.discriminatedUnion("action", [
@@ -180,11 +181,15 @@ function newApp(access: Access, spec: ProductSpec): Application {
   };
 }
 // Verified source becomes active atomically; failed builds preserve the working release.
-export async function applyRelease(app: Application, release: Release) {
+export async function applyRelease(app: Application, release: Release, access?: Access) {
   if (!release.capabilityArtifact && capabilityMode(app))
     throw new Error("Capability-backed designs cannot be replaced by legacy source releases.");
   if (release.capabilityArtifact) {
-    await assertCapabilityArtifact(release);
+    await assertCapabilityArtifact(release, false);
+    if (!release.simulationPassed) {
+      app.preview = release;
+      return false;
+    }
     const ready = validateCapabilityPlan(
       release.capabilityArtifact.plan,
       capabilityRequirements(release.spec, release.requirements!),
@@ -206,6 +211,33 @@ export async function applyRelease(app: Application, release: Release) {
   }
   if (release.verification.sourceHash !== (await sourceHash(release.bundle)))
     throw new Error("Source changed after verification.");
+  const dataHash = applicationDataHash(app.data);
+  const context = { ...app, enabledPlugins: [...(app.enabledPlugins ?? [])] };
+  const checks = await verifyApplication(
+    release,
+    context,
+    access ?? { ownerId: app.ownerId, accessToken: null },
+  );
+  release.verification.checks = release.verification.checks.filter(
+    (check) =>
+      ![
+        "Saved input compatibility",
+        "Browser rendering",
+        "Browser interaction and persistence",
+        "Application browser verification",
+      ].includes(check.name),
+  );
+  release.verification.checks.push(...checks);
+  release.verification.passed = release.verification.checks.every((check) => check.passed);
+  if (!release.verification.passed) {
+    app.preview = release;
+    return false;
+  }
+  release.verification.application = {
+    dataHash,
+    checkedAt: new Date().toISOString(),
+    environment: "chromium-isolated-fixtures",
+  };
   if (app.current) app.history = [app.current, ...app.history].slice(0, 2);
   else if (app.spec.protocol !== release.spec.protocol) {
     app.data.inputs = defaultData(release.spec.protocol);
@@ -319,7 +351,7 @@ export async function dispatch(access: Access, raw: unknown) {
         continue;
       const app = newApp(access, p.defaultSpec);
       const release = await build(app.spec, "sample", "Install example");
-      await applyRelease(app, release);
+      await applyRelease(app, release, access);
       event(app, "Installed a labelled example application.");
       created.push(await saveApp(access, app, null));
     }
@@ -331,6 +363,7 @@ export async function dispatch(access: Access, raw: unknown) {
     const active = await applyRelease(
       app,
       await build(app.spec, req.mode, "Build the product specification"),
+      access,
     );
     event(
       app,
@@ -362,6 +395,7 @@ export async function dispatch(access: Access, raw: unknown) {
     const active = await applyRelease(
       app,
       await makeRelease(spec, req.bundle, "import", "Imported application source"),
+      access,
     );
     event(
       app,
@@ -461,7 +495,7 @@ export async function dispatch(access: Access, raw: unknown) {
       );
     }
     app.preview.verification = await verify(app.preview.bundle, app.preview.spec);
-    const active = await applyRelease(app, app.preview);
+    const active = await applyRelease(app, app.preview, access);
     event(
       app,
       active
@@ -508,6 +542,7 @@ export async function dispatch(access: Access, raw: unknown) {
     const active = await applyRelease(
       app,
       await build(spec, req.mode, req.request, app.current ?? app.preview ?? undefined),
+      access,
     );
     event(
       app,
@@ -543,7 +578,7 @@ export async function dispatch(access: Access, raw: unknown) {
       release.verification.sourceHash !== (await sourceHash(release.bundle))
     )
       throw new Error("A verified, unchanged preview is required before accepting a release.");
-    await applyRelease(app, release);
+    await applyRelease(app, release, access);
     event(app, "Activated verified source. Shared data retained.");
     return saveApp(access, app, app.revision);
   }
@@ -561,7 +596,10 @@ export async function dispatch(access: Access, raw: unknown) {
     const input = z.strictObject({ inputs: z.record(z.string(), z.unknown()) }).parse(req.input);
     if (JSON.stringify(input).length > 150000)
       throw new Error("Capability input exceeds size limit");
-    return runCapabilityPlan(release.capabilityArtifact.plan, input.inputs);
+    return publicCapabilityResult(
+      release.capabilityArtifact.plan,
+      await runCapabilityPlan(release.capabilityArtifact.plan, input.inputs),
+    );
   }
   if (
     !release?.verification.passed ||

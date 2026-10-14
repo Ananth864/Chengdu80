@@ -13,6 +13,7 @@ COPY packages/backend/package.json packages/backend/package.json
 COPY packages/config/package.json packages/config/package.json
 COPY packages/env/package.json packages/env/package.json
 COPY packages/ui/package.json packages/ui/package.json
+COPY packages/capabilities/package.json packages/capabilities/package.json
 RUN bun install --frozen-lockfile
 
 FROM oven/bun:1 AS build
@@ -41,6 +42,8 @@ RUN bunx --no-install vp run --filter web build
 FROM oven/bun:1 AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+RUN apt-get update && apt-get install -y chromium && rm -rf /var/lib/apt/lists/*
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/chromium
 COPY --from=build /repo/node_modules ./node_modules
 COPY --from=build /repo/apps/web/node_modules ./apps/web/node_modules
 COPY --from=build /repo/apps/web/dist ./apps/web/dist

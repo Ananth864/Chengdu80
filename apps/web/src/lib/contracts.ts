@@ -84,6 +84,42 @@ export const bundleSchema = z
         name: z.string().min(3).max(80),
         protocol: z.enum(protocolIds),
         permissions: z.array(z.enum(capabilities)).max(10),
+        browserTests: z
+          .array(
+            z.discriminatedUnion("action", [
+              z
+                .object({ action: z.literal("click"), selector: z.string().min(1).max(300) })
+                .strict(),
+              z
+                .object({
+                  action: z.literal("fill"),
+                  selector: z.string().min(1).max(300),
+                  value: z.string().max(2000),
+                })
+                .strict(),
+              z
+                .object({
+                  action: z.literal("assert-text"),
+                  selector: z.string().min(1).max(300),
+                  value: z.string().min(1).max(2000),
+                })
+                .strict(),
+            ]),
+          )
+          .max(12)
+          .optional(),
+        pluginFixtures: z
+          .array(
+            z
+              .object({
+                pluginId: z.string().min(1),
+                operationId: z.string().min(1),
+                result: z.unknown(),
+              })
+              .strict(),
+          )
+          .max(20)
+          .optional(),
       })
       .strict(),
     files: z
@@ -103,6 +139,7 @@ export type Verification = {
   checks: Check[];
   checkedAt: string;
   sourceHash: string;
+  application?: { dataHash: string; checkedAt: string; environment: "chromium-isolated-fixtures" };
 };
 export type Release = {
   id: string;

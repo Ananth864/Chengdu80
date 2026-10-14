@@ -165,6 +165,9 @@ fi
   set +a
   export VITE_DEMO_MODE="${CD80_DEMO_MODE:-1}"
   export PORT="$web_port"
+  if [ -z "${PLAYWRIGHT_CHROMIUM_EXECUTABLE:-}" ] && [ -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]; then
+    export PLAYWRIGHT_CHROMIUM_EXECUTABLE="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  fi
   nohup node server/node-entry.mjs >"$repo_root/.selfhosted-web.log" 2>&1 &
   echo $! > "$web_pid_file"
 )

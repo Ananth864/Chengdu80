@@ -505,7 +505,9 @@ export function Studio() {
                         <EmptyDescription>
                           {release
                             ? release.capabilityArtifact
-                              ? "Execution is disabled until verification or capability simulation passes. Simulation never authorizes production activation."
+                              ? release.capabilityArtifact.simulation === false
+                                ? "Execution is disabled until verification or capability preview tests pass. Preview tests never authorize production activation."
+                                : "Execution is disabled until verification or capability simulation passes. Simulation never authorizes production activation."
                               : "Execution is disabled until verification passes."
                             : "Request a build or import source."}
                         </EmptyDescription>
@@ -565,11 +567,22 @@ export function Studio() {
                       });
                     }}
                     onSimulate={async () => {
-                      await run("Simulating capabilities...", async () => {
-                        await api<Application>({ action: "simulate-capabilities", appId: app.id });
-                        await refresh();
-                        setTab("preview");
-                      });
+                      const hasUnverified = app.requirements?.capabilityPlan?.steps.some(
+                        (step) =>
+                          resolveCapabilityDefinition(step.capabilityId, step.version)?.status ===
+                          "unverified",
+                      );
+                      await run(
+                        hasUnverified ? "Previewing capabilities..." : "Simulating capabilities...",
+                        async () => {
+                          await api<Application>({
+                            action: "simulate-capabilities",
+                            appId: app.id,
+                          });
+                          await refresh();
+                          setTab("preview");
+                        },
+                      );
                     }}
                     onImportPlan={async (markdown) => {
                       await run("Saving capability Markdown...", async () => {
@@ -786,7 +799,9 @@ function Checks({
         </AlertTitle>
         <AlertDescription>
           {artifact
-            ? `Capability simulation: ${release.simulationPassed ? "passed" : "not passed"}. Simulation fixtures do not verify product behavior. Production requires a verified, nonmock artifact and explicit approval; blocked previews leave the working app in place.`
+            ? artifact.simulation
+              ? `Capability simulation: ${release.simulationPassed ? "passed" : "not passed"}. Simulation fixtures do not verify product behavior. Production requires a verified, nonmock artifact and explicit approval; blocked previews leave the working app in place.`
+              : `Capability preview tests: ${release.simulationPassed ? "passed" : "not passed"}. Unverified deterministic behavior is not validated financial support or a suitability assessment. Production requires a verified, nonmock artifact and explicit approval; blocked previews leave the working app in place.`
             : "Fixtures validate the protocol contract. Passing builds activate automatically; failed changes leave the working app in place."}
         </AlertDescription>
       </Alert>

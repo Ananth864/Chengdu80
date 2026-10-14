@@ -1,4 +1,10 @@
 import { z } from "zod";
+import { finmatchContractExamples, finmatchContractSchemas, finmatchDefinitions } from "./finmatch";
+import {
+  finmatchCompanySizeContractExamples,
+  finmatchCompanySizeContractSchemas,
+  finmatchCompanySizeDefinitions,
+} from "./finmatch-size";
 
 export const SIMULATION_WARNING =
   "Prototype-only arbitrary fixtures; not financial advice, live data, verified analysis, or a real risk classification.";
@@ -26,6 +32,34 @@ export type SimulationContractValues = {
   [K in SimulationContractId]: z.infer<(typeof simulationContractSchemas)[K]>;
 };
 export type SimulationPorts = Readonly<Record<string, SimulationContractId>>;
+export const capabilityContractSchemas = {
+  ...simulationContractSchemas,
+  ...finmatchContractSchemas,
+  ...finmatchCompanySizeContractSchemas,
+} as const;
+export type CapabilityContractId = keyof typeof capabilityContractSchemas;
+export type CapabilityContractValues = {
+  [K in CapabilityContractId]: z.infer<(typeof capabilityContractSchemas)[K]>;
+};
+// Only these named producer contracts compose into the broader request contracts.
+export const contractAccepts: Readonly<
+  Partial<Record<CapabilityContractId, readonly CapabilityContractId[]>>
+> = {
+  "finmatch.risk-request@1": ["finmatch.risk-result@v0-demo"],
+  "finmatch.industry-preference-request@1": ["finmatch.industry-preference@1"],
+  "finmatch.mapping-policy-request@1": ["finmatch.mapping-policy@1"],
+};
+export const capabilityContractExamples = {
+  "simulation.text@1": "fixture",
+  "simulation.nine-answers@1": Array.from({ length: 9 }, () => "arbitrary"),
+  "simulation.risk@1": "simulated-low",
+  "simulation.industry@1": "fictional industry",
+  "simulation.items@1": ["fictional"],
+  "simulation.metrics@1": { fixtureValue: 1, unit: "arbitrary-fixture-units" },
+  "simulation.dashboard@1": { title: "fixture", fixtureValue: 1, warning: SIMULATION_WARNING },
+  ...finmatchContractExamples,
+  ...finmatchCompanySizeContractExamples,
+} satisfies CapabilityContractValues;
 export type CapabilityPorts = Readonly<Record<string, string>>;
 export type CapabilityContracts = Readonly<Record<string, z.ZodType>>;
 
@@ -47,6 +81,10 @@ export interface CapabilityDefinition {
   readonly financial: boolean;
   readonly inputs: CapabilityPorts | null;
   readonly outputs: CapabilityPorts | null;
+  readonly optionalInputs?: readonly string[];
+  readonly inputValidation?: "handler";
+  readonly internalOutputs?: readonly string[];
+  readonly sourceDocuments?: readonly string[];
   readonly behavior: string | null;
   readonly coverage: string | null;
   readonly supportedAssetTypes: readonly string[] | null;
@@ -170,6 +208,8 @@ export const capabilityDefinitions: readonly CapabilityDefinition[] = [
     { dashboard: "simulation.dashboard@1" },
     "Return a prototype dashboard payload with a fixture warning; no UI rendering.",
   ),
+  ...finmatchDefinitions,
+  ...finmatchCompanySizeDefinitions,
 ];
 
 // Shared catalog objects must not be alterable into fabricated verified evidence.
@@ -180,7 +220,16 @@ function freeze(value: object): void {
   Object.freeze(value);
 }
 freeze(capabilityDefinitions);
+freeze(capabilityContractExamples);
+freeze(contractAccepts);
 
 export function resolveCapabilityDefinition(id: string, version: string) {
   return capabilityDefinitions.find((entry) => entry.id === id && entry.version === version);
+}
+
+export function getCapabilityPorts(
+  definition: CapabilityDefinition,
+  direction: "inputs" | "outputs",
+): CapabilityPorts | null {
+  return definition.status === "mock" ? definition.simulation[direction] : definition[direction];
 }

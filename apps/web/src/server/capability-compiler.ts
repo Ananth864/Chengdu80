@@ -1,6 +1,10 @@
 import ts from "typescript";
 import { z } from "zod";
-import { capabilityPlanSchema, type CapabilityPlan } from "@web-starter/capabilities";
+import {
+  capabilityPlanSchema,
+  capabilityContractSchemas,
+  type CapabilityPlan,
+} from "@web-starter/capabilities";
 import {
   generateCapabilityTypeScript,
   runCapabilityPlan,
@@ -67,7 +71,7 @@ export function compileCapabilityProgram(plan: CapabilityPlan): {
   const typescript = generateCapabilityTypeScript(plan);
   const sourcePath = "/capability-compiler/generated.ts";
   const declarationsPath = "/capability-compiler/contracts.d.ts";
-  const contractDeclarations = Object.entries(simulationContractSchemas).map(([id, schema], i) => ({
+  const contractDeclarations = Object.entries(capabilityContractSchemas).map(([id, schema], i) => ({
     id,
     name: `SimulationContract${i}`,
     declaration: schemaDeclaration(schema, `SimulationContract${i}`),
@@ -76,9 +80,14 @@ export function compileCapabilityProgram(plan: CapabilityPlan): {
 declare module "@web-starter/capabilities" {
   ${schemaDeclaration(capabilityPlanSchema, "CapabilityPlan")}
   ${contractDeclarations.map((entry) => entry.declaration).join("\n")}
-  export type SimulationContractValues = {
-    ${contractDeclarations.map((entry) => `${JSON.stringify(entry.id)}: ${entry.name};`).join("\n")}
-  };
+   export type CapabilityContractValues = {
+     ${contractDeclarations.map((entry) => `${JSON.stringify(entry.id)}: ${entry.name};`).join("\n")}
+   };
+   export type SimulationContractValues = Pick<CapabilityContractValues, ${Object.keys(
+     simulationContractSchemas,
+   )
+     .map((id) => JSON.stringify(id))
+     .join(" | ")}>;
 }
 declare module "@web-starter/capabilities/runtime" {
   import type { CapabilityPlan } from "@web-starter/capabilities";

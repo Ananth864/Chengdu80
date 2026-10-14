@@ -42,7 +42,10 @@ const fixture = createServer(async (req, res) => {
       .map((message) => message.content)
       .join("\n");
     assert.match(instructions, /call get_design and then simulate_capabilities directly/);
-    assert.match(instructions, /do not send the user into an impossible confirmation loop/i);
+    assert.match(
+      instructions,
+      /do not send (?:the user|users) into an impossible confirmation loop/i,
+    );
     assert.match(instructions, /never require passing production feasibility to preview mocks/);
     const results = body.messages.filter((message) => message.role === "tool");
     assert(results.length <= (simulate ? 2 : 1), "Agent must settle without replaying tools");

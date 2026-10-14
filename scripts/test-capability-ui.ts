@@ -26,6 +26,7 @@ const config = {
   PATH: process.env.PATH ?? "",
   HOST: "127.0.0.1",
   PORT: "3012",
+  PLAYWRIGHT_CHROMIUM_EXECUTABLE: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
   CD80_LOCAL_MODE: "1",
   VITE_LOCAL_MODE: "1",
   CD80_DATA_DIR: dataDir,

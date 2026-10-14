@@ -2,20 +2,33 @@ import { z } from "zod";
 import { canonicalCapabilityJson } from "./json";
 import {
   capabilityDefinitions,
+  capabilityContractSchemas,
   capabilityStatusSchema,
-  simulationContractSchemas,
+  getCapabilityPorts,
+  contractAccepts,
   SIMULATION_WARNING,
 } from "./definitions";
 import type {
   CapabilityContracts,
   CapabilityDefinition,
   CapabilityPorts,
-  SimulationContractId,
   SimulationContractValues,
   SimulationPorts,
 } from "./definitions";
 import { capabilityPlanSchema, validateCapabilityPlan } from "./plans";
 import type { CapabilityBinding, CapabilityPlan } from "./plans";
+import {
+  finmatchImplementations,
+  finmatchImplementationSource,
+  finmatchRequestSchema,
+} from "./finmatch";
+import {
+  finmatchCompanySizeImplementations,
+  finmatchCompanySizeImplementationSource,
+} from "./finmatch-size";
+
+export const UNVERIFIED_CAPABILITY_WARNING =
+  "Unverified deterministic developer-draft implementations. Demo scoring is not a validated suitability assessment; no investment recommendations.";
 
 type PortValues<P extends SimulationPorts> = { [K in keyof P]: SimulationContractValues[P[K]] };
 
@@ -79,12 +92,21 @@ const implementations = {
       },
     }),
   ),
+  ...finmatchImplementations,
+  ...finmatchCompanySizeImplementations,
 };
 
-function portSchema(ports: SimulationPorts) {
+function portSchema(ports: CapabilityPorts) {
   return z.strictObject(
     Object.fromEntries(
-      Object.entries(ports).map(([name, contract]) => [name, simulationContractSchemas[contract]]),
+      Object.entries(ports).map(([name, contract]) => {
+        if (!Object.hasOwn(capabilityContractSchemas, contract))
+          throw new Error(`Unknown input contract ${contract}.`);
+        return [
+          name,
+          capabilityContractSchemas[contract as keyof typeof capabilityContractSchemas],
+        ];
+      }),
     ),
   );
 }
@@ -148,8 +170,7 @@ export function createCapabilityRegistry(
     if (!Object.hasOwn(handlers, key)) throw new Error(`No exact implementation ${key}.`);
     const impl = handlers[key]!;
     for (const direction of ["inputs", "outputs"] as const) {
-      const declared =
-        definition.status === "mock" ? definition.simulation[direction] : definition[direction];
+      const declared = getCapabilityPorts(definition, direction);
       if (
         !declared ||
         Object.keys(declared).length !== Object.keys(impl[direction]).length ||
@@ -157,7 +178,14 @@ export function createCapabilityRegistry(
       )
         throw new Error(`Registry contract drift: ${key}.`);
     }
-    const schema = (ports: CapabilityPorts) =>
+    for (const [names, ports] of [
+      [definition.optionalInputs ?? [], impl.inputs],
+      [definition.internalOutputs ?? [], impl.outputs],
+    ] as const) {
+      if (new Set(names).size !== names.length || names.some((name) => !Object.hasOwn(ports, name)))
+        throw new Error(`Registry port metadata drift: ${key}.`);
+    }
+    const schema = (ports: CapabilityPorts, optional: readonly string[] = []) =>
       z.strictObject(
         Object.fromEntries(
           Object.entries(ports).map(([name, contract]) => {
@@ -165,11 +193,14 @@ export function createCapabilityRegistry(
               throw new Error(`Unknown registry contract ${contract}.`);
             if (["__proto__", "constructor", "prototype"].includes(name))
               throw new Error(`Unsafe port ${name}.`);
-            return [name, contracts[contract]!];
+            const contractSchema = contracts[contract]!;
+            return [name, optional.includes(name) ? contractSchema.optional() : contractSchema];
           }),
         ),
       );
-    const inputSchema = schema(impl.inputs);
+    const declaredInputSchema = schema(impl.inputs, definition.optionalInputs);
+    const inputSchema =
+      definition.inputValidation === "handler" ? finmatchRequestSchema : declaredInputSchema;
     const outputSchema = schema(impl.outputs);
     const invoke = impl.invoke;
     entries.set(
@@ -198,7 +229,7 @@ export function createCapabilityRegistry(
 
 export const capabilityRegistry = createCapabilityRegistry(
   capabilityDefinitions,
-  simulationContractSchemas,
+  capabilityContractSchemas,
   implementations,
 );
 
@@ -206,12 +237,19 @@ export function capabilityImplementationSources(id: string, version: string): st
   capabilityRegistry.resolve(id, version);
   return JSON.stringify({
     handler: implementations[`${id}@${version}` as keyof typeof implementations].invoke.toString(),
+    finmatch: finmatchImplementationSource,
+    finmatchCompanySize: finmatchCompanySizeImplementationSource,
+    definitions: capabilityDefinitions,
+    contractAccepts,
+    ports: getCapabilityPorts.toString(),
+    publicResult: publicCapabilityResult.toString(),
+    warnings: { simulation: SIMULATION_WARNING, unverified: UNVERIFIED_CAPABILITY_WARNING },
     runner: runCapabilityPlan.toString(),
     registry: createCapabilityRegistry.toString(),
     portValidation: portSchema.toString(),
     planValidation: validateCapabilityPlan.toString(),
     schemas: Object.fromEntries(
-      Object.entries(simulationContractSchemas).map(([name, schema]) => [
+      Object.entries(capabilityContractSchemas).map(([name, schema]) => [
         name,
         z.toJSONSchema(schema),
       ]),
@@ -236,13 +274,12 @@ export async function runCapabilityPlan(
     throw new Error(
       `Plan is not executable: ${validation.issues.map((i) => i.message).join("; ")}`,
     );
-  const declarations: Record<string, SimulationContractId> = Object.create(null);
+  const declarations: Record<string, string> = Object.create(null);
   for (const binding of [
     ...parsed.steps.flatMap((step) => Object.values(step.inputs)),
     ...Object.values(parsed.outputs),
   ]) {
-    if (binding.kind === "input")
-      declarations[binding.name] = binding.contract as SimulationContractId;
+    if (binding.kind === "input") declarations[binding.name] = binding.contract;
   }
   const appInputs = structuredClone(portSchema(declarations).parse(inputs));
   const results: Record<string, Record<string, unknown>> = Object.create(null);
@@ -262,10 +299,68 @@ export async function runCapabilityPlan(
   }
   const outputs: Record<string, unknown> = Object.create(null);
   for (const [name, binding] of Object.entries(parsed.outputs)) outputs[name] = resolve(binding);
+  const statuses = parsed.steps.map(
+    (step) => capabilityRegistry.resolve(step.capabilityId, step.version).definition.status,
+  );
+  const simulated = statuses.includes("mock");
+  const unverified = statuses.some((status) => status !== "verified");
   return {
     results,
     outputs,
-    provenance: { simulated: true, unverified: true, warning: SIMULATION_WARNING },
+    provenance: {
+      simulated,
+      unverified,
+      warning: simulated ? SIMULATION_WARNING : unverified ? UNVERIFIED_CAPABILITY_WARNING : "",
+    },
+  };
+}
+
+// Trusted composition keeps complete risk data; browser responses must use this projection.
+export function publicCapabilityResult(
+  plan: CapabilityPlan,
+  result: CapabilityRunResult,
+): CapabilityRunResult {
+  const parsed = capabilityPlanSchema.parse(plan);
+  const internal = new Map(
+    parsed.steps.map((step) => [
+      step.id,
+      capabilityRegistry.resolve(step.capabilityId, step.version).definition.internalOutputs ?? [],
+    ]),
+  );
+  const redact = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(redact);
+    if (value !== null && typeof value === "object")
+      return Object.fromEntries(
+        Object.entries(value)
+          .filter(([key]) => !["total_score", "risk_profile_bucket", "answers"].includes(key))
+          .map(([key, child]) => [key, redact(child)]),
+      );
+    return value;
+  };
+  return {
+    results: Object.fromEntries(
+      Object.entries(result.results).map(([stepId, value]) => [
+        stepId,
+        redact(
+          Object.fromEntries(
+            Object.entries(value as Record<string, unknown>).filter(
+              ([name]) => !internal.get(stepId)?.includes(name),
+            ),
+          ),
+        ),
+      ]),
+    ),
+    outputs: Object.fromEntries(
+      Object.entries(result.outputs)
+        .filter(([name]) => {
+          const binding = parsed.outputs[name];
+          return !(
+            binding?.kind === "step" && internal.get(binding.stepId)?.includes(binding.output)
+          );
+        })
+        .map(([name, value]) => [name, redact(value)]),
+    ),
+    provenance: { ...result.provenance },
   };
 }
 
@@ -273,6 +368,16 @@ export function generateCapabilityTypeScript(plan: CapabilityPlan): string {
   const parsed = capabilityPlanSchema.parse(plan);
   const validation = validateCapabilityPlan(parsed);
   if (!validation.executable) throw new Error("Cannot generate a non-executable plan.");
+  const finmatch =
+    parsed.steps.some(
+      (step) =>
+        Object.hasOwn(finmatchImplementations, `${step.capabilityId}@${step.version}`) ||
+        Object.hasOwn(finmatchCompanySizeImplementations, `${step.capabilityId}@${step.version}`),
+    ) ||
+    Object.values(parsed.outputs).some(
+      (binding) => binding.kind === "input" && binding.contract.startsWith("finmatch."),
+    );
+  const contractValues = finmatch ? "CapabilityContractValues" : "SimulationContractValues";
   const contracts = new Map<string, string>();
   for (const binding of [
     ...parsed.steps.flatMap((step) => Object.values(step.inputs)),
@@ -285,12 +390,12 @@ export function generateCapabilityTypeScript(plan: CapabilityPlan): string {
         .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
         .map(
           ([name, contract]) =>
-            `  ${JSON.stringify(name)}: SimulationContractValues[${JSON.stringify(contract)}];`,
+            `  ${JSON.stringify(name)}: ${contractValues}[${JSON.stringify(contract)}];`,
         )
         .join("\n")}\n}`
     : "Record<string, never>";
   // Delegate binding and invocation to the same pinned, schema-checked registry runner.
-  return `// Generated prototype simulation. ${SIMULATION_WARNING}\nimport { runCapabilityPlan } from "@web-starter/capabilities/runtime";\nimport type { CapabilityPlan${contracts.size ? ", SimulationContractValues" : ""} } from "@web-starter/capabilities";\n\nconst plan: CapabilityPlan = ${canonicalCapabilityJson(parsed, 2)};\n\nexport async function runGenerated(inputs: ${inputType}) {\n  return runCapabilityPlan(plan, inputs);\n}\n`;
+  return `// ${finmatch ? `Generated developer draft. ${UNVERIFIED_CAPABILITY_WARNING}` : `Generated prototype simulation. ${SIMULATION_WARNING}`}\nimport { runCapabilityPlan } from "@web-starter/capabilities/runtime";\nimport type { CapabilityPlan${contracts.size ? `, ${contractValues}` : ""} } from "@web-starter/capabilities";\n\nconst plan: CapabilityPlan = ${canonicalCapabilityJson(parsed, 2)};\n\nexport async function runGenerated(inputs: ${inputType}) {\n  return runCapabilityPlan(plan, inputs);\n}\n`;
 }
 
 // Fail immediately if a catalog entry is shipped without its exact implementation.

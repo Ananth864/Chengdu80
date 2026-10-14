@@ -123,6 +123,20 @@ try {
   ])
     assert.ok(planningPrompt.includes(phrase), `Planning prompt must include ${phrase}`);
   assert.ok(planningPrompt.includes("data.stock-price-api"));
+  for (const phrase of [
+    "CAP-001",
+    "CAP-002",
+    "CAP-003",
+    "0.2.0",
+    "finmatch.questionnaire-submission@v0-demo",
+    "finmatch.risk-request@1",
+    "contractAccepts",
+    "never bind CAP-002 risk_result",
+  ])
+    assert.ok(
+      planningPrompt.includes(phrase),
+      `Planner must receive documented FinMatch contracts: ${phrase}`,
+    );
   assert.ok(planningPrompt.includes("1.0.0"));
   for (const row of expected) assert.ok(planningPrompt.includes(row.id));
   console.log(

@@ -81,6 +81,7 @@ try {
         "index.html": original.files["index.html"],
       },
       manifest: {
+        browserTests: original.manifest.browserTests,
         permissions: original.manifest.permissions,
         protocol: original.manifest.protocol,
         name: original.manifest.name,

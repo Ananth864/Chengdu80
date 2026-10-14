@@ -35,7 +35,7 @@ const checkError = (plan: unknown, code: string) => {
 
 describe("catalog and registry", () => {
   test("nine stable pinned concepts, unknown product contracts, no evidence", () => {
-    expect(capabilityDefinitions.map((d) => d.id)).toEqual([
+    expect(capabilityDefinitions.filter((d) => d.status === "mock").map((d) => d.id)).toEqual([
       "research.market",
       "analysis.company-history",
       "data.stock-price-api",
@@ -46,7 +46,7 @@ describe("catalog and registry", () => {
       "extraction.annual-report-metrics",
       "presentation.metrics-dashboard",
     ]);
-    for (const definition of capabilityDefinitions) {
+    for (const definition of capabilityDefinitions.filter((d) => d.status === "mock")) {
       expect(definition.version).toBe("1.0.0");
       expect(definition.status).toBe("mock");
       expect(definition.inputs).toBeNull();
@@ -88,7 +88,7 @@ describe("catalog and registry", () => {
       "simulation.metrics@1": { fixtureValue: 1, unit: "arbitrary-fixture-units" },
       "simulation.dashboard@1": { title: "fixture", fixtureValue: 1, warning: SIMULATION_WARNING },
     };
-    for (const definition of capabilityDefinitions) {
+    for (const definition of capabilityDefinitions.filter((d) => d.status === "mock")) {
       const entry = capabilityRegistry.resolve(definition.id, definition.version);
       const input = Object.fromEntries(
         Object.entries(definition.simulation.inputs).map(([name, contract]) => [
@@ -488,6 +488,9 @@ describe("generation", () => {
   test("deterministic output compiles with strict TypeScript and executes the same registry", async () => {
     const source = generateCapabilityTypeScript(fixture());
     expect(source).toBe(generateCapabilityTypeScript(fixture()));
+    expect(source).toBe(
+      `// Generated prototype simulation. ${SIMULATION_WARNING}\nimport { runCapabilityPlan } from "@web-starter/capabilities/runtime";\nimport type { CapabilityPlan, SimulationContractValues } from "@web-starter/capabilities";\n\nconst plan: CapabilityPlan = ${canonicalCapabilityJson(fixture(), 2)};\n\nexport async function runGenerated(inputs: {\n  "query": SimulationContractValues["simulation.text@1"];\n}) {\n  return runCapabilityPlan(plan, inputs);\n}\n`,
+    );
     expect(source).toContain('"version": "1.0.0"');
     expect(source).toContain("runCapabilityPlan(plan, inputs)");
     const root = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");

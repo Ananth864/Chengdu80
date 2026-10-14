@@ -4,8 +4,12 @@ import {
   capabilityPlanSchema,
   validateCapabilityPlan,
   resolveCapabilityDefinition,
+  getCapabilityPorts,
   type CapabilityPlan,
 } from "@web-starter/capabilities";
+
+export const UNVERIFIED_WARNING =
+  "Unverified deterministic developer-draft implementation. Demo scoring is not a validated suitability assessment; production activation is blocked.";
 
 export const requirementsSchema = z
   .object({
@@ -191,7 +195,9 @@ export function capabilityWorkflow(
           detail:
             binding.kind === "input"
               ? "User-supplied prototype input"
-              : JSON.stringify(binding.value),
+              : port === "risk_result"
+                ? "Private internal handoff; values are not displayed."
+                : JSON.stringify(binding.value),
           inputs: "Application input",
           outputs: binding.kind === "input" ? binding.contract : "Validated literal",
         });
@@ -201,23 +207,45 @@ export function capabilityWorkflow(
   for (const id of validation.order) {
     const step = plan.steps.find((entry) => entry.id === id)!;
     const definition = resolveCapabilityDefinition(step.capabilityId, step.version)!;
+    const outputs = getCapabilityPorts(definition, "outputs");
     nodes.push({
       id,
       kind: "capability",
       label: `${definition.name} @ ${step.version} (${definition.status})`,
-      detail: `${definition.purpose} ${definition.simulation.behavior} ${definition.unknowns.join(" ")}`,
-      inputs: JSON.stringify(definition.simulation.inputs),
-      outputs: JSON.stringify(definition.simulation.outputs),
+      detail: `${definition.purpose} ${definition.status === "mock" ? definition.simulation.behavior : definition.id === "CAP-002" ? "Validate the complete documented questionnaire and calculate a private provisional demo result; not a validated suitability assessment." : definition.behavior} ${definition.unknowns.join(" ")}`,
+      inputs: Object.entries(getCapabilityPorts(definition, "inputs") ?? {})
+        .map(
+          ([name, contract]) =>
+            `${name}: ${contract}${definition.optionalInputs?.includes(name) ? " (optional)" : ""}`,
+        )
+        .join("; "),
+      outputs: Object.entries(outputs ?? {})
+        .map(
+          ([name, contract]) =>
+            `${name}: ${contract}${definition.internalOutputs?.includes(name) ? " (private internal handoff; contract only, no values)" : ""}`,
+        )
+        .join("; "),
     });
     for (const [port, binding] of Object.entries(step.inputs)) addBinding(binding, id, port);
   }
   for (const [name, binding] of Object.entries(plan.outputs)) {
     const id = `output:${name}`;
+    const definition =
+      binding.kind === "step" ? plan.steps.find((step) => step.id === binding.stepId) : undefined;
+    const privateOutput =
+      binding.kind === "step" &&
+      definition &&
+      resolveCapabilityDefinition(
+        definition.capabilityId,
+        definition.version,
+      )?.internalOutputs?.includes(binding.output);
     nodes.push({
       id,
       kind: "output",
-      label: name,
-      detail: "Prototype-only result; not verified financial output",
+      label: privateOutput ? `${name} (private internal handoff)` : name,
+      detail: privateOutput
+        ? "Private internal contract only; actual values are not exposed in public preview results."
+        : "Prototype-only result; not verified financial output",
       inputs: name,
       outputs: name,
     });

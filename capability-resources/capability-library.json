@@ -1,0 +1,123 @@
+{
+  "format": "capability-library-catalog",
+  "version": "0.2",
+  "source_authority": "This catalog summarizes the linked Markdown contracts; those exact source documents are authoritative for capability behavior, questionnaire wording, choice labels, and scoring. CAP-002 outputs are internal application-facing data only. No source revision digest is declared; semantic source drift is checked by scripts/test-capability-resources.ts, not by dynamically generated hashes.",
+  "product_documents": [
+    "capability-resources/capability_library/finmatch-application-2-product-decisions.md"
+  ],
+  "product_document_scope": "Product documents define experience and persistence decisions, not additional capabilities, questionnaire scoring, risk-to-industry policy, or recommendation rules.",
+  "capabilities": [
+    {
+      "id": "CAP-001",
+      "matching_guidance": "Use this capability to capture and normalize a user's industry preferences. Do not infer preferences from risk answers or free text, and do not treat this capability as company selection or recommendation logic.",
+      "source_documents": [
+        "capability-resources/capability_library/finmatch-industry-preference-capability.md"
+      ],
+      "name": "Industry preference capture and normalization",
+      "purpose": "Collect the industries a user wants to see in FinMatch and return them in a stable, machine-readable form for a downstream recommendation capability.",
+      "inputs": [
+        "selected_industries: required array submitted by the UI; an empty array is valid"
+      ],
+      "specifications": [
+        "Supported stored values and display labels: technology (Technology), finance (Finance), agriculture (Agriculture), manufacturing (Manufacturing), fmcg (FMCG), energy (Energy).",
+        "The UI presents the six choices as a multiple-choice control and allows any combination, including no selections. Display labels may be localized; stored values remain stable.",
+        "Each input value must exactly match a supported stored value. Remove duplicates or return a validation error; never silently accept unsupported values.",
+        "If selected_industries is absent, is not an array, or contains an unsupported value, return a clear validation error and request a valid selection. Do not interpret invalid input as no selection.",
+        "For one or more valid selections, return selection_mode=selected and the normalized selected_industries. For an empty array, return selection_mode=balanced_coverage and selected_industries=[].",
+        "Keep industry_preference separate from risk_profile_bucket. Do not infer preferences from risk answers or free text.",
+        "Market context: China-listed stocks on the Shanghai Stock Exchange (SSE). The supplied company list is for downstream use, not an input to this capability. Each company is assumed to have exactly one industry from the supported stored values.",
+        "Pass the normalized preference object to the downstream recommendation capability. Company filtering, selection, ranking, and risk-based rules belong to that separate capability."
+      ],
+      "outputs": [
+        "industry_preference object with selection_mode (selected or balanced_coverage) and selected_industries (array of supported stored values)",
+        "For balanced_coverage, signal the downstream recommendation capability to show one company from each of the six industries; this capability does not select or display companies"
+      ],
+      "asset_scope": [
+        "China-listed stocks on the Shanghai Stock Exchange (SSE); preference capture only"
+      ]
+    },
+    {
+      "id": "CAP-002",
+      "matching_guidance": "Use this capability to collect and score risk questionnaire. Treat the result as an internal provisional demo profile, not a validated assessment or official suitability determination. Do not generate investment recommendations.",
+      "source_documents": [
+        "capability-resources/capability_library/finmatch-risk-questionnaire-capability-io.md",
+        "capability-resources/capability_library/finmatch-risk-questionnaire-scoring.md"
+      ],
+      "name": "Risk questionnaire capture and demo scoring",
+      "purpose": "Collect seven questionnaire answers, validate a complete submission, calculate a provisional total score, and return a machine-readable risk profile for downstream application logic.",
+      "inputs": [
+        "questionnaire_version: demo questionnaire and scoring version, required value v0-demo",
+        "answers: object containing one integer answer for each question q1 through q7; each value must be 1, 2, or 3"
+      ],
+      "specifications": [
+        "Present the seven questions with their three choices as defined in finmatch-risk-questionnaire-scoring.md. Each question is single-select and requires exactly one answer: Low=1, Medium=2, or High=3. This capability definition does not duplicate the question wording or labels.",
+        "Require all seven answers before submission. Reject missing answers, unknown question keys, non-integer values, and values outside 1–3. Do not calculate or return a partial score or bucket.",
+        "Do not persist partial answers. If the user exits before completing the questionnaire, discard the attempt; the user starts again next time.",
+        "For a complete valid submission, preserve all seven numeric answers and calculate total_score as their sum (range 7–21).",
+        "Map total_score 7–11 to low, 12–16 to medium, and 17–21 to high. Return the result as risk_profile_bucket.",
+        "Return application-facing scoring data only. Do not show the score, bucket, or scoring explanation to the user, and do not provide a user-facing interpretation.",
+        "Keep risk_profile_bucket separate from industry preferences and company industry data. Pass it as its own field to the later capability; do not define risk-to-industry mappings here.",
+        "This demo score combines stated willingness, basic capacity indicators, and stated return expectations; it is not a pure measure of risk appetite, validated psychometric instrument, or official suitability assessment. The cutoffs are provisional demo thresholds.",
+        "China-specific legal review is required before using this questionnaire to personalize, filter, or recommend investment products."
+      ],
+      "outputs": [
+        "For a complete valid submission: questionnaire_version, answers (all seven submitted numeric choices q1 through q7), total_score, risk_profile_bucket; internal application-facing scoring data only, with the exact linked Markdown output contract authoritative",
+        "No timestamp or user-facing explanation"
+      ],
+      "asset_scope": [
+        "User risk profile for downstream FinMatch application logic; no investment selection or recommendation"
+      ]
+    },
+    {
+      "id": "CAP-003",
+      "implementation_version": "0.2.0",
+      "company_size_successor": {
+        "id": "CAP-003",
+        "implementation_version": "0.3.0",
+        "name": "Risk-to-company-size mapping",
+        "source_documents": [
+          "capability_library/finmatch-risk-to-company-size-mapping-capability.md"
+        ],
+        "policy_id": "finmatch-risk-company-size",
+        "policy_version": "1.0.0",
+        "bucket_to_company_size": { "high": "small", "medium": "medium", "low": "large" },
+        "matching_guidance": "Use 0.3.0 for the confirmed company-size rule. No supplied mapping_policy is required. Preserve industries separately. Numeric market-cap thresholds, company classification and selection are unspecified. 0.2.0 below retains the earlier risk-to-industry contract."
+      },
+      "matching_guidance": "Use this capability only with an explicit product-approved mapping policy. Never infer bucket-to-industry mappings. If no applicable valid policy is supplied, return mapping_not_configured with no mapped industries.",
+      "source_documents": [
+        "capability-resources/capability_library/finmatch-risk-to-industry-mapping-capability.md",
+        "capability-resources/capability_library/finmatch-risk-questionnaire-capability-io.md",
+        "capability-resources/capability_library/finmatch-industry-preference-capability.md"
+      ],
+      "name": "Risk-to-industry mapping",
+      "purpose": "Apply an approved policy to a completed risk result and return risk-aligned industry suggestions, optionally comparing them with the user's separate industry preferences.",
+      "inputs": [
+        "risk_result: questionnaire_version, total_score, and risk_profile_bucket from the upstream questionnaire capability",
+        "mapping_policy: versioned policy with policy_id, policy_version, supported questionnaire_versions, and bucket_to_industries mappings for low, medium, and high",
+        "industry_preference: optional object with selection_mode and selected_industries from the preference capture capability"
+      ],
+      "specifications": [
+        "Supported canonical industries: technology, finance, agriculture, manufacturing, fmcg, energy. Data exchange uses these identifiers exactly.",
+        "Validate risk_result: require a supported questionnaire version, integer total_score from 7–21, and known bucket. For v0-demo, verify consistency using 7–11=low, 12–16=medium, and 17–21=high. Reject inconsistent score/bucket pairs; do not calculate partial scores.",
+        "Validate mapping_policy: require policy ID and version, coverage for the input questionnaire version, mappings for all three buckets, and only supported industry identifiers. The policy owner must define the mappings and their intended downstream use. Do not derive them from general beliefs about sectors or user preferences.",
+        "Use the mapping for the validated risk_profile_bucket, preserving configured order and removing duplicate identifiers or rejecting duplicates. Duplicates must not create duplicate suggestions.",
+        "If industry_preference is supplied, validate it: selected requires a non-empty list of supported identifiers; balanced_coverage requires an empty list. Reject invalid or contradictory combinations.",
+        "For selected preferences, report overlap_industries and selected_outside_mapping, preserving user input order. Do not remove or overwrite user selections.",
+        "For balanced_coverage, preserve that mode and return mapped suggestions separately. Do not convert it to explicit selections or treat it as opt-in to filter to the mapping.",
+        "Keep risk-aligned suggestions, user preferences, and company industry fields separate. If no preference was supplied, omit the comparison object.",
+        "On missing or inapplicable policy, return mapping_status=mapping_not_configured and an empty risk_aligned_industries list. On invalid risk, policy, or preference input, return mapping_status=invalid_input and an empty list, with a stable error_code and corrective message.",
+        "Suggestions are for downstream application logic and user review. Do not present a financial suitability conclusion, select or rank stocks, funds, or gold products, fetch market data, or take brokerage actions.",
+        "The upstream questionnaire is a provisional demo score, not a validated psychometric instrument or official suitability assessment. Sector labels do not establish the risk of an individual company or product. China-specific legal review is required before using the questionnaire to personalize, filter, or recommend investment products."
+      ],
+      "outputs": [
+        "On success: mapping_status=mapped, mapping_policy_id, mapping_policy_version, questionnaire_version, total_score, risk_profile_bucket, and ordered risk_aligned_industries",
+        "When a preference was supplied, industry_preference_comparison with selection_mode, unchanged user_selected_industries, overlap_industries, and selected_outside_mapping",
+        "On failure: non-success mapping_status, error_code, message, relevant validated risk fields when available, and risk_aligned_industries=[]; do not emit guessed mappings"
+      ],
+      "asset_scope": [
+        "Industry suggestions for downstream FinMatch investment discovery; no asset selection or recommendation"
+      ],
+      "depends_on": ["CAP-001", "CAP-002", "Product-approved versioned mapping policy"]
+    }
+  ]
+}

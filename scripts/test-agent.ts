@@ -65,6 +65,18 @@ const fixture = createServer(async (req, res) => {
         {
           name: "write_file",
           arguments: {
+            path: "cd80.json",
+            content: JSON.stringify({
+              schemaVersion: 1,
+              name: "Copper Finch",
+              protocol: "portfolio",
+              permissions: ["finance.calculate", "storage.read"],
+            }),
+          },
+        },
+        {
+          name: "write_file",
+          arguments: {
             path: "index.html",
             content: '<main><h1 id="title">Copper Finch</h1><p id="note"></p></main>',
           },
@@ -98,6 +110,14 @@ const fixture = createServer(async (req, res) => {
             content: JSON.stringify({
               ...pluginManifest,
               permissions: [...new Set([...pluginManifest.permissions, "plugin.call"])],
+              browserTests: [],
+              pluginFixtures: [
+                {
+                  pluginId: registeredPluginId,
+                  operationId: "getWeather",
+                  result: { city: "London", temperature: 21 },
+                },
+              ],
             }),
           },
         },
@@ -130,7 +150,40 @@ const fixture = createServer(async (req, res) => {
       ][calls];
       text = "The site now displays London weather from the registered plugin.";
     } else if (prompt.includes("Exercise server tool iteration limit")) {
-      tool = { name: "list_files", arguments: {} };
+      tool = calls
+        ? { name: "list_files", arguments: {} }
+        : {
+            name: "write_file",
+            arguments: { path: "index.html", content: "<main>Tool limit staged marker</main>" },
+          };
+    } else if (prompt.includes("Continue the tool limit turn")) {
+      tool = [
+        { name: "read_file", arguments: { path: "index.html" } },
+        {
+          name: "edit_file",
+          arguments: {
+            path: "index.html",
+            oldText: "Tool limit staged marker",
+            newText: "Resumed staged marker",
+          },
+        },
+      ][calls];
+      text = "Continued the staged edit; it has not been deployed.";
+    } else if (prompt.includes("Recover the interrupted turn")) {
+      // Recovery must supply a result for the unconfirmed old call, not execute it.
+      assert(
+        JSON.stringify(body.input).includes("Tool interrupted before its result was confirmed"),
+      );
+      tool = calls ? undefined : { name: "read_file", arguments: { path: "index.html" } };
+      text = "Inspected the retained workspace without replaying interrupted tools.";
+    } else if (prompt.includes("Exercise a recoverable tool failure")) {
+      tool = calls
+        ? undefined
+        : {
+            name: "edit_file",
+            arguments: { path: "index.html", oldText: "missing exact match", newText: "unused" },
+          };
+      text = "The edit failed; no changes were made.";
     } else if (prompt.includes("Try to deploy and automatically buy")) {
       tool = calls
         ? undefined
@@ -251,6 +304,7 @@ async function start() {
   node = spawn("node", ["apps/web/server/node-entry.mjs"], {
     env: {
       PATH: process.env.PATH,
+      PLAYWRIGHT_CHROMIUM_EXECUTABLE: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,
       NODE_ENV: "production",
       HOST: "127.0.0.1",
       PORT: "3007",
@@ -299,6 +353,185 @@ async function turn(appId: string, content: string, headers: Record<string, stri
       messages: [{ id: crypto.randomUUID(), role: "user", parts: [{ type: "text", content }] }],
     }),
   });
+}
+async function reliabilityOnly() {
+  // Exercise current source directly, without rebuilding or reading a concurrent build.
+  Object.assign(process.env, {
+    CD80_LOCAL_MODE: "1",
+    CD80_DEMO_MODE: "1",
+    CD80_DATA_DIR: dataDir,
+    MODEL_PROVIDER: "openai",
+    OPENAI_MODEL: "gpt-6-luna",
+    OPENAI_API_KEY: "agent-fixture-key",
+    OPENAI_BASE_URL: `http://127.0.0.1:${fixturePort}/v1`,
+  });
+  const { startAgentTurn } = await import("../apps/web/src/server/agent");
+  const { findApp, saveApp } = await import("../apps/web/src/server/repository");
+  const { sampleBundle } = await import("../apps/web/src/lib/samples");
+  const access = { ownerId: "local-prototype-owner", accessToken: null };
+  const spec = { ...protocols[0]!.defaultSpec, name: "Reliability fixture" };
+  const app = await saveApp(
+    access,
+    {
+      id: crypto.randomUUID(),
+      ownerId: access.ownerId,
+      revision: 0,
+      name: spec.name,
+      spec,
+      workspace: sampleBundle(spec),
+      current: null,
+      preview: null,
+      history: [],
+      data: {},
+      events: [],
+      createdAt: new Date().toISOString(),
+    },
+    null,
+  );
+  async function run(content: string) {
+    const chunks = [];
+    for await (const chunk of await startAgentTurn(
+      access,
+      app.id,
+      { id: crypto.randomUUID(), content },
+      new AbortController().signal,
+    ))
+      chunks.push(chunk);
+    return chunks;
+  }
+  const limited = await run("Exercise server tool iteration limit");
+  const exhausted = await findApp(access, app.id);
+  assert.equal(exhausted.agentTurn?.status, "error");
+  assert(exhausted.agentTurn?.completedAt);
+  assert(
+    limited.some(
+      (chunk) => chunk.type === "RUN_ERROR" && /Reached tool limit.*incomplete/.test(chunk.message),
+    ),
+  );
+  assert.equal(limited.at(-1)?.type, "RUN_FINISHED");
+  assert.equal((limited.at(-1) as { finishReason?: string }).finishReason, "stop");
+  const executed = limited.filter((chunk) => chunk.type === "TOOL_CALL_RESULT");
+  assert.equal(executed.length, 18);
+  assert.equal(new Set(executed.map((chunk) => chunk.toolCallId)).size, 18);
+  assert.equal(exhausted.workspace?.files["index.html"], "<main>Tool limit staged marker</main>");
+  assert.equal(exhausted.current, null);
+  assert(JSON.stringify(exhausted.conversation).includes("this turn is incomplete"));
+  const resumed = await run("Continue the tool limit turn");
+  assert.equal(resumed.filter((chunk) => chunk.type === "TOOL_CALL_RESULT").length, 2);
+  assert(!resumed.some((chunk) => chunk.type === "RUN_ERROR"));
+  assert.equal((await findApp(access, app.id)).agentTurn?.status, "complete");
+  assert.equal(
+    (await findApp(access, app.id)).workspace?.files["index.html"],
+    "<main>Resumed staged marker</main>",
+  );
+  const failure = await run("Exercise a recoverable tool failure");
+  assert(JSON.stringify(failure).includes("Expected exactly one matching occurrence"));
+  assert(!failure.some((chunk) => chunk.type === "RUN_ERROR"));
+  assert.equal((await findApp(access, app.id)).agentTurn?.status, "complete");
+  results.push(
+    "18 actual tool executions report incomplete, retain staged source, and resume exactly once; ordinary tool failures remain recoverable",
+  );
+
+  const interrupted = await findApp(access, app.id);
+  const oldId = crypto.randomUUID();
+  interrupted.agentTurn = { id: oldId, startedAt: new Date().toISOString(), status: "running" };
+  interrupted.turns = [...(interrupted.turns ?? []), interrupted.agentTurn];
+  interrupted.conversation = [
+    ...(interrupted.conversation ?? []),
+    { id: oldId, role: "user", parts: [{ type: "text", content: "Interrupted edit" }] },
+    {
+      id: `${oldId}-reply`,
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-call",
+          id: `${oldId}-tool`,
+          name: "edit_file",
+          state: "input-complete",
+          arguments: JSON.stringify({
+            path: "index.html",
+            oldText: "Resumed staged marker",
+            newText: "Must not replay",
+          }),
+        },
+      ],
+    },
+  ];
+  await saveApp(access, interrupted, interrupted.revision);
+  const before = requests.length;
+  await assert.rejects(run("Recover the interrupted turn"), /already replying/);
+  assert.equal(requests.length, before, "Fresh persisted ownership must block another process");
+  const stale = await findApp(access, app.id);
+  stale.agentTurn!.startedAt = new Date(Date.now() - 300001).toISOString();
+  stale.turns = stale.turns!.map((turn) => (turn.id === oldId ? { ...stale.agentTurn! } : turn));
+  await saveApp(access, stale, stale.revision);
+  const recovered = await run("Recover the interrupted turn");
+  assert.equal(recovered.filter((chunk) => chunk.type === "TOOL_CALL_RESULT").length, 1);
+  const settled = await findApp(access, app.id);
+  assert.equal(settled.turns?.find((turn) => turn.id === oldId)?.status, "error");
+  assert(settled.turns?.find((turn) => turn.id === oldId)?.completedAt);
+  assert.equal(settled.workspace?.files["index.html"], "<main>Resumed staged marker</main>");
+  assert(JSON.stringify(settled.conversation).includes("previous turn was interrupted"));
+  results.push(
+    "Stale persisted turns settle with interrupted tool results before resuming; fresh ownership is never cleared",
+  );
+
+  const signal = new AbortController();
+  const stream = await startAgentTurn(
+    access,
+    app.id,
+    { id: crypto.randomUUID(), content: "Start a slow turn" },
+    signal.signal,
+  );
+  await assert.rejects(run("Concurrent reply"), /already replying/);
+  for await (const chunk of stream) if (chunk.type === "TOOL_CALL_RESULT") signal.abort();
+  const stopped = await findApp(access, app.id);
+  assert.equal(stopped.agentTurn?.status, "stopped");
+  const stoppedTurn = structuredClone(stopped.agentTurn);
+  await run("Discuss the retained workspace");
+  assert.deepEqual(
+    (await findApp(access, app.id)).turns?.find((turn) => turn.id === stoppedTurn.id),
+    stoppedTurn,
+  );
+  results.push("Explicit Stop stays terminal when a subsequent turn starts");
+
+  const lateStream = await startAgentTurn(
+    access,
+    app.id,
+    { id: crypto.randomUUID(), content: "Discuss the retained workspace" },
+    new AbortController().signal,
+  );
+  const replacement = await findApp(access, app.id);
+  const replacementId = crypto.randomUUID();
+  replacement.agentTurn = {
+    id: replacementId,
+    startedAt: new Date().toISOString(),
+    status: "running",
+  };
+  replacement.conversation = [
+    { id: replacementId, role: "user", parts: [{ type: "text", content: "New owner" }] },
+  ];
+  await saveApp(access, replacement, replacement.revision);
+  for await (const _chunk of lateStream) {
+    /* Drain the superseded turn. */
+  }
+  const owned = await findApp(access, app.id);
+  assert.deepEqual(owned.agentTurn, replacement.agentTurn);
+  assert.deepEqual(owned.conversation, replacement.conversation);
+  results.push(
+    "Concurrent turns are blocked and superseded finalizers cannot overwrite newer ownership or conversation",
+  );
+}
+if (process.argv.includes("--reliability-only")) {
+  try {
+    await reliabilityOnly();
+    console.log(results.map((result) => `PASS ${result}`).join("\n"));
+    console.log(`${results.length} source-only reliability flows passed; not live inference.`);
+  } finally {
+    await new Promise<void>((resolve) => fixture.close(() => resolve()));
+    await rm(dataDir, { recursive: true, force: true });
+  }
+  process.exit(0);
 }
 await mkdir(".local/agent-tests", { recursive: true });
 try {
@@ -523,7 +756,9 @@ try {
     .fill("Connect the registered weather plugin and display London weather.");
   await page.getByRole("textbox", { name: "Message the AI" }).press("Enter");
   await page
-    .getByText("The site now displays London weather from the registered plugin.", { exact: true })
+    .getByText("The site now displays London weather from the registered plugin.", {
+      exact: true,
+    })
     .waitFor({ timeout: 60000 });
   await page.locator('iframe[aria-busy="false"]').waitFor();
   await page.frameLocator("iframe").getByText("21°C in London", { exact: true }).waitFor();
@@ -563,6 +798,8 @@ try {
   const importedBundle = structuredClone(connected.current.bundle);
   importedBundle.files["index.html"] = "<main><h1>Imported workspace marker</h1></main>";
   importedBundle.files["app.js"] = "cd80.ready();";
+  importedBundle.manifest.permissions = ["finance.calculate", "storage.read"];
+  delete importedBundle.manifest.pluginFixtures;
   const importedSpec = { ...connected.current.spec, name: "Imported specification marker" };
   const importedResponse = await fetch(`${base}/api/platform`, {
     method: "POST",
@@ -608,7 +845,7 @@ try {
   await page.reload();
   await page
     .getByRole("textbox", { name: "Message the AI" })
-    .fill("Exercise server tool iteration limit without editing files.");
+    .fill("Exercise server tool iteration limit with a staged edit.");
   await page.getByRole("textbox", { name: "Message the AI" }).press("Enter");
   await page.getByRole("button", { name: "Stop generation" }).waitFor();
   await page
@@ -620,9 +857,47 @@ try {
     [],
     "Server tool limit must not cause an assistant continuation request",
   );
+  await page.getByText("Could not finish this turn", { exact: true }).waitFor();
+  await page
+    .getByText(/Reached tool limit; this turn is incomplete/)
+    .first()
+    .waitFor();
+  const limited = await appById(id);
+  assert.equal(limited.agentTurn?.status, "error");
+  assert.equal(limited.current?.id, redeployed.current?.id);
+  assert.equal(limited.workspace?.files["index.html"], "<main>Tool limit staged marker</main>");
+  const lastUser = limited.conversation!.findLastIndex((message) => message.role === "user");
+  const limitedParts = limited.conversation!.slice(lastUser).flatMap((message) => message.parts);
+  assert.equal(limitedParts.filter((part) => part.type === "tool-call").length, 18);
+  assert.equal(limitedParts.filter((part) => part.type === "tool-result").length, 18);
+  await page
+    .getByRole("button", { name: /^Work failed for / })
+    .last()
+    .click();
+  await page
+    .getByRole("button", { name: /write file.*Done/ })
+    .last()
+    .waitFor();
+  await page.getByRole("textbox", { name: "Message the AI" }).fill("Continue the tool limit turn");
+  await page.getByRole("textbox", { name: "Message the AI" }).press("Enter");
+  await page
+    .getByText("Continued the staged edit; it has not been deployed.", { exact: true })
+    .waitFor();
+  await page.getByRole("button", { name: "Stop generation" }).waitFor({ state: "hidden" });
+  const resumed = await appById(id);
+  assert.equal(resumed.agentTurn?.status, "complete");
+  assert.equal(resumed.workspace?.files["index.html"], "<main>Resumed staged marker</main>");
+  assert.equal(resumed.current?.id, redeployed.current?.id);
   assert.equal(await page.getByText("Could not finish this turn", { exact: true }).count(), 0);
+  assert.deepEqual(
+    rejectedChats,
+    [],
+    "Resume must not replay old tools or send client continuations",
+  );
   page.off("response", observeChat);
-  results.push("Tool-ending server turns settle without client assistant-message continuation");
+  results.push(
+    "Tool limit reports incomplete with inspectable partial progress; staged edits resume without client continuation or duplicate tools",
+  );
   assert.deepEqual(browserErrors, []);
   console.log(results.map((result) => `PASS ${result}`).join("\n"));
   console.log(

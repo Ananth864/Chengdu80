@@ -12,11 +12,15 @@ import {
   designKey,
   initialRequirements,
   requirementsSchema,
+  UNVERIFIED_WARNING,
   type Requirements,
 } from "../lib/planning";
 import type { RegisteredPlugin } from "../lib/plugins";
 import {
   exportCapabilityMarkdown,
+  finmatchQuestionnaire,
+  finmatchIndustries,
+  getCapabilityPorts,
   parseCapabilityMarkdown,
   resolveCapabilityDefinition,
   validateCapabilityPlan,
@@ -47,6 +51,9 @@ export function DesignReview({
   const savedSpec = app.workspaceSpec ?? app.spec;
   const savedRequirements = app.requirements ?? initialRequirements();
   const savedPlan = savedRequirements.capabilityPlan;
+  const hasUnverified = savedPlan?.steps.some(
+    (step) => resolveCapabilityDefinition(step.capabilityId, step.version)?.status === "unverified",
+  );
   const expectedRequirements = capabilityRequirements(savedSpec, savedRequirements);
   const initialForm = {
     protocol: savedSpec.protocol,
@@ -390,10 +397,15 @@ export function DesignReview({
       <section className="flex min-w-0 flex-col gap-3" aria-label="Capability plan">
         <h3 className="font-medium">Capability plan</h3>
         <Alert>
-          <AlertTitle>Prototype capabilities, not verified analysis</AlertTitle>
+          <AlertTitle>
+            {hasUnverified
+              ? "Mock or unverified capabilities"
+              : "Prototype capabilities, not verified analysis"}
+          </AlertTitle>
           <AlertDescription>
-            {SIMULATION_WARNING} Valid bindings and passing simulation do not satisfy the production
-            verification gate. Product contracts and coverage remain UNKNOWN.
+            {hasUnverified
+              ? `${UNVERIFIED_WARNING} Defined product contracts and coverage do not establish validated financial support. Valid bindings and passing preview tests do not satisfy the production verification gate.`
+              : `${SIMULATION_WARNING} Valid bindings and passing simulation do not satisfy the production verification gate. Product contracts and coverage remain UNKNOWN.`}
           </AlertDescription>
         </Alert>
         {planValidation && !planValidation.valid && (
@@ -419,7 +431,7 @@ export function DesignReview({
             }
             onClick={() => void onSimulate()}
           >
-            Simulate capabilities
+            {hasUnverified ? "Preview capabilities" : "Simulate capabilities"}
           </Button>
         </div>
         {(dirty || markdownDirty) && (
@@ -446,13 +458,84 @@ export function DesignReview({
                     </p>
                     <p>{definition?.purpose ?? "No exact catalog definition found."}</p>
                     <p>
-                      Product behavior: {definition?.behavior ?? "UNKNOWN"}. Coverage:{" "}
-                      {definition?.coverage ?? "UNKNOWN"}.
+                      Product behavior:{" "}
+                      {definition?.id === "CAP-002"
+                        ? "Validate the complete documented questionnaire and calculate a private provisional demo result; not a validated suitability assessment"
+                        : (definition?.behavior ?? "UNKNOWN")}
+                      . Defined product coverage: {definition?.coverage ?? "UNKNOWN"}.
                     </p>
+                    {definition?.status === "unverified" && (
+                      <p>
+                        Validation: unverified. Defined coverage is not validated financial support.
+                      </p>
+                    )}
+                    {!!definition?.sourceDocuments?.length && (
+                      <p>Source documents: {definition.sourceDocuments.join("; ")}</p>
+                    )}
                     {definition?.unknowns.map((unknown) => (
                       <p key={unknown}>{unknown}</p>
                     ))}
-                    {definition && <p>Simulation only: {definition.simulation.behavior}</p>}
+                    {definition?.status === "mock" && (
+                      <p>Simulation only: {definition.simulation.behavior}</p>
+                    )}
+                    {definition && (
+                      <>
+                        <p>
+                          Inputs:{" "}
+                          {Object.entries(getCapabilityPorts(definition, "inputs") ?? {})
+                            .map(
+                              ([name, contract]) =>
+                                `${name}: ${contract}${definition.optionalInputs?.includes(name) ? " (optional)" : ""}`,
+                            )
+                            .join("; ") || "UNKNOWN"}
+                        </p>
+                        <p>
+                          Outputs:{" "}
+                          {Object.entries(getCapabilityPorts(definition, "outputs") ?? {})
+                            .map(
+                              ([name, contract]) =>
+                                `${name}: ${contract}${definition.internalOutputs?.includes(name) ? " (private internal handoff; contract only, no values)" : ""}`,
+                            )
+                            .join("; ") || "UNKNOWN"}
+                        </p>
+                      </>
+                    )}
+                    {definition?.id === "CAP-001" && (
+                      <p>
+                        Industry choices:{" "}
+                        {finmatchIndustries
+                          .map((industry) =>
+                            industry === "fmcg"
+                              ? "Fast-moving consumer goods"
+                              : industry[0].toUpperCase() + industry.slice(1),
+                          )
+                          .join(", ")}
+                        . No selection means balanced coverage, not an explicit selection of all
+                        industries.
+                      </p>
+                    )}
+                    {definition?.id === "CAP-002" && (
+                      <details>
+                        <summary className="cursor-pointer">
+                          Documented questionnaire (v0-demo)
+                        </summary>
+                        <p className="mt-2">
+                          Definition only, not a submitted assessment. Scores and calculated
+                          classifications are private.
+                        </p>
+                        {finmatchQuestionnaire.map((question) => (
+                          <div key={question.id} className="mt-3">
+                            <h5 className="font-medium">{question.title}</h5>
+                            <p>{question.question}</p>
+                            <ul className="ml-4 list-disc">
+                              {question.choices.map((choice) => (
+                                <li key={choice.label}>{choice.text}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                      </details>
+                    )}
                   </CardContent>
                 </Card>
               );
@@ -464,9 +547,13 @@ export function DesignReview({
               );
               return (
                 <p key={requirement.id} className="break-words text-sm">
-                  <strong>{requirement.text}</strong>: fixture-only plan coverage:{" "}
-                  {coverage?.status ?? "unreported"}. Product coverage: UNKNOWN. Model-authored
-                  rationale (not validated financial support):{" "}
+                  <strong>{requirement.text}</strong>:{" "}
+                  {hasUnverified ? "Model-authored plan coverage" : "fixture-only plan coverage"}:{" "}
+                  {coverage?.status ?? "unreported"}.{" "}
+                  {hasUnverified
+                    ? "Defined product coverage is listed above; requirement support remains unverified."
+                    : "Product coverage: UNKNOWN."}{" "}
+                  Model-authored rationale (not validated financial support):{" "}
                   {coverage?.reason ?? "No coverage recorded."}
                   {coverage?.stepIds.length ? ` Steps: ${coverage.stepIds.join(", ")}.` : ""}
                 </p>

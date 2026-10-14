@@ -293,7 +293,7 @@ test("all-unsupported plans need no forced steps or outputs", async () => {
   expect(await runCapabilityPlan(p, {})).toMatchObject({
     results: {},
     outputs: {},
-    provenance: { simulated: true, unverified: true },
+    provenance: { simulated: false, unverified: false, warning: "" },
   });
   for (const id of ["search", "holdings"])
     expect(b2cPerformancePlan.coverage.find((r) => r.requirementId === id)).toMatchObject({

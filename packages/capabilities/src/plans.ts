@@ -1,6 +1,15 @@
 import { z } from "zod";
-import { capabilityDefinitions, simulationContractSchemas } from "./definitions";
-import type { CapabilityContracts, CapabilityDefinition } from "./definitions";
+import {
+  capabilityDefinitions,
+  capabilityContractSchemas,
+  getCapabilityPorts,
+  contractAccepts,
+} from "./definitions";
+import type {
+  CapabilityContractId,
+  CapabilityContracts,
+  CapabilityDefinition,
+} from "./definitions";
 
 export type JsonValue =
   | null
@@ -193,7 +202,7 @@ export function validateCapabilityPlan(
     "coverage",
   );
   const catalog = options.definitions ?? capabilityDefinitions;
-  const contracts: CapabilityContracts = options.contracts ?? simulationContractSchemas;
+  const contracts: CapabilityContracts = options.contracts ?? capabilityContractSchemas;
   unique(
     catalog.map((d) => `${d.id}@${d.version}`),
     "catalog identity",
@@ -214,8 +223,7 @@ export function validateCapabilityPlan(
     d.markets !== null &&
     d.dependencies !== null &&
     d.unknowns.length === 0;
-  const ports = (d: CapabilityDefinition, direction: "inputs" | "outputs") =>
-    d.status === "mock" ? d.simulation[direction] : d[direction];
+  const ports = getCapabilityPorts;
   if (expectedRequirements) {
     unique(
       expectedRequirements.map((r) => r.id),
@@ -317,7 +325,7 @@ export function validateCapabilityPlan(
       else edges.get(step.id)!.add(candidates[0]!.id);
     }
     for (const name of Object.keys(inputPorts)) {
-      if (!Object.hasOwn(step.inputs, name))
+      if (!Object.hasOwn(step.inputs, name) && !def.optionalInputs?.includes(name))
         error("MISSING_BINDING", `Missing input ${name}.`, step.id);
     }
     for (const [name, binding] of Object.entries(step.inputs)) {
@@ -334,7 +342,11 @@ export function validateCapabilityPlan(
           !contracts[target]!.safeParse(binding.value).success
         )
           error("INVALID_LITERAL", `Literal does not satisfy ${target} for ${name}.`, step.id);
-      } else if (source && source !== target) {
+      } else if (
+        source &&
+        source !== target &&
+        !contractAccepts[target as CapabilityContractId]?.some((accepted) => accepted === source)
+      ) {
         error("CONTRACT_MISMATCH", `${source} cannot compose with ${target} for ${name}.`, step.id);
       }
     }

@@ -393,14 +393,24 @@ export async function callPlugin(
   pluginId: string,
   operationId: string,
   parameters: Record<string, unknown>,
-  options: { appId: string; releaseId?: string },
+  options: {
+    appId: string;
+    releaseId?: string;
+    validateOnly?: boolean;
+    candidate?: import("../lib/contracts").AppBundle;
+  },
 ): Promise<unknown> {
   if (!options?.appId) throw new Error("Plugin calls require an application context");
   const app = await findApp(access, options.appId);
   const release = options.releaseId ? app.current : undefined;
   if (options.releaseId && (release?.id !== options.releaseId || !release.verification.passed))
     throw new Error("Plugin calls require the current verified release");
-  const bundle = options.releaseId ? release?.bundle : app.workspace;
+  const bundle =
+    options.validateOnly && options.candidate
+      ? options.candidate
+      : options.releaseId
+        ? release?.bundle
+        : app.workspace;
   if (
     !app.enabledPlugins?.includes(pluginId) ||
     !bundle?.manifest.permissions.includes("plugin.call")
@@ -469,6 +479,7 @@ export async function callPlugin(
     else headers[plugin.auth.name] = plugin.auth.prefix + credential;
   }
   url.search = query.toString();
+  if (options.validateOnly) return { validated: true };
   const result = await remote(url, operation.method, headers, body);
   try {
     return JSON.parse(credential ? result.replaceAll(credential, "[redacted]") : result);
