@@ -307,6 +307,17 @@ const fixture = createServer(async (req, res) => {
           : { cardMetrics: ["ps"] };
       if (!calls) tool = { name: "prepare_build", arguments: { ...researchPlan, ...change } };
       text = "The changed plan needs a new proposal.";
+    } else if (prompt.includes("Restate the approved plan with minor wording changes")) {
+      if (!calls)
+        tool = {
+          name: "prepare_build",
+          arguments: {
+            ...researchPlan,
+            requirements:
+              "Build an industry research application using the supported capability set",
+          },
+        };
+      text = "The slightly reworded approved plan still builds.";
     } else if (prompt.includes("Start a slow turn")) {
       if (!calls) tool = { name: "list_files", arguments: {} };
       else await new Promise((resolve) => setTimeout(resolve, 1600));
@@ -991,6 +1002,23 @@ try {
     assert.deepEqual(afterPlanChange.buildRecords, beforePlanChanges.buildRecords);
     assert.deepEqual(afterPlanChange.workspace, beforePlanChanges.workspace);
   }
+  const toleratedRewording = await turn(
+    id,
+    "Restate the approved plan with minor wording changes.",
+  );
+  assert(toleratedRewording.ok);
+  assert(
+    !(await toleratedRewording.text()).includes("no longer matches the proposal"),
+    "Minor requirements rewording proceeds under the existing approval",
+  );
+  const afterTolerated = await appById(id);
+  assert(!afterTolerated.buildProposal, "Tolerated rewording builds and clears the proposal");
+  assert.equal(
+    afterTolerated.buildRecords?.length,
+    (beforePlanChanges.buildRecords?.length ?? 0) + 1,
+    "Tolerated rewording records the build",
+  );
+  results.push("Minor plan rewording builds without asking for approval again");
   const liveProposal = await turn(id, "Propose a live research change using actual live data.");
   assert(liveProposal.ok);
   await liveProposal.text();

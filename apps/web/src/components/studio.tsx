@@ -597,9 +597,7 @@ export function Studio() {
                 aria-label="Application workspace"
                 className={cn(
                   "flex min-h-0 min-w-0 flex-1 flex-col [&:fullscreen]:h-svh [&:fullscreen]:bg-background",
-                  app && !imported && tab !== "workflow"
-                    ? "overflow-hidden"
-                    : "overflow-y-auto",
+                  app && !imported && tab !== "workflow" ? "overflow-hidden" : "overflow-y-auto",
                 )}
               >
                 <input

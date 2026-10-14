@@ -57,6 +57,66 @@ export function resolveCapabilities(selected: BusinessCapability[]) {
 export function selectedProtocols(selected: BusinessCapability[]) {
   return [...new Set(resolveCapabilities(selected).map((id) => capabilityProtocols[id]))];
 }
+
+// Workflow approval is asked once per plan. A model re-emitting the approved
+// plan differs cosmetically (field order, list order, equivalent requirements
+// wording); those proceed under the recorded approval, while material changes
+// require a newly approved proposal.
+const requirementsSimilarityFloor = 0.6;
+
+export type PlanApprovalMismatch =
+  | "mode"
+  | "capabilities"
+  | "companyQueries"
+  | "themeOverride"
+  | "cardMetrics"
+  | "requirements";
+
+function sameSet(left: string[], right: string[]) {
+  const a = [...new Set(left)].sort();
+  const b = [...new Set(right)].sort();
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+// English words plus individual CJK characters, so Chinese requirement texts
+// compare by character overlap instead of as one unsplit token.
+function requirementTokens(text: string) {
+  return new Set(text.toLowerCase().match(/[a-z0-9]+|[\u4e00-\u9fff]/g) ?? []);
+}
+
+function requirementsSimilarity(approved: string, declared: string) {
+  const left = requirementTokens(approved);
+  const right = requirementTokens(declared);
+  if (!left.size || !right.size) return approved.trim() === declared.trim() ? 1 : 0;
+  let shared = 0;
+  for (const token of left) if (right.has(token)) shared += 1;
+  return shared / (left.size + right.size - shared);
+}
+
+export function planMatchesApproval(
+  approved: BuildPlan,
+  declared: BuildPlan,
+): PlanApprovalMismatch | undefined {
+  if (approved.mode !== declared.mode) return "mode";
+  // Capability order is immaterial: selection and explicit dependencies
+  // resolve to the same dependency-closed set. Company queries likewise
+  // resolve to the same companies regardless of ordering.
+  if (
+    JSON.stringify(resolveCapabilities(approved.capabilities)) !==
+    JSON.stringify(resolveCapabilities(declared.capabilities))
+  )
+    return "capabilities";
+  if (!sameSet(approved.companyQueries, declared.companyQueries)) return "companyQueries";
+  if ((approved.themeOverride ?? null) !== (declared.themeOverride ?? null)) return "themeOverride";
+  // Metric selection is a unique set, not an ordered list.
+  if (!sameSet(approved.cardMetrics ?? [], declared.cardMetrics ?? [])) return "cardMetrics";
+  if (
+    requirementsSimilarity(approved.requirements, declared.requirements) <
+    requirementsSimilarityFloor
+  )
+    return "requirements";
+  return undefined;
+}
 export const fixtureCompanies: Company[] = [
   {
     name: "Demo Technology Large",

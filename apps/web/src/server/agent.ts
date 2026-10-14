@@ -43,9 +43,9 @@ import { buildPlanSchema, type BuildRecord } from "../lib/build-plan";
 import {
   agentProtocols,
   frontendDesign,
+  planMatchesApproval,
   prepareBuild,
   requireBuild,
-  resolveCapabilities,
   selectedProtocols,
   validateScopedBundle,
 } from "./build-policy";
@@ -503,13 +503,9 @@ export async function startAgentTurn(
           throw new Error(
             "Generate a complete Input, Capabilities and Output workflow and propose it again before approval.",
           );
-        if (
-          !proposal.plan ||
-          JSON.stringify(proposal.plan) !== JSON.stringify(plan) ||
-          proposal.mode !== plan.mode ||
-          JSON.stringify(resolveCapabilities(proposal.capabilities)) !==
-            JSON.stringify(resolveCapabilities(plan.capabilities))
-        )
+        const planMismatch =
+          !proposal.plan || planMatchesApproval(proposal.plan, plan) !== undefined;
+        if (planMismatch)
           throw new Error(
             "The declared plan no longer matches the proposal the user confirmed. Call propose_build with the updated plan and end the turn.",
           );
