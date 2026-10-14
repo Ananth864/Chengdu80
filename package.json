@@ -54,6 +54,7 @@
     "test:agent": "VITE_LOCAL_MODE=1 bun run build && bun scripts/test-agent.ts",
     "test:plugins": "VITE_LOCAL_MODE=1 bun run build && bun scripts/test-plugins.ts",
     "test:company-capabilities": "bun scripts/test-company-capabilities.ts",
+    "test:requirements": "bun scripts/test-requirements.ts",
     "test:conversation": "bun scripts/test-conversation.ts",
     "starter:sync": "bun scripts/sync-app-starter.ts",
     "test:chat-storage": "bun scripts/test-chat-storage.ts",

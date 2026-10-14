@@ -15,6 +15,7 @@ import { z } from "zod";
 import {
   bundleSchema,
   protocols,
+  requirementsSchema,
   specSchema,
   type Application,
   type AppBundle,
@@ -49,6 +50,12 @@ const requestSchema = z.discriminatedUnion("action", [
     })
     .strict(),
   z.object({ action: z.literal("clarify"), prompt: text }),
+  z.object({
+    action: z.literal("save-design"),
+    appId: z.string(),
+    spec: specSchema.optional(),
+    requirements: requirementsSchema,
+  }),
   z.object({ action: z.literal("create-workspace"), prompt: z.string().trim().min(1).max(12000) }),
   z.object({
     action: z.literal("browser-log"),
@@ -218,6 +225,26 @@ export async function dispatch(access: Access, raw: unknown) {
       "Use the financial-capability conversation to scope this request. Legacy direct builds, imports and provider tests are disabled until they support the internal capability contract.",
     );
   if (req.action === "delete-chat") return deleteChat(access, req.appId, req.expectedRevision);
+  if (req.action === "save-design") {
+    return mutateApp(access, req.appId, (latest) => {
+      if (req.spec) {
+        if (req.spec.protocol !== latest.spec.protocol)
+          throw new Error("An active app's calculation protocol cannot change.");
+        latest.workspaceSpec = req.spec;
+        if (!latest.current) {
+          latest.spec = req.spec;
+          latest.name = req.spec.name;
+        }
+      }
+      latest.requirements = req.requirements;
+      event(
+        latest,
+        req.spec
+          ? "Saved the reviewed specification and requirements."
+          : "Saved the reviewed requirements.",
+      );
+    });
+  }
   if (req.action === "create-workspace") {
     const app = newApp(access, {
       ...protocols[0]!.defaultSpec,

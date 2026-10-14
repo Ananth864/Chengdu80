@@ -3,6 +3,7 @@ import { StudioSubscriptions } from "../lib/use-studio-data";
 import { BuildGallery } from "./build-gallery";
 import { AgentChat } from "./agent-chat";
 import { ConversationNavigation } from "./conversation-navigation";
+import { DesignReview, WorkflowView } from "./design-review";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowUpRight,
@@ -12,6 +13,9 @@ import {
   Maximize,
   Minimize,
   Code2,
+  ClipboardList,
+  MessageCircleQuestion,
+  Workflow,
   RefreshCw,
   ShieldCheck,
   LayoutGrid,
@@ -79,11 +83,13 @@ type Snapshot = {
     runtime: string;
   };
 };
-type Tab = "preview" | "source" | "data";
+type Tab = "preview" | "source" | "data" | "requirements" | "workflow";
 const workspaceTabs = [
   { value: "preview", label: "Preview", Icon: Eye },
   { value: "source", label: "Code", Icon: Code2 },
   { value: "data", label: "Database (read-only)", Icon: Database },
+  { value: "requirements", label: "Requirements", Icon: ClipboardList },
+  { value: "workflow", label: "Workflow", Icon: Workflow },
 ] as const;
 export function Studio() {
   const convexConfigured = !!useRouter().options.context.convexClient;
@@ -521,7 +527,9 @@ export function Studio() {
                 aria-label="Application workspace"
                 className={cn(
                   "flex min-h-0 min-w-0 flex-1 flex-col [&:fullscreen]:h-svh [&:fullscreen]:bg-background",
-                  app && !imported && tab !== "data" ? "overflow-hidden" : "overflow-y-auto",
+                  app && !imported && tab !== "data" && tab !== "requirements" && tab !== "workflow"
+                    ? "overflow-hidden"
+                    : "overflow-y-auto",
                 )}
               >
                 <input
@@ -572,7 +580,8 @@ export function Studio() {
                     onValueChange={(value) => {
                       if (isTab(value)) {
                         setTab(value);
-                        if (value === "data") void run("Refreshing shared data…", refresh);
+                        if (value !== "preview" && value !== "source")
+                          void run("Refreshing workspace…", refresh);
                       }
                     }}
                     className="min-h-0 min-w-0 flex-1 gap-0"
@@ -592,18 +601,36 @@ export function Studio() {
                         >
                           {tab === "source" ? activeSourceFile : app.name}
                         </span>
+                        {!!app.requirements?.questions.filter((question) => !question.answer.trim())
+                          .length &&
+                          tab !== "requirements" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 gap-1.5 px-2.5 text-xs"
+                              onClick={() => setTab("requirements")}
+                            >
+                              <MessageCircleQuestion className="size-3.5" />
+                              {
+                                app.requirements.questions.filter(
+                                  (question) => !question.answer.trim(),
+                                ).length
+                              }{" "}
+                              open
+                            </Button>
+                          )}
                         {tab !== "source" && (
                           <Button
                             variant="ghost"
                             size="icon-sm"
-                            aria-label={tab === "data" ? "Refresh database" : "Refresh preview"}
-                            title={tab === "data" ? "Refresh database" : "Refresh preview"}
+                            aria-label={`Refresh ${tab === "data" ? "database" : tab}`}
+                            title={`Refresh ${tab === "data" ? "database" : tab}`}
                             disabled={
                               !!busy || (tab === "preview" && !release?.verification.passed)
                             }
                             onClick={() => {
-                              if (tab === "data") void run("Refreshing shared data…", refresh);
-                              else setPreviewRevision((revision) => revision + 1);
+                              if (tab === "preview") setPreviewRevision((revision) => revision + 1);
+                              else void run("Refreshing workspace…", refresh);
                             }}
                           >
                             <RefreshCw />
@@ -682,6 +709,29 @@ export function Studio() {
                       <pre className="max-w-full overflow-x-auto py-4 text-xs">
                         {JSON.stringify(app.data, null, 2)}
                       </pre>
+                    </TabsContent>
+                    <TabsContent
+                      value="requirements"
+                      className="flex min-h-0 flex-col overflow-y-auto"
+                    >
+                      <DesignReview
+                        app={app}
+                        disabled={!!busy || agentBusy}
+                        onSave={async (spec, requirements) => {
+                          await run("Saving design…", async () => {
+                            await api<Application>({
+                              action: "save-design",
+                              appId: app.id,
+                              spec,
+                              requirements,
+                            });
+                            await refresh();
+                          });
+                        }}
+                      />
+                    </TabsContent>
+                    <TabsContent value="workflow" className="flex min-h-0 flex-col overflow-y-auto">
+                      <WorkflowView app={app} />
                     </TabsContent>
                   </Tabs>
                 ) : (
@@ -819,7 +869,13 @@ export function Studio() {
 }
 
 function isTab(value: unknown): value is Tab {
-  return value === "preview" || value === "source" || value === "data";
+  return (
+    value === "preview" ||
+    value === "source" ||
+    value === "data" ||
+    value === "requirements" ||
+    value === "workflow"
+  );
 }
 
 function Checks({ release }: { release: Release }) {

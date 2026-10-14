@@ -30,6 +30,7 @@ import { z } from "zod";
 import {
   bundleSchema,
   specSchema,
+  requirementsSchema,
   protocolFor,
   capabilityContracts,
   type AppBundle,
@@ -411,6 +412,24 @@ export async function startAgentTurn(
         };
       }),
       toolDefinition({
+        name: "record_requirements",
+        description:
+          "Record the draft requirements for the user's Requirements review: clarification questions with the user's actual answers, assumptions, missing inputs and the analysis period. Ask material questions in chat first; record only answers the user actually gave, never invented or assumed ones. The user reviews, answers and edits these in the Requirements tab.",
+        inputSchema: requirementsSchema,
+      }).server(async (requirements) => {
+        await mutateApp(access, appId, (latest) => {
+          controller.signal.throwIfAborted();
+          if (latest.agentTurn?.id !== user.id || latest.agentTurn.status !== "running")
+            throw new Error("This financial build turn is no longer active.");
+          latest.requirements = requirements;
+        });
+        return {
+          saved: true,
+          openQuestions: requirements.questions.filter((question) => !question.answer.trim())
+            .length,
+        };
+      }),
+      toolDefinition({
         name: "read_starter_reference",
         description:
           "Read the exact platform starter SDK, toolkit guide or installed shadcn sources.",
@@ -634,7 +653,7 @@ export async function startAgentTurn(
       systemPrompts: [
         ...Object.values(agentProtocols),
         ...selected,
-        `Available financial capability IDs: ${JSON.stringify(Object.keys((await import("./build-policy")).capabilityDependencies))}. Current internal build record: ${JSON.stringify(prior ?? null)}.`,
+        `Available financial capability IDs: ${JSON.stringify(Object.keys((await import("./build-policy")).capabilityDependencies))}. Current internal build record: ${JSON.stringify(prior ?? null)}. Current draft requirements for the Requirements tab: ${JSON.stringify(app.requirements ?? null)}.`,
         "Before fixture edits use prepare_build; read its selected protocols. Preserve the Synthetic demo label. New React apps use fixed financial modules in the protected root route. Fixture apps may use storage.read and storage.write. Legacy fixtures also preserve finance.calculate. Matching builds may also use finance.match-companies; company-card builds may also use finance.company-cards. Use these fixed platform modules for matching, daily batches, decisions and watchlists; do not recreate their logic. Metric selection is pinned in prepare_build.cardMetrics, with omitted selection using defaults. Demo risk selection is an explicit synthetic profile, not a completed expert assessment. Market APIs, LLM explanations and plugins are not enabled for this first scoped flow. Keep unsupported financial outputs unavailable. Fixture company table uses synthetic DEMO001/DEMO002/DEMO003 companies. Live company table and Wind are platform-managed pending inputs.",
         projectFormat
           ? "This app is an actual TanStack Start React/TypeScript checkout with installed libraries and local shadcn Base UI source. Call read_starter_reference to inspect exact SDK types and toolkit imports. The platform renders confirmed financial modules in its protected root. Customize src/App.tsx and presentation components only after prepare_build approves this turn. Package/build configuration, SDK, financial modules and shadcn source are immutable. Use installed shadcn components; do not recreate controls or financial logic. Use the default theme; src/app.css changes require a recorded theme override. No direct provider/LLM/network calls, generic plugins or package installation. Permissions and src/lib/build-context.ts are derived from the contract. Keep missing financial outputs unavailable. deploy_preview uses platform-owned build/type checks and financial render checks in Linux isolation."

@@ -89,6 +89,30 @@ export const specSchema = z
   })
   .strict();
 export type ProductSpec = z.infer<typeof specSchema>;
+export const requirementsQuestionSchema = z
+  .object({
+    id: z.string().regex(/^[a-zA-Z0-9_-]{1,50}$/),
+    question: z.string().trim().min(1).max(300),
+    answer: z.string().trim().max(1000),
+  })
+  .strict();
+export const requirementsSchema = z
+  .object({
+    analysisPeriod: z.string().trim().max(300),
+    assumptions: z.array(z.string().trim().min(1).max(500)).max(12),
+    missingInputs: z.array(z.string().trim().min(1).max(300)).max(12),
+    questions: z.array(requirementsQuestionSchema).max(12),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      new Set(value.questions.map((question) => question.id)).size === value.questions.length,
+    "Question IDs must be unique",
+  );
+export type Requirements = z.infer<typeof requirementsSchema>;
+export function initialRequirements(): Requirements {
+  return { analysisPeriod: "", assumptions: [], missingInputs: [], questions: [] };
+}
 export const bundleSchema = z
   .object({
     manifest: z
@@ -171,6 +195,7 @@ export type Application = {
   conversation?: UIMessage[];
   workspace?: AppBundle;
   workspaceSpec?: ProductSpec;
+  requirements?: Requirements;
   browserEvents?: { releaseId: string; at: string; message: string }[];
   enabledPlugins?: string[];
   turns?: {

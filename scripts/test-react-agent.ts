@@ -239,7 +239,14 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  page.on("response", response => { if (response.url().includes("/api/ai/chat") && !response.ok()) void response.text().then(body => console.error("Chat fixture error", response.status(), body.slice(0, 1200))); });
+  page.on("response", (response) => {
+    if (response.url().includes("/api/ai/chat") && !response.ok())
+      void response
+        .text()
+        .then((body) =>
+          console.error("Chat fixture error", response.status(), body.slice(0, 1200)),
+        );
+  });
   await page.goto(base);
   const composer = page.getByRole("textbox", { name: "Message the AI" });
   async function send(text: string, answer: string) {

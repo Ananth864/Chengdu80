@@ -72,6 +72,34 @@ try {
   const unknown = await request({ action: "build-anything" }, false);
   assert(unknown.error);
   pass("Unknown platform actions fail closed");
+  const workspace = await request({
+    action: "create-workspace",
+    prompt: "Build a demo matching app with five daily company cards",
+  });
+  const designed = await request({
+    action: "save-design",
+    appId: workspace.id,
+    requirements: {
+      analysisPeriod: "Past year",
+      assumptions: ["Synthetic demo data only"],
+      missingInputs: [],
+      questions: [{ id: "q1", question: "Which industries matter to you?", answer: "" }],
+    },
+  });
+  assert.equal(designed.requirements.questions[0]!.question, "Which industries matter to you?");
+  assert.equal(designed.requirements.questions[0]!.answer, "");
+  pass("Requirements persist through save-design for the pre-build review");
+  const protocolChange = await request(
+    {
+      action: "save-design",
+      appId: workspace.id,
+      spec: { ...designed.spec, protocol: "strategy" },
+      requirements: { analysisPeriod: "", assumptions: [], missingInputs: [], questions: [] },
+    },
+    false,
+  );
+  assert(protocolChange.error.toLowerCase().includes("protocol"));
+  pass("save-design rejects changing the app's calculation protocol");
   console.log(`${passed} scoped API flow checks passed, including 27 bypass attempts.`);
 } finally {
   if (server.pid) process.kill(-server.pid, "SIGTERM");
