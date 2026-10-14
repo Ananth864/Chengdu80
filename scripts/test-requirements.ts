@@ -8,7 +8,7 @@ import {
   type ProductSpec,
 } from "../apps/web/src/lib/contracts";
 import { applicationWorkflow, workflowGraph } from "../apps/web/src/lib/planning";
-import type { BuildRecord } from "../apps/web/src/lib/build-plan";
+import { buildPlanSchema, type BuildRecord } from "../apps/web/src/lib/build-plan";
 import { sampleBundle } from "../apps/web/src/lib/samples";
 import {
   capabilityCatalog,
@@ -18,17 +18,53 @@ import {
 } from "../apps/web/src/lib/capability-catalog";
 
 assert.equal(capabilityCatalog.library_id, "shared-financial-capabilities");
-assert.equal(capabilityCatalog.version, "2.0.0");
+assert.equal(capabilityCatalog.version, "1.9.0");
+assert.deepEqual(
+  Object.fromEntries(
+    capabilityCatalog.capabilities.map((entry) => [entry.id, entry.contract_version]),
+  ),
+  {
+    "industry-research": "1.2.0",
+    "historical-analysis": "1.2.0",
+    "price-target": "1.2.0",
+    "risk-profile": "1.0.0",
+    "industry-preferences": "1.4.0",
+    "company-discovery": "1.3.0",
+  },
+);
+assert.equal(capabilityCatalog.capabilities.length, 6);
+for (const entry of capabilityCatalog.capabilities)
+  assert.equal(entry.implementation_status, "implemented_demo_contract");
+// Persisted executable IDs are distinct from the six canonical catalog contracts.
 assert.equal(businessCapabilities.length, 7);
+assert(!businessCapabilities.some((id: string) => id === "news"));
 assert.deepEqual(parseCapabilityCatalog(capabilityCatalog), capabilityCatalog);
 assert.ok(
   capabilityCatalog.capabilities.find((entry) => entry.id === "risk-profile")
     ?.questionnaire_definition,
 );
-assert.ok(
-  capabilityCatalog.capabilities.find((entry) => entry.id === "market-data-provider")
-    ?.verified_endpoints,
+for (const id of ["industry-research", "historical-analysis", "price-target"] as const) {
+  const entry = capabilityCatalog.capabilities.find((entry) => entry.id === id)!;
+  assert.ok(entry.implementation.includes(`apps/web/src/server/${id}.ts`));
+  assert.ok(entry.implementation.includes("apps/web/src/server/tushare.ts"));
+  assert.match(String(entry.implementation_note), /representative/i);
+  assert.match(String(entry.implementation_note), /not verif|not complete|not verify/i);
+  assert.match(
+    capabilityDefinitions[id === "industry-research" ? "market-research" : id].availability,
+    /implemented/i,
+  );
+  assert.deepEqual(entry.depends_on ?? [], []);
+}
+assert.deepEqual(
+  capabilityCatalog.capabilities.find((entry) => entry.id === "company-discovery")?.depends_on,
+  ["risk-profile", "industry-preferences"],
 );
+const target = capabilityCatalog.capabilities.find((entry) => entry.id === "price-target")!;
+assert.match(
+  String(target.implementation_note),
+  /rating mappings and target horizons were not verified/i,
+);
+assert.match(String(target.implementation_note), /do not invent mappings or horizons/i);
 assert.ok(!capabilityCatalog.capabilities.some((entry) => entry.id === "grounded-chatbot"));
 for (const id of businessCapabilities)
   for (const related of capabilityDefinitions[id].relatedCatalogIds)
@@ -36,7 +72,9 @@ for (const id of businessCapabilities)
 assert.throws(() =>
   parseCapabilityCatalog({
     ...capabilityCatalog,
-    capabilities: capabilityCatalog.capabilities.filter((entry) => entry.id !== "result-store"),
+    capabilities: capabilityCatalog.capabilities.map((entry, index) =>
+      index ? entry : { ...entry, implementation: undefined },
+    ),
   }),
 );
 assert.throws(() =>
@@ -49,7 +87,7 @@ assert.throws(() =>
   parseCapabilityCatalog({
     ...capabilityCatalog,
     capabilities: capabilityCatalog.capabilities.map((entry, index) =>
-      index ? entry : { ...entry, depends_on: ["missing-capability"] },
+      index ? entry : { ...entry, outputs: [] },
     ),
   }),
 );
@@ -114,6 +152,24 @@ assert.ok(
   !draftSpecSchema.safeParse({ ...unconfigured, outputs: Array(13).fill("Output") }).success,
 );
 
+const planWithoutTheme = {
+  requirements: "Build an industry preference form",
+  capabilities: ["industry-preference"],
+  companyQueries: [],
+  mode: "live",
+};
+assert.equal(buildPlanSchema.parse(planWithoutTheme).themeOverride, null);
+assert.equal(
+  buildPlanSchema.parse({ ...planWithoutTheme, themeOverride: null }).themeOverride,
+  null,
+);
+assert.equal(
+  buildPlanSchema.parse({ ...planWithoutTheme, themeOverride: "Warm neutral" }).themeOverride,
+  "Warm neutral",
+);
+assert.throws(() => buildPlanSchema.parse({ ...planWithoutTheme, themeOverride: " " }));
+assert.throws(() => buildPlanSchema.parse({ ...planWithoutTheme, mode: "fixture" }), /live mode/);
+
 // Draft graph: no record yet, so data flows conceptually to the output.
 const draft = workflowGraph(spec, undefined, undefined);
 assert.equal(draft.basis, "draft");
@@ -156,9 +212,9 @@ const record = {
   createdAt: new Date().toISOString(),
   hash: "hash",
   plan: {
-    requirements: "Demo matching app",
+    requirements: "Live matching app",
     capabilities: ["risk-industry-matching", "company-cards"],
-    companyQueries: ["Demo Technology Large"],
+    companyQueries: ["600000.SH"],
     mode: "live" as const,
     themeOverride: null,
   },
@@ -168,9 +224,9 @@ const record = {
     "risk-industry-matching",
     "company-cards",
   ],
-  companyIds: ["DEMO001"],
-  companyIndustries: ["Technology"],
-  companyTableVersion: "synthetic-companies-v1",
+  companyIds: ["600000.SH"],
+  companyIndustries: ["Financial services"],
+  companyTableVersion: "supplied-csv-test-version",
   protocolHashes: {},
   provider: "tushare" as const,
   moduleVersions: {},
@@ -180,10 +236,11 @@ const record = {
 } satisfies BuildRecord;
 const graph = workflowGraph(spec, initialRequirements(), record);
 assert.equal(graph.basis, "build-record");
-assert.ok(graph.nodes.some((node) => node.id === "companies" && node.inputs === "DEMO001"));
+assert.ok(graph.nodes.some((node) => node.id === "companies" && node.inputs === "600000.SH"));
+assert.equal(graph.nodes.find((node) => node.id === "data")?.label, "Live platform data");
 assert.deepEqual(
   graph.nodes.filter((node) => node.kind === "capability").map((node) => node.label),
-  ["Risk/industry matching", "Daily company cards"],
+  ["Risk/industry matching", "Company discovery cards"],
 );
 assert.ok(
   graph.nodes
@@ -203,9 +260,7 @@ const blocked: BuildRecord = {
   ...record,
   readiness: "blocked",
   plan: { ...record.plan, capabilities: ["market-research"] },
-  // "news" is deliberately outside the capability union: the blocked record
-  // must survive validation without it ever being resolvable.
-  resolvedCapabilities: ["market-research", "news"] as BuildRecord["resolvedCapabilities"],
+  resolvedCapabilities: ["market-research"],
 };
 const app: Application = {
   id: "app-1",

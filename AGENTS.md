@@ -22,7 +22,7 @@ Bun monorepo:
 - Do not put secrets in public `VITE_` variables.
 - Keep Convex functions in `packages/backend/convex` and import APIs from `@web-starter/backend/convex/_generated/api`.
 - Run `bun run codegen` after adding or renaming Convex functions.
-- New generated apps use `apps/web/starter/project`. Keep its financial SDK/modules, shadcn source and build configuration protected. Regenerate `app-project-template.ts` with `bun run starter:sync` after starter changes.
+- New generated apps use `apps/web/starter/project`. Keep financial SDK, calculation/schema libraries, shadcn source and build configuration protected. Presentation components, routes and styles are builder-owned; they must use the approved SDK rather than reimplement financial algorithms. New plans are live-only; fixture records are retained only for historical-release compatibility and isolated tests. Regenerate `app-project-template.ts` with `bun run starter:sync` after starter changes.
 - Generated Node/Bash/SSR code must run only in the Linux Bubblewrap sandbox. On macOS use the Docker launcher; never add a host execution fallback.
 - Retain per-turn capability, dependency, company and permission checks and server-key-protected writes. The builder assesses semantic feasibility; there is no separate intent-classifier model. Require prior-turn proposals and explicit Preview activation. Markdown policies do not replace executable gates.
 - Keep the existing gallery, retained discussion, chat-only deletion and studio UI.
@@ -35,7 +35,7 @@ Bun monorepo:
 - Keep workflow metadata aligned with the displayed release: active release specification and build record belong together; blocked attempts must not replace the active workflow. Draft outputs describe intended behavior, not verified execution or live-data availability.
 - Test new-workspace defaults, missing-specification deployment rejection, app-specific output labels and distinct output details. Include a non-portfolio request to catch inherited portfolio metadata. Local model fixtures prove wiring and enforcement, not live-model semantic correctness.
 - Root `AGENTS.md` instructs repository coding agents, not the application LLM. Mirror relevant generation rules in `apps/web/src/server/protocols/builder.md` and the dashboard skill; keep tool descriptions and executable validation consistent. Markdown alone is not enforcement.
-- Building requires explicit Workflow-stage approval recorded server-side for the exact proposal. A later chat reply alone is not approval. Changed plan fields require new approval; Preview activation remains a separate user action.
+- Building requires explicit Workflow-stage approval recorded server-side for the exact proposal. A later chat reply alone is not approval. Approval is asked once per plan: cosmetic re-emission differences (field order, list order, equivalent requirements wording) proceed under the recorded approval, while materially changed plans (mode, capabilities, companies, theme, metric selection or substantively rewritten requirements) require new approval; Preview activation remains a separate user action.
 - UI and CLI workflow approval use the same server action and automatically start one bounded builder turn. Preserve approval receipt deduplication, persisted progress and separate Preview activation; do not require a second chat message or claim durable crash recovery for the in-process task.
 
 ## Environment

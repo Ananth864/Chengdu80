@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { prepareBuild } from "../apps/web/src/server/build-policy";
+import { prepareBuild, validateScopedBundle } from "../apps/web/src/server/build-policy";
 import {
   buildContextPath,
   buildContextSource,
@@ -19,8 +19,13 @@ import {
   createPreviewSession,
   resolvePreviewSession,
 } from "../apps/web/src/server/preview-session";
-import { resetSizedCompanyCache, resetSseCompanyCache } from "../apps/web/src/server/providers";
-import type { Application } from "../apps/web/src/lib/contracts";
+import { resetSseCompanyCache, sseACompanies } from "../apps/web/src/server/providers";
+import { importCompanyCsv } from "../apps/web/src/lib/company-table";
+import type { Application, ProductSpec } from "../apps/web/src/lib/contracts";
+import {
+  discoveryIndustries,
+  discoveryResultSchema,
+} from "../apps/web/starter/project/src/lib/company-discovery";
 
 assert.equal(
   process.platform,
@@ -29,28 +34,46 @@ assert.equal(
 );
 process.env.CD80_LOCAL_MODE = "1";
 process.env.CD80_SANDBOX_SENTINEL = "fixture-secret-must-stay-outside-project";
-// prepare_build verifies the live Tushare feed; stub it with the sample payload.
+// Inject the live lookup transport without making the provider endpoint configurable.
 const tushareSample = JSON.parse(
   await readFile(new URL("./fixtures/stock-basic-sample.json", import.meta.url), "utf8"),
 );
 process.env.TUSHARE_TOKEN = "test-token";
 const originalFetch = globalThis.fetch;
-globalThis.fetch = (async () =>
-  new Response(JSON.stringify(tushareSample))) as unknown as typeof fetch;
+globalThis.fetch = (async (url, options) => {
+  assert.equal(url, "https://api.tushare.pro");
+  assert.equal(typeof options?.body, "string");
+  assert.equal(JSON.parse(options!.body as string).api_name, "stock_basic");
+  return new Response(JSON.stringify(tushareSample));
+}) as typeof fetch;
 resetSseCompanyCache();
-resetSizedCompanyCache();
+try {
+  assert.equal((await sseACompanies()).available, true);
+} finally {
+  globalThis.fetch = originalFetch;
+  resetSseCompanyCache();
+}
 const directory = process.env.CD80_DATA_DIR;
 assert(directory, "Supply an isolated fixture data directory");
 await mkdir(directory, { recursive: true });
 const access = { ownerId: "local-prototype-owner", accessToken: null };
 let app = (await dispatch(access, {
   action: "create-workspace",
-  prompt: "Company card demo",
+  prompt: "Supplied-CSV company discovery with explicit saved company IDs",
 })) as Application;
-const spec = {
-  ...app.spec,
-  name: "React company cards",
-  purpose: "A daily company-card app using fixed platform modules",
+const spec: ProductSpec = {
+  name: "React company discovery",
+  purpose: "Review supplied-CSV companies one at a time with an optional saved watchlist",
+  protocol: "screening",
+  inputs: ["Completed risk questionnaire", "Normalized industry preference"],
+  outputs: ["Current discovery company", "Saved company IDs"],
+  outputDetails: {
+    "Current discovery company":
+      "One matching supplied-CSV SSE company per round; live financial metrics are unavailable.",
+    "Saved company IDs":
+      "Canonical CSV company IDs persisted only by an explicit app storage write.",
+  },
+  constraints: ["At most five companies per memory-only session", "No investment advice"],
 };
 const record = await prepareBuild(
   {
@@ -63,14 +86,27 @@ const record = await prepareBuild(
   "react-fixture-turn",
   1,
 );
-globalThis.fetch = originalFetch;
+assert.equal(record.readiness, "live");
+assert.equal(record.moduleVersions.starter, "financial-react-v4");
+assert.equal(record.moduleVersions["company-discovery"], "v1.3.0");
 const bundle = app.workspace!;
 assert.equal(bundle.manifest.schemaVersion, 3);
 bundle.manifest.name = spec.name;
 bundle.manifest.permissions = approvedPermissions(record, true);
 bundle.files[buildContextPath] = buildContextSource(record, spec.name);
 bundle.files["src/App.tsx"] =
-  'export default function App() { return <p data-testid="custom-presentation">Contract-bound presentation</p>; }\n';
+  'import { FinancialDemo } from "@/components/financial-app";\nexport default function App() { return <><FinancialDemo /><p data-testid="custom-presentation">Contract-bound presentation</p></>; }\n';
+bundle.files["src/components/financial-app.tsx"] += "\n// Editable financial presentation.\n";
+validateScopedBundle(bundle, record);
+for (const path of [
+  "src/lib/cd80.ts",
+  "src/lib/company-discovery.ts",
+  "src/lib/discovery-contract.ts",
+]) {
+  const changed = structuredClone(bundle);
+  changed.files[path] += "\n// Intentional protected SDK mutation.\n";
+  assert.throws(() => validateScopedBundle(changed, record), /starter file unchanged/);
+}
 const outsideFile = join(directory, "parent-only.txt");
 await writeFile(outsideFile, "parent fixture secret");
 const first = await prepareProject(bundle, { scope: "isolation-a", pin: true });
@@ -97,6 +133,12 @@ assert(
 );
 release.buildRecord = { ...record, artifactHash: release.verification.sourceHash };
 assert(release.verification.thumbnail?.html.includes("Live · Shanghai Stock Exchange"));
+assert(release.verification.thumbnail?.html.includes("Contract-bound presentation"));
+assert(
+  release.verification.thumbnail?.html.includes(
+    'data-financial-module-version="financial-react-v4"',
+  ),
+);
 assert(release.verification.thumbnail?.css.includes("--primary"));
 app = await findApp(access, app.id);
 assert(await applyRelease(app, release));
@@ -110,7 +152,9 @@ app.conversation = [
   },
 ];
 const saved = await saveApp(access, app, app.revision);
-console.log("PASS platform-owned build/type checks, fixed financial SSR and gallery thumbnail");
+console.log(
+  "PASS platform-owned build/type checks, editable v4 financial SSR and protected SDK scope",
+);
 const origin = "http://127.0.0.1:3007";
 const session = await createPreviewSession(access, app.id, release.id, "fixture-nonce", origin);
 const token = session.url.split("/")[3]!;
@@ -128,8 +172,8 @@ await assert.rejects(
     origin,
   ),
 );
-console.log("PASS signed previews bind owner, origin, release and unchanged financial contract");
-async function rpc(input: unknown, capability = "finance.company-cards") {
+console.log("PASS signed previews bind owner, origin, release and financial contract");
+async function rpc(input: unknown, capability = "finance.company-discovery.v1-3") {
   return dispatch(access, {
     action: "rpc",
     appId: app.id,
@@ -138,21 +182,76 @@ async function rpc(input: unknown, capability = "finance.company-cards") {
     input,
   });
 }
-const batch = (await rpc({ action: "batch", risk: "low", industries: ["Technology"] })) as {
-  companies: { ticker: string }[];
-};
-assert.equal(batch.companies.length, 1);
-const ticker = batch.companies[0]!.ticker;
-await rpc({ action: "decide", ticker, choice: "yes" });
-const watchlist = (await rpc({ action: "watchlist" })) as { companies: { ticker: string }[] };
-assert.equal(watchlist.companies[0]!.ticker, ticker);
+const beforeDiscovery = structuredClone((await findApp(access, app.id)).data);
+const started = discoveryResultSchema.parse(
+  await rpc({
+    action: "start",
+    risk_result: {
+      status: "completed",
+      questionnaire_version: "v0-demo",
+      answers: { q1: 1, q2: 1, q3: 1, q4: 1, q5: 1, q6: 1, q7: 1 },
+      total_score: 7,
+      risk_profile_bucket: "low",
+    },
+    industry_preference: {
+      selection_mode: "selected",
+      selected_industries: ["manufacturing"],
+      effective_industries: ["manufacturing"],
+    },
+  }),
+);
+assert(started.status === "ready" && "eligible_company_count" in started);
+const csv = importCompanyCsv(
+  await readFile(
+    new URL("../apps/web/src/server/data/sse-a-universe.csv", import.meta.url),
+    "utf8",
+  ),
+);
+const eligible = csv.filter(
+  (company) => company.industry === discoveryIndustries.manufacturing && company.size === "large",
+);
+assert.equal(started.eligible_company_count, eligible.length);
+assert.equal(started.total_rounds, Math.min(5, eligible.length));
+const original = eligible.find((company) => company.ticker === started.current_company.ticker);
+assert(original, "Discovery must return a canonical supplied-CSV company");
+assert.equal(started.current_company.name, original.name);
+assert.equal(started.current_company.industry, original.industry);
+assert.equal(started.current_company.market_cap_rmb, original.marketCapRmb);
+assert.equal(started.current_company.size_category, "Large cap");
+assert.equal("watchlist_add" in started, false);
+const companyId = `SSE:${original.ticker}`;
+const advanced = discoveryResultSchema.parse(
+  await rpc({
+    action: "advance",
+    session_state: started.session_state,
+    company_id: companyId,
+  }),
+);
+assert.equal(advanced.status, started.total_rounds === 1 ? "session_completed" : "ready");
+assert.equal("watchlist_add" in advanced, false);
+const invalid = discoveryResultSchema.parse(
+  await rpc({
+    action: "advance",
+    session_state: started.session_state,
+    company_id: companyId,
+    choice: "add",
+  }),
+);
+assert.equal(invalid.status, "invalid_input", "Neutral discovery must reject legacy choices");
+assert.deepEqual((await findApp(access, app.id)).data, beforeDiscovery);
+await rpc({ key: "discovery-watchlist", value: [companyId] }, "storage.write");
+assert.deepEqual(await rpc({ key: "discovery-watchlist" }, "storage.read"), [companyId]);
+await assert.rejects(rpc({}, "finance.company-cards"), /permission/);
+await assert.rejects(rpc({}, "finance.company-discovery"), /permission/);
 await assert.rejects(rpc({}, "finance.calculate"), /permission/);
 await assert.rejects(rpc({}, "plugin.call"), /permission/);
 await assert.rejects(
   rpc({ key: "_companyCards", value: {} }, "storage.write"),
   /reserved|server|protected/i,
 );
-console.log("PASS scoped company RPC, watchlist persistence and forbidden capability/state writes");
+console.log(
+  "PASS neutral CSV discovery, explicit watchlist persistence and forbidden capability/state writes",
+);
 const broken = structuredClone(bundle);
 broken.files["src/App.tsx"] = "export default function App() { return <Broken";
 const failed = await makeRelease(spec, broken, "model", "Intentional failed update", record);
@@ -162,6 +261,7 @@ const latest = await findApp(access, saved.id);
 assert.equal(await applyRelease(latest, failed), false);
 assert.equal(latest.current?.id, release.id);
 assert.deepEqual(latest.data, (await findApp(access, saved.id)).data);
+assert.deepEqual(latest.conversation, saved.conversation);
 console.log(
   "PASS failed project verification retains accepted release, conversation and saved data",
 );

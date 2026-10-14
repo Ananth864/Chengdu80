@@ -13,15 +13,22 @@ import history from "./protocols/history.md?raw";
 import matching from "./protocols/matching.md?raw";
 import frontendDesign from "./protocols/frontend-design.md?raw";
 import { financialExpertInstructions, financialSkills } from "./financial-expert";
-import { buildPlanSchema, type BusinessCapability, type BuildRecord } from "../lib/build-plan";
+import {
+  buildPlanSchema,
+  type BuildPlan,
+  type BusinessCapability,
+  type BuildRecord,
+} from "../lib/build-plan";
 import type { AppBundle } from "../lib/contracts";
 import { sseACompanies } from "./providers";
 import {
+  type Company,
   type CompanyLookupInput,
   type LiveCompany,
   rankCompanyMatches,
 } from "../lib/company-table";
-import { capabilityCatalogInstructions } from "../lib/capability-catalog";
+import { capabilityCatalogInstructions, capabilityDefinitions } from "../lib/capability-catalog";
+import { suppliedCompanyUniverse, suppliedCompanyUniverseVersion } from "./company-universe";
 
 export const agentProtocols = {
   communication,
@@ -31,24 +38,16 @@ export const agentProtocols = {
   "capability-catalog": capabilityCatalogInstructions,
 };
 export { frontendDesign };
-const capabilityProtocols: Record<BusinessCapability, string> = {
-  "market-research": research,
-  "historical-analysis": history,
-  "price-target": history,
-  "risk-assessment": matching,
-  "industry-preference": matching,
-  "risk-industry-matching": matching,
-  "company-cards": matching,
-};
-export const capabilityDependencies: Record<BusinessCapability, BusinessCapability[]> = {
-  "market-research": [],
-  "historical-analysis": ["price-target"],
-  "price-target": ["historical-analysis"],
-  "risk-assessment": ["risk-industry-matching"],
-  "industry-preference": ["risk-industry-matching"],
-  "risk-industry-matching": ["risk-assessment", "industry-preference"],
-  "company-cards": ["risk-industry-matching"],
-};
+const protocols = { research, history, matching };
+const capabilityProtocols = Object.fromEntries(
+  Object.entries(capabilityDefinitions).map(([id, definition]) => [
+    id,
+    protocols[definition.protocol],
+  ]),
+) as Record<BusinessCapability, string>;
+export const capabilityDependencies = Object.fromEntries(
+  Object.entries(capabilityDefinitions).map(([id, definition]) => [id, definition.dependencies]),
+) as Record<BusinessCapability, BusinessCapability[]>;
 export function resolveCapabilities(selected: BusinessCapability[]) {
   const resolved = new Set(selected);
   for (const id of resolved)
@@ -58,7 +57,91 @@ export function resolveCapabilities(selected: BusinessCapability[]) {
 export function selectedProtocols(selected: BusinessCapability[]) {
   return [...new Set(resolveCapabilities(selected).map((id) => capabilityProtocols[id]))];
 }
+
+// Workflow approval is asked once per plan. A model re-emitting the approved
+// plan differs cosmetically (field order, list order, equivalent requirements
+// wording); those proceed under the recorded approval, while material changes
+// require a newly approved proposal.
+const requirementsSimilarityFloor = 0.6;
+
+export type PlanApprovalMismatch =
+  | "mode"
+  | "capabilities"
+  | "companyQueries"
+  | "themeOverride"
+  | "cardMetrics"
+  | "requirements";
+
+function sameSet(left: string[], right: string[]) {
+  const a = [...new Set(left)].sort();
+  const b = [...new Set(right)].sort();
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+// English words plus individual CJK characters, so Chinese requirement texts
+// compare by character overlap instead of as one unsplit token.
+function requirementTokens(text: string) {
+  return new Set(text.toLowerCase().match(/[a-z0-9]+|[\u4e00-\u9fff]/g) ?? []);
+}
+
+function requirementsSimilarity(approved: string, declared: string) {
+  const left = requirementTokens(approved);
+  const right = requirementTokens(declared);
+  if (!left.size || !right.size) return approved.trim() === declared.trim() ? 1 : 0;
+  let shared = 0;
+  for (const token of left) if (right.has(token)) shared += 1;
+  return shared / (left.size + right.size - shared);
+}
+
+export function planMatchesApproval(
+  approved: BuildPlan,
+  declared: BuildPlan,
+): PlanApprovalMismatch | undefined {
+  if (approved.mode !== declared.mode) return "mode";
+  // Capability order is immaterial: selection and explicit dependencies
+  // resolve to the same dependency-closed set. Company queries likewise
+  // resolve to the same companies regardless of ordering.
+  if (
+    JSON.stringify(resolveCapabilities(approved.capabilities)) !==
+    JSON.stringify(resolveCapabilities(declared.capabilities))
+  )
+    return "capabilities";
+  if (!sameSet(approved.companyQueries, declared.companyQueries)) return "companyQueries";
+  if ((approved.themeOverride ?? null) !== (declared.themeOverride ?? null)) return "themeOverride";
+  // Metric selection is a unique set, not an ordered list.
+  if (!sameSet(approved.cardMetrics ?? [], declared.cardMetrics ?? [])) return "cardMetrics";
+  if (
+    requirementsSimilarity(approved.requirements, declared.requirements) <
+    requirementsSimilarityFloor
+  )
+    return "requirements";
+  return undefined;
+}
+export const fixtureCompanies: Company[] = [
+  {
+    name: "Demo Technology Large",
+    ticker: "DEMO001",
+    industry: "Technology",
+    marketCapRmb: 100000000000,
+    size: "large",
+  },
+  {
+    name: "Demo Technology Medium",
+    ticker: "DEMO002",
+    industry: "Technology",
+    marketCapRmb: 10000000000,
+    size: "medium",
+  },
+  {
+    name: "Demo Technology Small",
+    ticker: "DEMO003",
+    industry: "Technology",
+    marketCapRmb: 1000000000,
+    size: "small",
+  },
+];
 export type ManagedCompanyTable =
+  | { available: true; synthetic: true; version: string; companies: Company[] }
   | {
       available: true;
       synthetic: false;
@@ -73,10 +156,17 @@ export type ManagedCompanyTable =
       companies: [];
       reason: string;
     };
-// Company identity comes from the platform's Tushare token (SSE Class A
-// listed shares). App users cannot replace this table, and no synthetic
-// fallback exists: when the feed is unavailable, company lookups fail.
-export async function managedCompanies(): Promise<ManagedCompanyTable> {
+// Fixture identity is retained only for pinned legacy releases; new plans are live-only.
+export async function managedCompanies(
+  mode: "fixture" | "live" = "live",
+): Promise<ManagedCompanyTable> {
+  if (mode === "fixture")
+    return {
+      version: "synthetic-companies-v1",
+      companies: fixtureCompanies,
+      available: true,
+      synthetic: true,
+    };
   const table = await sseACompanies();
   if (!table.available)
     return {
@@ -128,12 +218,20 @@ export async function prepareBuild(
   turnId: string,
   revision: number,
   additionalBlockers: string[] = [],
-): Promise<BuildRecord> {
+): Promise<BuildRecord & { plan: BuildPlan; readiness: "live" | "blocked" }> {
   const plan = buildPlanSchema.parse(raw);
   const resolvedCapabilities = resolveCapabilities(plan.capabilities);
-  const table = await managedCompanies();
+  const table = {
+    available: true as const,
+    synthetic: false,
+    version: suppliedCompanyUniverseVersion,
+    companies: suppliedCompanyUniverse().map((company) => ({
+      ticker: `${company.ticker}.SH`,
+      name: company.name,
+      industry: company.industry,
+    })),
+  };
   const blockers: string[] = [...additionalBlockers];
-  if (!table.available) blockers.push(`Live company lookup is unavailable: ${table.reason}`);
   const companyIds: string[] = [];
   for (const query of plan.companyQueries) {
     if (!table.available) continue;
@@ -148,10 +246,22 @@ export async function prepareBuild(
         : `Company is outside the SSE Class A scope: ${query}. Reject this company and propose a different real Shanghai Stock Exchange Class A company instead (lookup_companies); never offer demo or synthetic data.`,
     );
   }
-  if (resolvedCapabilities.includes("historical-analysis") && !plan.companyQueries.length)
-    blockers.push(
-      "Select a supported company for the historical-analysis and price-target package.",
-    );
+  if (
+    resolvedCapabilities.some((id) =>
+      ["historical-analysis", "price-target", "market-research"].includes(id),
+    ) &&
+    !plan.companyQueries.length
+  )
+    blockers.push("Select a supplied-CSV company for the requested financial analysis.");
+  const canonical = new Set(suppliedCompanyUniverse().map((company) => company.ticker));
+  if (
+    resolvedCapabilities.some((id) =>
+      ["historical-analysis", "price-target", "market-research"].includes(id),
+    )
+  )
+    for (const ticker of companyIds)
+      if (!canonical.has(ticker.replace(/\.SH$/, "")))
+        blockers.push(`Company ${ticker} is outside the supplied CSV universe.`);
   const protocolHashes = Object.fromEntries(
     [
       ...Object.entries(agentProtocols),
@@ -162,18 +272,15 @@ export async function prepareBuild(
       ...resolvedCapabilities.map((id) => [id, capabilityProtocols[id]] as const),
     ].map(([id, content]) => [id, hash(content)]),
   );
-  // The build context scopes the shell's industry picker to the confirmed
-  // companies' industries; apps without pinned companies get the full table.
+  // Keep the shell's industry picker on the protected CSV taxonomy.
   const confirmed = new Set(companyIds);
-  const companyIndustries = table.available
-    ? [
-        ...new Set(
-          table.companies
-            .filter((company) => confirmed.size === 0 || confirmed.has(company.ticker))
-            .map((company) => company.industry || "Other"),
-        ),
-      ].sort()
-    : [];
+  const companyIndustries = [
+    ...new Set(
+      suppliedCompanyUniverse()
+        .filter((company) => confirmed.size === 0 || confirmed.has(`${company.ticker}.SH`))
+        .map((company) => company.industry),
+    ),
+  ].sort();
   const record = {
     id: crypto.randomUUID(),
     version: 1 as const,
@@ -186,7 +293,24 @@ export async function prepareBuild(
     companyTableVersion: table.version,
     protocolHashes,
     provider: "tushare" as const,
-    moduleVersions: { companies: companyModuleVersion, starter: financialStarterVersion },
+    moduleVersions: {
+      companies: companyModuleVersion,
+      starter: financialStarterVersion,
+      ...(resolvedCapabilities.includes("risk-assessment") ? { "risk-profile": "v0-demo" } : {}),
+      ...(resolvedCapabilities.includes("industry-preference")
+        ? { "industry-preferences": "v1.4.0" }
+        : {}),
+      ...(resolvedCapabilities.includes("risk-industry-matching")
+        ? { "company-discovery": "v1.3.0" }
+        : {}),
+      ...(resolvedCapabilities.includes("historical-analysis")
+        ? { "finance.historical-analysis": "1.2.0" }
+        : {}),
+      ...(resolvedCapabilities.includes("market-research")
+        ? { "finance.industry-research": "1.2.0" }
+        : {}),
+      ...(resolvedCapabilities.includes("price-target") ? { "finance.price-target": "1.2.0" } : {}),
+    },
     companyIndustries,
     theme: plan.themeOverride ?? "starter-default",
     readiness: blockers.length ? ("blocked" as const) : plan.mode,
@@ -224,7 +348,9 @@ export function validateScopedBundle(bundle: AppBundle, record: BuildRecord) {
   const project = bundle.manifest.schemaVersion === 3;
   const allowed = approvedPermissions(record, project);
   if (project) {
-    if (record.moduleVersions.starter !== financialStarterVersion)
+    if (
+      ![financialStarterVersion, "financial-react-v1"].includes(record.moduleVersions.starter ?? "")
+    )
       throw new Error("The financial starter version changed. Prepare a new build.");
     inspectProjectProtection(bundle, record);
   }
@@ -232,4 +358,10 @@ export function validateScopedBundle(bundle: AppBundle, record: BuildRecord) {
     throw new Error(
       "This build can use only its approved platform modules and app storage. The market-data capability, arbitrary plugins and LLM research are not wired yet.",
     );
+  if (
+    !project &&
+    record.readiness === "fixture" &&
+    !bundle.files["index.html"].includes("Synthetic demo")
+  )
+    throw new Error('Fixture applications must visibly include the label "Synthetic demo".');
 }

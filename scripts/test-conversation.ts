@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import type { Application } from "../apps/web/src/lib/contracts";
 type UIMessage = NonNullable<Application["conversation"]>[number];
-import { compactTranscript } from "../apps/web/src/server/agent";
+import { compactTranscript, readSourceWindow, safeAgentError } from "../apps/web/src/server/agent";
+
+const source = Array.from({ length: 785 }, (_, i) => `line ${i + 1}`).join("\n");
+const firstWindow = readSourceWindow(source);
+assert.equal(firstWindow.content.split("\n").length, 160);
+assert.equal(firstWindow.nextOffset, 161);
+const finalWindow = readSourceWindow(source, 780, 160);
+assert.equal(finalWindow.content, "line 780\nline 781\nline 782\nline 783\nline 784\nline 785");
+assert.equal(finalWindow.nextOffset, undefined);
+assert.throws(() => readSourceWindow(undefined), /does not exist/);
+assert.equal(await safeAgentError(new Error("Request timed out.")), "Request timed out.");
 
 // Discussion turns plus later build/tool traffic must not erase earlier discussion.
 const messages: UIMessage[] = Array.from({ length: 8 }, (_, i) => [

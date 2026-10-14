@@ -131,10 +131,13 @@ const originalFetch = globalThis.fetch;
 let networkCalls = 0;
 try {
   process.env.TUSHARE_TOKEN = "test-token";
-  globalThis.fetch = (async () => {
-    networkCalls++;
-    return new Response(JSON.stringify(sample));
-  }) as typeof fetch;
+  globalThis.fetch = Object.assign(
+    async () => {
+      networkCalls++;
+      return new Response(JSON.stringify(sample));
+    },
+    { preconnect: originalFetch.preconnect },
+  ) satisfies typeof fetch;
   resetSseCompanyCache();
   const first = await sseACompanies();
   assert(first.available);
@@ -143,9 +146,12 @@ try {
   const second = await sseACompanies();
   assert(second.available);
   assert.equal(networkCalls, 1, "the cached table serves repeat lookups without refetching");
-  globalThis.fetch = (async () => {
-    throw new Error("network down");
-  }) as typeof fetch;
+  globalThis.fetch = Object.assign(
+    async () => {
+      throw new Error("network down");
+    },
+    { preconnect: originalFetch.preconnect },
+  ) satisfies typeof fetch;
   const stale = await sseACompanies();
   assert(stale.available);
   assert.equal(stale.companies.length, 11, "a failed refresh falls back to the cached table");
@@ -160,10 +166,13 @@ try {
   assert(unconfigured.reason.includes("TUSHARE_TOKEN"));
   process.env.TUSHARE_TOKEN = "test-token";
   let injectedCalls = 0;
-  const counting = (async () => {
-    injectedCalls++;
-    return new Response(JSON.stringify(sample));
-  }) as typeof fetch;
+  const counting = Object.assign(
+    async () => {
+      injectedCalls++;
+      return new Response(JSON.stringify(sample));
+    },
+    { preconnect: originalFetch.preconnect },
+  ) satisfies typeof fetch;
   await sseACompanies({ fetch: counting });
   await sseACompanies({ fetch: counting });
   assert.equal(injectedCalls, 2, "an injected fetch bypasses the cache for tests");

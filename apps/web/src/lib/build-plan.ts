@@ -1,15 +1,8 @@
 import { z } from "zod";
 import { metricSelectionSchema } from "./company-capabilities";
-export const businessCapabilities = [
-  "market-research",
-  "historical-analysis",
-  "price-target",
-  "risk-assessment",
-  "industry-preference",
-  "risk-industry-matching",
-  "company-cards",
-] as const;
-export type BusinessCapability = (typeof businessCapabilities)[number];
+import { businessCapabilities, type BusinessCapability } from "./capability-catalog";
+
+export { businessCapabilities, type BusinessCapability } from "./capability-catalog";
 export const buildPlanSchema = z
   .object({
     requirements: z.string().trim().min(10).max(4000),
@@ -25,8 +18,9 @@ export const buildPlanSchema = z
       .min(1)
       .max(300)
       .nullable()
+      .default(null)
       .describe(
-        "Visual identity for this app when the subject warrants more than the starter default: a short theme name followed by its 4-6 named hex colors, grounded in the confirmed specification. Set it in propose_build and repeat the same value in prepare_build; a recorded override authorizes editing the starter's src/app.css. Null keeps the starter default theme (then src/app.css must not change).",
+        "Visual identity metadata for this app when the subject warrants more than the starter default: a short theme name followed by its 4-6 named hex colors, grounded in the confirmed specification. Set it in propose_build and repeat the same value in prepare_build. Null keeps the starter default theme metadata. The starter's src/app.css is freely editable regardless of this value.",
       ),
     cardMetrics: metricSelectionSchema.optional(),
   })
@@ -39,16 +33,17 @@ export type BuildRecord = {
   turnId: string;
   createdAt: string;
   hash: string;
-  plan: BuildPlan;
+  // Persisted releases may predate the live-only plan schema.
+  plan: Omit<BuildPlan, "mode"> & { mode: "fixture" | "live" };
   resolvedCapabilities: BusinessCapability[];
   companyIds: string[];
-  companyIndustries: string[];
+  companyIndustries?: string[];
   companyTableVersion: string;
   protocolHashes: Record<string, string>;
   provider: "tushare";
   moduleVersions: Record<string, string>;
   theme: string;
-  readiness: "live" | "blocked";
+  readiness: "fixture" | "live" | "blocked";
   blockers: string[];
   artifactHash?: string;
 };

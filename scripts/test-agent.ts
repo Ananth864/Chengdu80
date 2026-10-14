@@ -4,12 +4,12 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer } from "node:http";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, type Browser } from "playwright";
 import { prepareBuild } from "../apps/web/src/server/build-policy";
-import { resetSizedCompanyCache, resetSseCompanyCache } from "../apps/web/src/server/providers";
 import { sourceHash } from "../apps/web/src/server/runtime";
 import type { Application, ProductSpec } from "../apps/web/src/lib/contracts";
 
@@ -35,17 +35,17 @@ const browserErrors: string[] = [];
 const cloudDatabaseRequests: string[] = [];
 const researchSpecification: ProductSpec = {
   name: "Copper Finch",
-  purpose: "Synthetic industry research with clearly unavailable evidence.",
+  purpose: "Historical listed-company industry research with explicit evidence availability.",
   protocol: "portfolio",
-  inputs: ["Selected industry"],
+  inputs: ["Selected company"],
   outputs: ["Industry research", "Evidence availability"],
   outputDetails: {
     "Industry research":
-      "Selected-industry research requires sourced industry evidence; unavailable in this synthetic demo.",
+      "Historical industry revenue and matched-cohort growth for the selected supplied-CSV company; unavailable without provider evidence.",
     "Evidence availability":
       "Show source coverage and missing-evidence reasons from the research response; no invented sources.",
   },
-  constraints: ["Synthetic demo; no invented research"],
+  constraints: ["Live sources required; no invented research"],
 };
 const liveResearchSpecification: ProductSpec = {
   ...researchSpecification,
@@ -61,7 +61,7 @@ const liveResearchSpecification: ProductSpec = {
 const researchPlan = {
   requirements: "Build an industry research app using the supported capability",
   capabilities: ["market-research"],
-  companyQueries: [],
+  companyQueries: ["600000.SH"],
   mode: "live",
   themeOverride: null,
 };
@@ -99,6 +99,7 @@ const fixture = createServer(async (req, res) => {
       for await (const chunk of req) raw += chunk;
       const body = JSON.parse(raw) as { api_name?: string; token?: string };
       assert.equal(body.token, "server-tushare-token");
+      assert(["stock_basic", "daily_basic"].includes(body.api_name ?? ""));
       const payload =
         body.api_name === "stock_basic"
           ? tushareSample
@@ -158,15 +159,15 @@ const fixture = createServer(async (req, res) => {
           arguments: {
             ...researchPlan,
             specification: researchSpecification,
-            summary: "Synthetic industry research for Technology; evidence remains unavailable.",
+            summary:
+              "Historical industry research for a supplied-CSV company; evidence remains unavailable.",
           },
         };
-      text =
-        "I propose a synthetic Copper Finch industry research demo for Technology. Please confirm the plan.";
+      text = "I propose a Copper Finch historical industry research app. Please confirm the plan.";
     } else if (
       automaticApproval &&
       approvalContext.includes(
-        "Synthetic industry research for Technology; evidence remains unavailable.",
+        "Historical industry research for a supplied-CSV company; evidence remains unavailable.",
       )
     ) {
       if (!calls) await new Promise((resolve) => setTimeout(resolve, 4000));
@@ -235,13 +236,13 @@ const fixture = createServer(async (req, res) => {
           arguments: {
             ...researchPlan,
             specification: researchSpecification,
-            summary: "Test a broken synthetic research presentation change.",
+            summary: "Test a broken research presentation change.",
           },
         };
-      text = "Please confirm the synthetic research presentation change before I stage it.";
+      text = "Please confirm the research presentation change before I stage it.";
     } else if (
       automaticApproval &&
-      approvalContext.includes("Test a broken synthetic research presentation change.")
+      approvalContext.includes("Test a broken research presentation change.")
     ) {
       tool = [
         {
@@ -300,12 +301,23 @@ const fixture = createServer(async (req, res) => {
       text = "The changed plan needs a new proposal.";
     } else if (prompt.includes("Change an approved plan field")) {
       const change = prompt.includes("requirements")
-        ? { requirements: "A different synthetic industry research requirement" }
+        ? { requirements: "A different historical industry research requirement" }
         : prompt.includes("themeOverride")
           ? { themeOverride: "Use a dark theme" }
           : { cardMetrics: ["ps"] };
       if (!calls) tool = { name: "prepare_build", arguments: { ...researchPlan, ...change } };
       text = "The changed plan needs a new proposal.";
+    } else if (prompt.includes("Restate the approved plan with minor wording changes")) {
+      if (!calls)
+        tool = {
+          name: "prepare_build",
+          arguments: {
+            ...researchPlan,
+            requirements:
+              "Build an industry research application using the supported capability set",
+          },
+        };
+      text = "The slightly reworded approved plan still builds.";
     } else if (prompt.includes("Start a slow turn")) {
       if (!calls) tool = { name: "list_files", arguments: {} };
       else await new Promise((resolve) => setTimeout(resolve, 1600));
@@ -589,17 +601,17 @@ try {
     .waitFor();
   await page.getByRole("heading", { name: "Agent fixture site", exact: true }).waitFor();
   const dataBefore = (await appById(id)).data;
-  const noProposal = await turn(id, "Prepare without a proposal for a synthetic demo.");
+  const noProposal = await turn(id, "Prepare without a proposal for a research app.");
   assert(noProposal.ok);
   assert((await noProposal.text()).includes("Call propose_build and end the turn first"));
   assert.equal((await appById(id)).buildRecords?.length ?? 0, 0);
   await page
     .getByRole("textbox", { name: "Message the AI" })
-    .fill("Build the Copper Finch synthetic industry research demo now.");
+    .fill("Build the Copper Finch historical industry research app now.");
   await page.getByRole("textbox", { name: "Message the AI" }).press("Enter");
   await page
     .getByText(
-      "I propose a synthetic Copper Finch industry research demo for Technology. Please confirm the plan.",
+      "I propose a Copper Finch historical industry research app. Please confirm the plan.",
       { exact: true },
     )
     .waitFor();
@@ -642,7 +654,7 @@ try {
   const workflowNodes = page.getByRole("region", { name: "Workflow nodes by kind", exact: true });
   for (const label of ["Information used", "Steps the app takes", "What you get"])
     await workflowNodes.getByText(label, { exact: false }).first().waitFor();
-  await workflowNodes.getByRole("button", { name: "Selected industry", exact: true }).waitFor();
+  await workflowNodes.getByRole("button", { name: "Selected company", exact: true }).waitFor();
   for (const output of researchSpecification.outputs)
     await workflowNodes.getByRole("button", { name: output, exact: true }).waitFor();
   for (const output of researchSpecification.outputs) {
@@ -753,7 +765,7 @@ try {
   assert.equal(built.current.id, staged.preview.id);
   assert.equal(built.preview, null);
   assert.deepEqual(built.current.spec, researchSpecification);
-  assert.deepEqual(built.current.spec.inputs, ["Selected industry"]);
+  assert.deepEqual(built.current.spec.inputs, ["Selected company"]);
   assert.deepEqual(built.current.spec.outputs, ["Industry research", "Evidence availability"]);
   assert.deepEqual(Object.keys(built.current.spec.outputDetails ?? {}), built.current.spec.outputs);
   assert.equal(new Set(Object.values(built.current.spec.outputDetails ?? {})).size, 2);
@@ -814,11 +826,15 @@ try {
   assert(
     builderInstructions.includes("Related catalog IDs are requirement references, not aliases"),
   );
-  assert(builderInstructions.includes("verified_endpoints"));
+  assert(builderInstructions.includes("1.9.0"));
+  assert(builderInstructions.includes("finance.historical-analysis"));
+  assert(builderInstructions.includes("finance.industry-research"));
+  assert(builderInstructions.includes("finance.price-target"));
+  assert(builderInstructions.includes("matched-cohort"));
   assert(builderInstructions.includes("Ordinary forms, navigation, uploads"));
   assert(builderInstructions.includes("skills/annual-report-company-metrics.md"));
   assert(
-    !builderInstructions.includes("# General Dashboard Generation"),
+    !builderInstructions.includes("# Dashboard Composition and Display"),
     "Skill bodies load on demand rather than bloating every system prompt",
   );
   assert(
@@ -826,7 +842,7 @@ try {
       request.input.some(
         (item) =>
           item.type === "function_call_output" &&
-          item.output?.includes("# General Dashboard Generation"),
+          item.output?.includes("# Dashboard Composition and Display"),
       ),
     ),
     "Requested skill content reaches the builder through the tool result",
@@ -986,6 +1002,23 @@ try {
     assert.deepEqual(afterPlanChange.buildRecords, beforePlanChanges.buildRecords);
     assert.deepEqual(afterPlanChange.workspace, beforePlanChanges.workspace);
   }
+  const toleratedRewording = await turn(
+    id,
+    "Restate the approved plan with minor wording changes.",
+  );
+  assert(toleratedRewording.ok);
+  assert(
+    !(await toleratedRewording.text()).includes("no longer matches the proposal"),
+    "Minor requirements rewording proceeds under the existing approval",
+  );
+  const afterTolerated = await appById(id);
+  assert(!afterTolerated.buildProposal, "Tolerated rewording builds and clears the proposal");
+  assert.equal(
+    afterTolerated.buildRecords?.length,
+    (beforePlanChanges.buildRecords?.length ?? 0) + 1,
+    "Tolerated rewording records the build",
+  );
+  results.push("Minor plan rewording builds without asking for approval again");
   const liveProposal = await turn(id, "Propose a live research change using actual live data.");
   assert(liveProposal.ok);
   await liveProposal.text();
@@ -1018,7 +1051,7 @@ try {
   await pluginTurn.text();
   const latest = await appById(id);
   assert.equal(latest.current?.id, activeRelease);
-  assert(!requests.at(-1)?.input.some((item) => item.name === "call_plugin"));
+  assert(!requests.at(-1)?.tools?.some((tool) => tool.name === "call_plugin"));
   assert.deepEqual(providerCities, [], "No weather provider call was made");
   assert(built.current.buildRecord?.resolvedCapabilities.includes("market-research"));
   // News stays out of the closure: the platform does not offer news tracking.
@@ -1032,6 +1065,10 @@ try {
   assert(built.current.buildRecord?.protocolHashes["financial-skill:general-dashboard-generation"]);
   assert.equal(built.current.buildRecord?.provider, "tushare");
   assert.equal(built.current.buildRecord?.readiness, "live");
+  assert.equal(built.current.buildRecord?.plan.mode, "live");
+  assert.deepEqual(built.current.buildRecord?.companyIds, ["600000.SH"]);
+  assert.deepEqual(built.current.buildRecord?.resolvedCapabilities, ["market-research"]);
+  assert.equal(built.current.buildRecord?.moduleVersions["finance.industry-research"], "1.2.0");
   const legacy = await fetch(`${base}/api/platform`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -1041,7 +1078,7 @@ try {
   results.push(
     "Scoped build records pin protocols and dependencies; arbitrary plugins and legacy direct builds are blocked",
   );
-  // Seed a scoped module app into the isolated test store. All calls below use actual HTTP RPC.
+  // Legacy fixture RPC compatibility is separate from newly prepared live-only builds.
   await stop();
   const stored = JSON.parse(await readFile(join(dataDir, "apps.json"), "utf8")) as Application[];
   const cardsApp = structuredClone(built);
@@ -1052,25 +1089,7 @@ try {
     "finance.match-companies",
     "finance.company-cards",
   );
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
-    const url = typeof input === "string" ? input : (input as Request).url;
-    if (url === "https://api.tushare.pro") {
-      const raw = typeof init?.body === "string" ? init.body : "{}";
-      const body = JSON.parse(raw) as { api_name?: string };
-      return new Response(
-        JSON.stringify(
-          body.api_name === "stock_basic"
-            ? tushareSample
-            : { code: 0, msg: "", data: { fields: ["ts_code", "total_mv"], items: tushareCaps } },
-        ),
-      );
-    }
-    return realFetch(input as RequestInfo, init);
-  }) as typeof fetch;
-  resetSseCompanyCache();
-  resetSizedCompanyCache();
-  cardsApp.current!.buildRecord = await prepareBuild(
+  const cardsRecord = await prepareBuild(
     {
       requirements: "Daily company cards module",
       capabilities: ["company-cards"],
@@ -1082,9 +1101,33 @@ try {
     "company-module-turn",
     1,
   );
+  assert.equal(cardsRecord.readiness, "live");
+  const { hash: _liveHash, ...legacyPayload } = {
+    ...cardsRecord,
+    plan: { ...cardsRecord.plan, mode: "fixture" as const },
+    readiness: "fixture" as const,
+    companyTableVersion: "synthetic-companies-v1",
+    moduleVersions: { companies: "company-capabilities-v1", starter: "financial-react-v1" },
+  };
+  cardsApp.current!.bundle.files["index.html"] += "<p>Synthetic demo</p>";
+  cardsApp.current!.buildRecord = {
+    ...legacyPayload,
+    hash: createHash("sha256")
+      .update(
+        JSON.stringify(legacyPayload, (_key, item) =>
+          item && typeof item === "object" && !Array.isArray(item)
+            ? Object.fromEntries(
+                Object.keys(item)
+                  .sort()
+                  .map((key) => [key, item[key]]),
+              )
+            : item,
+        ),
+      )
+      .digest("hex"),
+  };
   cardsApp.current!.verification.sourceHash = await sourceHash(cardsApp.current!.bundle);
   cardsApp.current!.buildRecord.artifactHash = cardsApp.current!.verification.sourceHash;
-  globalThis.fetch = realFetch;
   stored.push(cardsApp);
   await writeFile(join(dataDir, "apps.json"), JSON.stringify(stored));
   await start();
@@ -1108,12 +1151,11 @@ try {
     assert.equal(response.ok, expectedOk, JSON.stringify(result));
     return result;
   }
-  const batchInput = { action: "batch", risk: "low", industries: ["银行"] };
+  const batchInput = { action: "batch", risk: "low", industries: ["Technology"] };
   const [batchA, batchB] = await Promise.all([moduleCall(batchInput), moduleCall(batchInput)]);
   assert.deepEqual(batchA, batchB);
   const firstTicker = batchA.companies[0]?.ticker as string;
-  assert(firstTicker, "The live SSE Class A table must supply today's batch");
-  assert(batchA.companies.length >= 2, "Large-cap banks form the eligible pool");
+  assert.equal(firstTicker, "DEMO001", "Only the pinned legacy release uses fixture companies");
   assert.deepEqual(
     batchA.companies[0].metrics.map((metric: any) => metric.id),
     ["ps"],
@@ -1146,7 +1188,7 @@ try {
   });
   assert.equal(unauthorized.status, 400);
   results.push(
-    "Platform company modules enforce capability scope, concurrent daily batches, protected state, pinned metrics and restart persistence",
+    "Pinned legacy fixture company modules enforce capability scope, concurrent daily batches, protected state, pinned metrics and restart persistence",
   );
   // Gallery includes only working apps, supports search, and restores studio selection.
   await page.reload();

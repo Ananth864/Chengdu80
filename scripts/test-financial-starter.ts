@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import { protocols, bundleSchema } from "../apps/web/src/lib/contracts";
 import { prepareBuild, validateScopedBundle } from "../apps/web/src/server/build-policy";
 import {
@@ -7,20 +6,11 @@ import {
   approvedPermissions,
   buildContextPath,
   buildContextSource,
+  financialStarterVersion,
+  protectedProjectFiles,
+  inspectProjectProtection,
 } from "../apps/web/src/lib/financial-starter";
 import { inspectProject } from "../apps/web/src/server/project-runtime";
-import { resetSizedCompanyCache, resetSseCompanyCache } from "../apps/web/src/server/providers";
-
-// prepare_build verifies the live Tushare feed; stub it with the sample payload.
-const tushareSample = JSON.parse(
-  await readFile(new URL("./fixtures/stock-basic-sample.json", import.meta.url), "utf8"),
-);
-const originalFetch = globalThis.fetch;
-process.env.TUSHARE_TOKEN = "test-token";
-globalThis.fetch = (async () =>
-  new Response(JSON.stringify(tushareSample))) as unknown as typeof fetch;
-resetSseCompanyCache();
-resetSizedCompanyCache();
 
 const spec = { ...protocols[0]!.defaultSpec, name: "Company card demo" };
 const record = await prepareBuild(
@@ -48,6 +38,11 @@ for (const filename of [
   "vite.config.ts",
   "tsconfig.json",
   "src/lib/cd80.ts",
+  "src/lib/risk-profile.ts",
+  "src/lib/industry-preference.ts",
+  "src/lib/company-discovery.ts",
+  "src/lib/discovery-contract.ts",
+  "src/lib/financial-results.ts",
   "src/lib/build-context.ts",
   "src/components/ui/button.tsx",
 ]) {
@@ -66,6 +61,10 @@ for (const filename of [
 }
 for (const filename of [
   "src/components/financial-app.tsx",
+  "src/components/financial-analysis.tsx",
+  "src/components/company-discovery.tsx",
+  "src/components/risk-questionnaire.tsx",
+  "src/components/industry-preference.tsx",
   "src/routes/__root.tsx",
   "src/routes/index.tsx",
   "src/App.tsx",
@@ -101,13 +100,54 @@ for (const permission of [
 }
 assert(!bundle.files["src/lib/cd80.ts"]!.includes("tushare"));
 assert(!bundle.files["src/lib/cd80.ts"]!.includes("ai.explain"));
-assert(bundle.files["src/lib/cd80.ts"]!.includes("priceHistory"));
-assert(bundle.files["src/routes/__root.tsx"]!.includes("<FinancialDemo"));
+assert(bundle.files["src/lib/cd80.ts"]!.includes("async financialAnalysis("));
+for (const permission of [
+  "finance.historical-analysis",
+  "finance.industry-research",
+  "finance.price-target",
+])
+  assert(bundle.files["src/lib/cd80.ts"]!.includes(permission));
+assert(!bundle.files["src/lib/cd80.ts"]!.includes("priceHistory"));
+assert(!bundle.files["src/lib/cd80.ts"]!.includes('"finance.research"'));
+assert(bundle.files["src/routes/__root.tsx"]!.includes("<Outlet"));
+assert(!bundle.files["src/routes/__root.tsx"]!.includes("FinancialDemo"));
+assert(bundle.files["src/App.tsx"]!.includes("<FinancialDemo"));
 assert(
   bundle.files["src/components/financial-app.tsx"]!.includes("Live · Shanghai Stock Exchange"),
 );
 assert(bundle.files["src/components/financial-app.tsx"]!.includes("export function FinancialDemo"));
-assert(bundle.files["src/components/financial-app.tsx"]!.includes("@/components/ui/card"));
+assert(!bundle.files["src/components/financial-app.tsx"]!.includes("Synthetic demo"));
+assert(bundle.files["src/components/financial-analysis.tsx"]!.includes("@/components/ui/card"));
+assert(bundle.files["src/components/financial-app.tsx"]!.includes("FinancialAnalysis"));
+assert(
+  bundle.files["src/components/financial-app.tsx"]!.includes(
+    'data-financial-module-version="financial-react-v4"',
+  ),
+);
+assert.equal(record.plan.mode, "live");
+assert.equal(record.moduleVersions.starter, financialStarterVersion);
+assert(buildContextSource(record, spec.name).includes('"mode":"live"'));
+// A replacement presentation need not retain a FinancialModules marker or fixed shell.
+const redesigned = structuredClone(bundle);
+redesigned.files["src/components/financial-app.tsx"] =
+  "export function FinancialDemo() { return <main>Live · Shanghai Stock Exchange</main>; }";
+validateScopedBundle(redesigned, record);
+assert(inspectProject(redesigned, spec, record).every((check) => check.passed));
+
+// Persisted v1 protection/context remain pure compatibility checks, not new fixture builds.
+const legacyRecord = {
+  ...record,
+  plan: { ...record.plan, mode: "fixture" as const },
+  readiness: "fixture" as const,
+  moduleVersions: { ...record.moduleVersions, starter: "financial-react-v1" },
+};
+const legacyBundle = structuredClone(bundle);
+Object.assign(legacyBundle.files, protectedProjectFiles("financial-react-v1"));
+legacyBundle.files[buildContextPath] = buildContextSource(legacyRecord, spec.name);
+inspectProjectProtection(legacyBundle, legacyRecord);
+assert(!legacyBundle.files[buildContextPath]!.includes('"mode"'));
+legacyBundle.files["src/lib/financial-results.ts"] += "\n// changed calculation contract";
+assert.throws(() => inspectProjectProtection(legacyBundle, legacyRecord), /starter/);
 // A themed record stays valid; presentation files no longer need permission to
 // differ — the recorded theme is a descriptor, not a styling gate.
 const themed = await prepareBuild(
@@ -119,7 +159,6 @@ const customized = structuredClone(bundle);
 customized.files[buildContextPath] = buildContextSource(themed, spec.name);
 customized.files["src/app.css"] = ":root { --primary: #9f4d37; }";
 validateScopedBundle(customized, themed);
-globalThis.fetch = originalFetch;
 console.log(
   "PASS React starter, platform-owned SDK/config/shadcn with free presentation redesign, fake-check rejection, market.prices gating and recorded themes",
 );

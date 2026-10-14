@@ -118,37 +118,13 @@ export function decideCompanyCard(
   } else next.dismissed = [...new Set([...next.dismissed, ticker])];
   return next;
 }
-// Card metrics come from the latest daily_basic fundamentals the feed publishes
-// (trailing P/E, P/S and dividend yield); everything else stays honestly
-// unavailable until an approved source supplies it.
-export type CardFundamentals = {
-  peTtm: number | null;
-  psTtm: number | null;
-  dividendYieldTtm: number | null;
-};
-export function companyCardMetrics(
-  fundamentals: CardFundamentals | undefined,
-  selected: CardMetric[] = defaultCardMetrics,
-) {
-  const source: Record<CardMetric, number | null> = {
-    pe: fundamentals?.peTtm ?? null,
-    ps: fundamentals?.psTtm ?? null,
-    dividendYield: fundamentals?.dividendYieldTtm ?? null,
-    revenueGrowth: null,
-    roe: null,
-    interestCoverage: null,
-  };
-  return metricSelectionSchema.parse(selected).map((id) => {
-    const value = source[id];
-    return value === null
-      ? {
-          id,
-          value: null,
-          status: "unavailable" as const,
-          reason: "Not published by the current market feed yet.",
-        }
-      : { id, value, status: "available" as const };
-  });
+export function unavailableCardMetrics(selected = defaultCardMetrics) {
+  return metricSelectionSchema.parse(selected).map((id) => ({
+    id,
+    value: null,
+    status: "unavailable" as const,
+    reason: "Tushare financial fields and approved metric definitions are pending.",
+  }));
 }
 export const companyCardsInputSchema = z.discriminatedUnion("action", [
   matchingInputSchema
