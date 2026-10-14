@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Application, Release } from "../lib/contracts";
 import { disclaimerFooterHtml } from "../lib/disclaimer";
 import { Alert, AlertTitle, AlertDescription } from "@web-starter/ui/components/alert";
+import { Spinner } from "@web-starter/ui/components/spinner";
 import { api } from "../lib/client";
 
 function LegacyAppFrame({ app, release }: { app: Application; release: Release }) {
@@ -112,9 +113,13 @@ function LegacyAppFrame({ app, release }: { app: Application; release: Release }
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {!ready && !error && (
-        <p role="status" className="text-sm text-muted-foreground">
+        <div
+          role="status"
+          className="flex shrink-0 items-center gap-2 border-b bg-muted/40 px-4 py-2 text-sm text-muted-foreground"
+        >
+          <Spinner className="size-3.5" />
           Loading preview…
-        </p>
+        </div>
       )}
       {!ready && error && (
         <Alert>

@@ -7,6 +7,8 @@ import { WorkflowView } from "./design-review";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowUpRight,
+  Check,
+  ChevronRight,
   Eye,
   MoreHorizontal,
   Maximize,
@@ -20,6 +22,14 @@ import {
   X,
 } from "lucide-react";
 import { Button, buttonVariants } from "@web-starter/ui/components/button";
+import { Badge } from "@web-starter/ui/components/badge";
+import { Input } from "@web-starter/ui/components/input";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@web-starter/ui/components/tooltip";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@web-starter/ui/components/collapsible";
 
 import {
   DropdownMenu,
@@ -58,15 +68,10 @@ import {
 } from "@web-starter/ui/components/empty";
 import { Separator } from "@web-starter/ui/components/separator";
 import { Skeleton } from "@web-starter/ui/components/skeleton";
+import { Field, FieldLabel } from "@web-starter/ui/components/field";
 
 import { api, download } from "../lib/client";
-import {
-  bundleSchema,
-  protocolFor,
-  type AppBundle,
-  type Application,
-  type Release,
-} from "../lib/contracts";
+import { protocolFor, type Application, type Release } from "../lib/contracts";
 import { disclaimerText } from "../lib/disclaimer";
 import { AppFrame } from "./app-frame";
 
@@ -106,14 +111,18 @@ export function Studio() {
   const [tab, setTab] = useState<Tab>("preview");
   const [mobilePane, setMobilePane] = useState<"chat" | "preview">("chat");
   const [review, setReview] = useState<"checks" | "spec" | null>(null);
-  const [imported, setImported] = useState<AppBundle | null>(null);
   const [deletingChat, setDeletingChat] = useState<Application | null>(null);
+  const [renamingChat, setRenamingChat] = useState<Application | null>(null);
+  const [renameTitle, setRenameTitle] = useState("");
+  const [discardingPreview, setDiscardingPreview] = useState<Release | null>(null);
+  // Errors scoped to the dialog that caused them, so an import or refresh
+  // failure never leaks into an unrelated delete or rename confirmation.
+  const [dialogError, setDialogError] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [chatKey, setChatKey] = useState("new");
   const [agentBusy, setAgentBusy] = useState(false);
   const [previewRevision, setPreviewRevision] = useState(0);
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
-  const file = useRef<HTMLInputElement>(null);
   const workspace = useRef<HTMLElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
   useEffect(() => {
@@ -215,24 +224,8 @@ export function Studio() {
     }, 2000);
     return () => clearInterval(timer);
   }, [app?.id, reactive]);
-  useEffect(() => {
-    if (reactive || !app || app.chatTitle !== "New chat") return;
-    let stopped = false;
-    let attempts = 0;
-    const timer = setInterval(() => {
-      if (++attempts > 20) {
-        clearInterval(timer);
-        return;
-      }
-      void api<Snapshot>().then((data) => {
-        if (!stopped) setSnapshot(data);
-      });
-    }, 2000);
-    return () => {
-      stopped = true;
-      clearInterval(timer);
-    };
-  }, [app?.id, app?.chatTitle, reactive]);
+  // The title generateChatTitle writes server-side lands through the snapshot
+  // poll above while a conversation is selected; no dedicated title polling.
   useEffect(() => {
     function restoreNavigation() {
       const params = new URLSearchParams(window.location.hash.slice(1));
@@ -241,7 +234,6 @@ export function Studio() {
       setView(params.get("view") === "builds" ? "builds" : "studio");
       setSelected(selectedId);
       setChatKey(selectedId ?? crypto.randomUUID());
-      setImported(null);
       setReview(null);
       setTab("preview");
       setMobilePane("chat");
@@ -257,10 +249,23 @@ export function Studio() {
     setView("builds");
     window.history.pushState(null, "", "/#view=builds");
   }
+  // Leaving an empty conversation removes it instead of littering the sidebar
+  // with abandoned "New chat" rows. A running turn or a finished build keeps
+  // its row; the delete itself is fire-and-forget with an optimistic update.
+  function purgeIfEmpty(target: Application | null) {
+    if (!target || agentBusy || target.agentTurn?.status === "running") return;
+    if (target.chatDeletedAt || target.current || (target.conversation?.length ?? 0) > 0) return;
+    setSnapshot((current) =>
+      current ? { ...current, apps: current.apps.filter((a) => a.id !== target.id) } : current,
+    );
+    void api({ action: "delete-chat", appId: target.id, expectedRevision: target.revision }).catch(
+      () => {},
+    );
+  }
   function select(id: string | null, pane: "chat" | "preview" = "chat") {
     setView("studio");
+    if (selected !== id) purgeIfEmpty(selectedApp);
     setSelected(id);
-    setImported(null);
     setError("");
     setChatKey(id ?? crypto.randomUUID());
     setTab("preview");
@@ -269,7 +274,11 @@ export function Studio() {
     setReview(null);
     window.history.pushState(null, "", id ? `/#app=${id}` : "/");
   }
-  async function run<T>(label: string, task: () => Promise<T>) {
+  async function run<T>(
+    label: string,
+    task: () => Promise<T>,
+    onError?: (message: string) => void,
+  ) {
     if (busy || agentBusy) return;
     setBusy(label);
     setError("");
@@ -277,84 +286,98 @@ export function Studio() {
       return await task();
     } catch (e) {
       const message = e instanceof Error ? e.message : "Operation failed";
-      setError(message);
+      if (onError) onError(message);
+      else setError(message);
     } finally {
       setBusy("");
     }
   }
+  function requestDeleteChat(app: Application) {
+    setDialogError("");
+    setDeletingChat(app);
+  }
   async function confirmDeleteChat() {
     if (!deletingChat) return;
     const target = deletingChat;
-    const result = await run("Deleting chat…", async () => {
-      const result = await api<{ deleted: boolean; retainedBuild: boolean }>({
-        action: "delete-chat",
-        appId: target.id,
-        expectedRevision: target.revision,
-      });
-      setSnapshot((current) =>
-        current
-          ? {
-              ...current,
-              apps: result.retainedBuild
-                ? current.apps.map((app) =>
-                    app.id === target.id
-                      ? {
-                          ...app,
-                          conversation: [],
-                          turns: [],
-                          buildRecords: [],
-                          agentTurn: undefined,
-                          chatTitle: undefined,
-                          chatDeletedAt: new Date().toISOString(),
-                        }
-                      : app,
-                  )
-                : current.apps.filter((app) => app.id !== target.id),
-            }
-          : current,
-      );
-      setDeletingChat(null);
-      if (selected === target.id) select(null);
-      await refresh();
-      return result;
-    });
+    const result = await run(
+      "Deleting chat…",
+      async () => {
+        const result = await api<{ deleted: boolean; retainedBuild: boolean }>({
+          action: "delete-chat",
+          appId: target.id,
+          expectedRevision: target.revision,
+        });
+        setSnapshot((current) =>
+          current
+            ? {
+                ...current,
+                apps: result.retainedBuild
+                  ? current.apps.map((app) =>
+                      app.id === target.id
+                        ? {
+                            ...app,
+                            conversation: [],
+                            turns: [],
+                            buildRecords: [],
+                            agentTurn: undefined,
+                            chatTitle: undefined,
+                            chatDeletedAt: new Date().toISOString(),
+                          }
+                        : app,
+                    )
+                  : current.apps.filter((app) => app.id !== target.id),
+              }
+            : current,
+        );
+        setDeletingChat(null);
+        if (selected === target.id) select(null);
+        await refresh();
+        return result;
+      },
+      setDialogError,
+    );
     if (!result) {
       try {
         const updated = await refresh();
         setDeletingChat(updated.apps.find((app) => app.id === target.id) ?? null);
       } catch (error) {
-        setError(error instanceof Error ? error.message : "Could not refresh the conversation.");
+        setDialogError(
+          error instanceof Error ? error.message : "Could not refresh the conversation.",
+        );
       }
     }
   }
-  async function importFiles(files: FileList | null) {
-    if (!files?.length) return;
-    await run("Reading application source…", async () => {
-      if (
-        Array.from(files).some((f) => f.size > 200000) ||
-        Array.from(files).reduce((n, f) => n + f.size, 0) > 250000
-      )
-        throw new Error("Source upload exceeds 250 KB.");
-      let bundle;
-      if (files.length === 1 && files[0].name.endsWith(".json"))
-        bundle = JSON.parse(await files[0].text());
-      else {
-        const entries = await Promise.all(
-          Array.from(files).map(async (f) => [f.name, await f.text()] as const),
+  function requestRename(app: Application) {
+    setDialogError("");
+    setRenameTitle(app.chatTitle ?? app.name);
+    setRenamingChat(app);
+  }
+  async function confirmRename() {
+    if (!renamingChat) return;
+    const target = renamingChat;
+    const title = renameTitle.trim();
+    if (!title) return;
+    await run(
+      "Renaming chat…",
+      async () => {
+        const updated = await api<Application>({
+          action: "rename-chat",
+          appId: target.id,
+          title,
+        });
+        setSnapshot((current) =>
+          current
+            ? {
+                ...current,
+                apps: current.apps.map((app) => (app.id === updated.id ? updated : app)),
+              }
+            : current,
         );
-        const map = Object.fromEntries(entries);
-        if (!map["cd80.json"])
-          throw new Error(
-            "Select cd80.json, index.html, app.js, calculations.js, and style.css together.",
-          );
-        bundle = {
-          manifest: JSON.parse(map["cd80.json"]),
-          files: Object.fromEntries(entries.filter(([name]) => name !== "cd80.json")),
-        };
-      }
-      setImported(bundleSchema.parse(bundle));
-    });
-    if (file.current) file.current.value = "";
+        setRenamingChat(null);
+        await refresh();
+      },
+      setDialogError,
+    );
   }
   async function approveWorkflow(proposalId: string) {
     if (!app) return;
@@ -363,14 +386,22 @@ export function Studio() {
       await refresh();
     });
   }
-  async function confirmImport() {
-    if (!imported) return;
-    await run("Verifying imported application source…", async () => {
-      const next = await api<Application>({ action: "import", bundle: imported, appId: app?.id });
-      await refresh();
-      select(next.id);
-      setTab("preview");
-    });
+  function requestDiscard(release: Release) {
+    setDialogError("");
+    setDiscardingPreview(release);
+  }
+  async function confirmDiscard() {
+    if (!discardingPreview || !app) return;
+    const target = discardingPreview;
+    await run(
+      "Discarding preview…",
+      async () => {
+        await api({ action: "discard", appId: app.id, releaseId: target.id });
+        await refresh();
+        setDiscardingPreview(null);
+      },
+      setDialogError,
+    );
   }
   return (
     <SidebarProvider
@@ -390,10 +421,14 @@ export function Studio() {
         selected={selected}
         select={select}
         busy={!!busy || agentBusy}
-        openSettings={() => setSettingsOpen(true)}
+        openSettings={() => {
+          setDialogError("");
+          setSettingsOpen(true);
+        }}
         openGallery={openGallery}
         galleryActive={view === "builds"}
-        requestDelete={setDeletingChat}
+        requestDelete={requestDeleteChat}
+        requestRename={requestRename}
       />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <header className="studio-topbar flex min-h-14 shrink-0 flex-wrap items-center justify-between gap-2 px-4 py-2">
@@ -439,7 +474,7 @@ export function Studio() {
                 size="sm"
                 onClick={() =>
                   download(
-                    `${app!.name.replaceAll(/[^a-zA-Z0-9]/g, "-")}.cd80.json`,
+                    `${(app!.chatTitle ?? app!.name).replaceAll(/[^a-zA-Z0-9]/g, "-") || "app"}.cd80.json`,
                     JSON.stringify(release.bundle, null, 2),
                   )
                 }
@@ -447,30 +482,32 @@ export function Studio() {
                 Export source
               </Button>
             )}
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={<Button variant="ghost" size="icon-sm" aria-label="More actions" />}
-              >
-                <MoreHorizontal />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuGroup>
-                  {release && (
-                    <>
-                      <DropdownMenuItem onClick={() => setReview("checks")}>
-                        Release checks
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setReview("spec")}>
-                        Specification
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                  <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
-                    Platform data
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {view === "studio" && release && (
+              <DropdownMenu>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <DropdownMenuTrigger
+                        render={<Button variant="ghost" size="icon-sm" aria-label="More actions" />}
+                      />
+                    }
+                  >
+                    <MoreHorizontal />
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">More actions</TooltipContent>
+                </Tooltip>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem onClick={() => setReview("checks")}>
+                      Release checks
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setReview("spec")}>
+                      Specification
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </header>
         <Separator />
@@ -566,6 +603,7 @@ export function Studio() {
                 }
                 modelName={snapshot?.status.model ?? "AI"}
                 onBusyChange={setAgentBusy}
+                openGallery={openGallery}
                 onWorkspaceCreated={(next) => {
                   setSnapshot((current) =>
                     current ? { ...current, apps: [...current.apps, next] } : current,
@@ -597,54 +635,10 @@ export function Studio() {
                 aria-label="Application workspace"
                 className={cn(
                   "flex min-h-0 min-w-0 flex-1 flex-col [&:fullscreen]:h-svh [&:fullscreen]:bg-background",
-                  app && !imported && tab !== "workflow"
-                    ? "overflow-hidden"
-                    : "overflow-y-auto",
+                  app && tab !== "workflow" ? "overflow-hidden" : "overflow-y-auto",
                 )}
               >
-                <input
-                  ref={file}
-                  type="file"
-                  accept=".json,.html,.js,.css"
-                  multiple
-                  hidden
-                  onChange={(e) => void importFiles(e.target.files)}
-                />
-                {imported ? (
-                  <section className="flex flex-col gap-5 p-4">
-                    <h2>Import {imported.manifest.name}</h2>
-                    <p className="text-sm">
-                      {app ? `Apply imported source to ${app.name}.` : "Create a new application."}
-                    </p>
-                    <Table>
-                      <TableBody>
-                        <TableRow>
-                          <TableCell>Protocol</TableCell>
-                          <TableCell>{imported.manifest.protocol}</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>Files</TableCell>
-                          <TableCell>{Object.keys(imported.files).join(", ")}</TableCell>
-                        </TableRow>
-                        <TableRow>
-                          <TableCell>Capabilities</TableCell>
-                          <TableCell className="whitespace-normal">
-                            {imported.manifest.permissions.join(", ")}
-                          </TableCell>
-                        </TableRow>
-                      </TableBody>
-                    </Table>
-                    <div className="flex flex-wrap gap-2">
-                      <Button disabled={!!busy} onClick={() => void confirmImport()}>
-                        <ShieldCheck data-icon="inline-start" />
-                        Verify imported app
-                      </Button>
-                      <Button variant="ghost" disabled={!!busy} onClick={() => setImported(null)}>
-                        Cancel
-                      </Button>
-                    </div>
-                  </section>
-                ) : app ? (
+                {app ? (
                   <Tabs
                     value={tab}
                     onValueChange={(value) => {
@@ -659,9 +653,14 @@ export function Studio() {
                       <div className="flex items-center gap-2">
                         <TabsList aria-label="Workspace views">
                           {workspaceTabs.map(({ value, label, Icon }) => (
-                            <TabsTrigger value={value} key={value} aria-label={label} title={label}>
-                              <Icon />
-                            </TabsTrigger>
+                            <Tooltip key={value}>
+                              <TooltipTrigger
+                                render={<TabsTrigger value={value} aria-label={label} />}
+                              >
+                                <Icon />
+                              </TooltipTrigger>
+                              <TooltipContent side="bottom">{label}</TooltipContent>
+                            </Tooltip>
                           ))}
                         </TabsList>
                         {workflowNeedsReview && proposal && (
@@ -678,44 +677,73 @@ export function Studio() {
                         )}
                       </div>
                       <div className="flex min-w-0 items-center justify-center gap-2">
-                        <span className="truncate text-sm font-mono" title={app.name}>
-                          {app.name}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Refresh ${tab}`}
-                          title={`Refresh ${tab}`}
-                          disabled={!!busy || (tab === "preview" && !release?.verification.passed)}
-                          onClick={() => {
-                            if (tab === "preview") setPreviewRevision((revision) => revision + 1);
-                            else void run("Refreshing workspace…", refresh);
-                          }}
+                        <span
+                          className="truncate text-sm font-mono"
+                          title={app.chatTitle ?? app.name}
                         >
-                          <RefreshCw />
-                        </Button>
+                          {app.chatTitle ?? app.name}
+                        </span>
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`Refresh ${tab}`}
+                                disabled={
+                                  !!busy || (tab === "preview" && !release?.verification.passed)
+                                }
+                                onClick={() => {
+                                  if (tab === "preview")
+                                    setPreviewRevision((revision) => revision + 1);
+                                  else void run("Refreshing workspace…", refresh);
+                                }}
+                              />
+                            }
+                          >
+                            <RefreshCw />
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom">Refresh {tab}</TooltipContent>
+                        </Tooltip>
                       </div>
                       <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                          title={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-                          onClick={() => void toggleFullscreen()}
-                        >
-                          {fullscreen ? <Minimize /> : <Maximize />}
-                        </Button>
-                        {app.current && (
-                          <a
-                            href={`/app/${app.id}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            aria-label="Open app"
-                            title="Open app"
-                            className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                                onClick={() => void toggleFullscreen()}
+                              />
+                            }
                           >
-                            <ArrowUpRight />
-                          </a>
+                            {fullscreen ? <Minimize /> : <Maximize />}
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom">
+                            {fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                          </TooltipContent>
+                        </Tooltip>
+                        {app.current && (
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <a
+                                  href={`/app/${app.id}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  aria-label="Open app"
+                                  className={buttonVariants({
+                                    variant: "ghost",
+                                    size: "icon-sm",
+                                  })}
+                                />
+                              }
+                            >
+                              <ArrowUpRight />
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom">Open app in a new tab</TooltipContent>
+                          </Tooltip>
                         )}
                       </div>
                     </div>
@@ -754,17 +782,7 @@ export function Studio() {
                             size="sm"
                             variant="ghost"
                             disabled={!!busy || agentBusy}
-                            onClick={() =>
-                              void run("Discarding preview…", async () => {
-                                if (!pendingPreview) return;
-                                await api({
-                                  action: "discard",
-                                  appId: app!.id,
-                                  releaseId: pendingPreview.id,
-                                });
-                                await refresh();
-                              })
-                            }
+                            onClick={() => requestDiscard(pendingPreview)}
                           >
                             Discard
                           </Button>
@@ -816,9 +834,13 @@ export function Studio() {
                       <EmptyMedia variant="icon">
                         <LayoutGrid className="text-primary" />
                       </EmptyMedia>
-                      <EmptyTitle className="studio-display">App preview</EmptyTitle>
+                      <EmptyTitle className="studio-display">
+                        {agentBusy ? "Building your app" : "App preview"}
+                      </EmptyTitle>
                       <EmptyDescription>
-                        Your preview appears here when the build is ready.
+                        {agentBusy
+                          ? "The agent will stage a preview here for you to review and activate."
+                          : "Your preview appears here when the build is ready."}
                       </EmptyDescription>
                     </EmptyHeader>
                     <EmptyContent>
@@ -834,7 +856,10 @@ export function Studio() {
       <Dialog
         open={deletingChat !== null}
         onOpenChange={(open) => {
-          if (!open && !busy) setDeletingChat(null);
+          if (!open && !busy) {
+            setDeletingChat(null);
+            setDialogError("");
+          }
         }}
       >
         <DialogContent showCloseButton={!busy}>
@@ -847,9 +872,9 @@ export function Studio() {
             </DialogDescription>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">This cannot be undone.</p>
-          {error && (
+          {dialogError && (
             <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription>{dialogError}</AlertDescription>
             </Alert>
           )}
           <DialogFooter>
@@ -862,6 +887,87 @@ export function Studio() {
               onClick={() => void confirmDeleteChat()}
             >
               {busy === "Deleting chat…" ? "Deleting…" : "Delete chat"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={renamingChat !== null}
+        onOpenChange={(open) => {
+          if (!open && !busy) {
+            setRenamingChat(null);
+            setDialogError("");
+          }
+        }}
+      >
+        <DialogContent showCloseButton={!busy}>
+          <DialogHeader>
+            <DialogTitle>Rename this chat</DialogTitle>
+            <DialogDescription>
+              The name appears in the conversation list, the workspace toolbar and Built apps.
+            </DialogDescription>
+          </DialogHeader>
+          <Field>
+            <FieldLabel htmlFor="rename-chat-title">Chat name</FieldLabel>
+            <Input
+              id="rename-chat-title"
+              value={renameTitle}
+              maxLength={60}
+              autoFocus
+              onChange={(event) => setRenameTitle(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && renameTitle.trim()) void confirmRename();
+              }}
+            />
+          </Field>
+          {dialogError && (
+            <Alert variant="destructive">
+              <AlertDescription>{dialogError}</AlertDescription>
+            </Alert>
+          )}
+          <DialogFooter>
+            <Button variant="outline" disabled={!!busy} onClick={() => setRenamingChat(null)}>
+              Cancel
+            </Button>
+            <Button disabled={!!busy || !renameTitle.trim()} onClick={() => void confirmRename()}>
+              {busy === "Renaming chat…" ? "Renaming…" : "Save name"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={discardingPreview !== null}
+        onOpenChange={(open) => {
+          if (!open && !busy) {
+            setDiscardingPreview(null);
+            setDialogError("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Discard this staged preview?</DialogTitle>
+            <DialogDescription>
+              {app?.current
+                ? "The staged build the agent prepared will be removed. The accepted app stays live, but you would have to ask for a new build to preview these changes again."
+                : "The staged build the agent prepared will be removed. No app is live yet; you would have to ask for a new build before anything can be activated."}
+            </DialogDescription>
+          </DialogHeader>
+          {dialogError && (
+            <Alert variant="destructive">
+              <AlertDescription>{dialogError}</AlertDescription>
+            </Alert>
+          )}
+          <DialogFooter>
+            <Button variant="outline" disabled={!!busy} onClick={() => setDiscardingPreview(null)}>
+              Keep preview
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!!busy || agentBusy}
+              onClick={() => void confirmDiscard()}
+            >
+              {busy === "Discarding preview…" ? "Discarding…" : "Discard preview"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -897,52 +1003,69 @@ export function Studio() {
                   : "Account mode uses WorkOS identity and Convex storage."}
             </DialogDescription>
           </DialogHeader>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Connection</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow>
-                <TableCell>Model</TableCell>
-                <TableCell className="whitespace-normal">
-                  {snapshot?.status.model} ·{" "}
-                  {snapshot?.status.modelConfigured ? "Key configured" : "Key required"}
-                </TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell>Runtime</TableCell>
-                <TableCell className="whitespace-normal">{snapshot?.status.runtime}</TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell>Market data</TableCell>
-                <TableCell>
-                  {snapshot?.status.tushareConfigured
-                    ? "Tushare token configured · live daily prices"
-                    : "Tushare token not set · live data unavailable"}
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-          <p className="text-sm text-muted-foreground">
-            The platform team manages the company table and the Tushare token. You do not need to
-            upload company data or provide API keys.
+          <p className="text-sm">
+            Generated apps run in an isolated Linux sandbox and are verified before anything goes
+            live. The platform team manages the company table and the market-data token; you never
+            provide API keys.
           </p>
+          <Collapsible>
+            <CollapsibleTrigger
+              render={<Button variant="ghost" size="sm" className="justify-start px-2" />}
+              aria-label="Toggle technical details"
+            >
+              <ChevronRight data-icon="inline-start" />
+              Technical details
+            </CollapsibleTrigger>
+            <CollapsibleContent className="min-w-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Connection</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow>
+                    <TableCell>Model</TableCell>
+                    <TableCell className="whitespace-normal">
+                      {snapshot?.status.model} ·{" "}
+                      {snapshot?.status.modelConfigured ? "Key configured" : "Key required"}
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Sandbox</TableCell>
+                    <TableCell className="whitespace-normal">
+                      {snapshot?.status.runtime ===
+                      "Linux-isolated TanStack projects; legacy workerd compatibility"
+                        ? "Isolated Linux sandbox · legacy formats supported"
+                        : snapshot?.status.runtime}
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Market data</TableCell>
+                    <TableCell>
+                      {snapshot?.status.tushareConfigured
+                        ? "Tushare token configured · live daily prices"
+                        : "Tushare token not set · live data unavailable"}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </CollapsibleContent>
+          </Collapsible>
           <Button
             variant="ghost"
             disabled={!!busy}
-            onClick={() => void run("Refreshing platform status…", refresh)}
+            onClick={() => void run("Refreshing platform status…", refresh, setDialogError)}
           >
             <RefreshCw data-icon="inline-start" />
             Refresh
           </Button>
           {busy && <p role="status">{busy}</p>}
-          {error && (
+          {dialogError && (
             <Alert variant="destructive">
               <AlertTitle>Connection failed</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
+              <AlertDescription>{dialogError}</AlertDescription>
             </Alert>
           )}
         </DialogContent>
@@ -979,7 +1102,12 @@ function Checks({ release }: { release: Release }) {
         <TableBody>
           {release.verification.checks.map((check, index) => (
             <TableRow key={index}>
-              <TableCell>{check.passed ? "Pass" : "Fail"}</TableCell>
+              <TableCell>
+                <Badge variant={check.passed ? "success" : "destructive"}>
+                  {check.passed ? <Check aria-hidden="true" /> : <X aria-hidden="true" />}
+                  {check.passed ? "Pass" : "Fail"}
+                </Badge>
+              </TableCell>
               <TableCell className="whitespace-normal">{check.name}</TableCell>
               <TableCell className="whitespace-normal">{check.detail}</TableCell>
             </TableRow>

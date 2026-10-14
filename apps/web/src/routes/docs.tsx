@@ -11,10 +11,7 @@ export const Route = createFileRoute("/docs")({
 
 function DocumentationLayout() {
   return (
-    <RootProvider
-      theme={{ defaultTheme: "light", enableSystem: false }}
-      search={{ options: { api: "/api/docs-search" } }}
-    >
+    <RootProvider theme={{ enabled: false }} search={{ options: { api: "/api/docs-search" } }}>
       <DocsLayout
         tree={documentationTree}
         nav={{ title: "Linus", url: "/#view=builds" }}

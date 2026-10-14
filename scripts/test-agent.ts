@@ -275,7 +275,10 @@ const fixture = createServer(async (req, res) => {
     } else if (automaticApproval && approvalContext.includes("Request live industry research.")) {
       tool = [
         // Out-of-scope company triggers the merged live gate: blocked validation retains the proposal.
-        { name: "prepare_build", arguments: { ...researchPlan, mode: "live", companyQueries: ["Apple"] } },
+        {
+          name: "prepare_build",
+          arguments: { ...researchPlan, mode: "live", companyQueries: ["Apple"] },
+        },
         {
           name: "write_file",
           arguments: { path: "index.html", content: "<main>Blocked live replacement</main>" },
@@ -990,11 +993,6 @@ try {
   const liveApproval = await approveWorkflow(id);
   assert(liveApproval?.workflowApproval);
   const liveBlocked = await waitForApproval(id, liveApproval.workflowApproval.proposalId);
-  const liveMessages = liveBlocked.conversation?.slice(
-    liveBlocked.conversation.findIndex(
-      (message) => message.id === liveApproval.workflowApproval!.turnId,
-    ),
-  );
   // The transcript elides large prepare_build outputs; the saved record carries the blockers.
   assert(
     liveBlocked.buildRecords
@@ -1024,7 +1022,11 @@ try {
   assert.deepEqual(providerCities, [], "No weather provider call was made");
   assert(built.current.buildRecord?.resolvedCapabilities.includes("market-research"));
   // News stays out of the closure: the platform does not offer news tracking.
-  assert(!built.current.buildRecord?.resolvedCapabilities.includes("news"));
+  assert(
+    !(built.current.buildRecord?.resolvedCapabilities ?? []).some(
+      (capability) => (capability as string) === "news",
+    ),
+  );
   assert(built.current.buildRecord?.protocolHashes.builder);
   assert(built.current.buildRecord?.protocolHashes["financial-expert"]);
   assert(built.current.buildRecord?.protocolHashes["financial-skill:general-dashboard-generation"]);

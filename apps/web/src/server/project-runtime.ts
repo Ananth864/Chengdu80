@@ -69,7 +69,7 @@ export async function verifyProject(
       const expectedLabel = "Live · Shanghai Stock Exchange";
       if (response.status !== 200 || !html.includes(expectedLabel))
         throw new Error(
-          "The compiled app did not render with its live-source label. Keep \"Live · Shanghai Stock Exchange\" visible in the page.",
+          'The compiled app did not render with its live-source label. Keep "Live · Shanghai Stock Exchange" visible in the page.',
         );
       const output = await readProjectFiles(workspace);
       for (const [name, source] of Object.entries(bundle.files))

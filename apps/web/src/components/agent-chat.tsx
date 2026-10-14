@@ -20,7 +20,13 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@web-starter/ui/components/collapsible";
-import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from "@web-starter/ui/components/empty";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@web-starter/ui/components/empty";
 import { Field, FieldLabel } from "@web-starter/ui/components/field";
 import {
   InputGroup,
@@ -69,6 +75,7 @@ type AgentChatProps = {
   onWorkspaceCreated: (app: Application) => void;
   onFinish: () => Promise<void> | void;
   onBusyChange?: (busy: boolean) => void;
+  openGallery?: () => void;
 };
 
 type Part = UIMessage["parts"][number];
@@ -462,27 +469,47 @@ export function AgentChat(props: AgentChatProps) {
             </MessageScroller>
           </MessageScrollerProvider>
         ) : (
-          <Empty className="h-full">
-            <EmptyHeader>
+          <Empty className="h-full items-start justify-center text-left">
+            <EmptyHeader className="items-start text-left">
               <EmptyTitle>
                 {props.app ? "Continue with this app" : "What would you like to research?"}
               </EmptyTitle>
+              {!props.app && (
+                <EmptyDescription>
+                  Describe a financial app. The agent scopes it, plans the build with you, verifies
+                  the source, and stages a live-data preview you approve. Finished apps land in
+                  Built apps.
+                </EmptyDescription>
+              )}
             </EmptyHeader>
             {!props.app && (
-              <EmptyContent>
+              <EmptyContent className="items-start">
                 {[
                   "Build an industry research app for Shanghai-listed banks",
                   "Build a daily company-card app for Shanghai-listed stocks",
+                  "Compare a Shanghai-listed bank against its industry peers",
                 ].map((example) => (
                   <Button
                     key={example}
                     variant="outline"
+                    className="h-auto min-h-10 w-full justify-start whitespace-normal text-left"
                     disabled={props.disabled || chat.isLoading}
                     onClick={() => setPrompt(example)}
                   >
                     {example}
                   </Button>
                 ))}
+                {props.openGallery && (
+                  <Button
+                    variant="link"
+                    className="h-auto justify-start p-0"
+                    disabled={props.disabled}
+                    onClick={props.openGallery}
+                  >
+                    See built apps
+                    <ChevronRight data-icon="inline-end" />
+                  </Button>
+                )}
               </EmptyContent>
             )}
           </Empty>

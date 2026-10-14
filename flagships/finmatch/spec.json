@@ -1,0 +1,30 @@
+{
+  "name": "FinMatch",
+  "purpose": "Gamified watchlist discovery over a bundled SSE-style sample universe: a seven-question behavioural match selects a company-size pool, industry picks narrow it, a transparent value screen (positive P/E at or below a ceiling and dividend yield at or above a floor) filters it with the platform's screening contract, and the surviving companies are dealt as swipe cards to keep or fold.",
+  "protocol": "screening",
+  "inputs": [
+    "Seven behavioural questionnaire answers (low / medium / high each)",
+    "Industry selection across the five bundled industries (none means all)",
+    "Maximum P/E and minimum dividend yield for the value screen",
+    "Per-card keep or fold decisions"
+  ],
+  "outputs": [
+    "Value screen outcome",
+    "Dealt company cards",
+    "Session watchlist",
+    "Metric chooser with education"
+  ],
+  "outputDetails": {
+    "Value screen outcome": "Live counts of universe companies passing the screen, excluded for missing numbers, and remaining in the size-and-industry pool, computed with the same rules as the verified screening calculation; missing P/E or yield excludes rather than defaulting to zero.",
+    "Dealt company cards": "Up to five cards per round in random order, each showing name, ticker, industry, size, market cap and the chosen metrics with industry fixture medians; every metric value is a deterministic local fixture and is labelled as one.",
+    "Session watchlist": "Kept companies with their selected metrics. The sandboxed preview has no durable storage of its own, so keeps live for the session and the interface says so; shared platform storage is used automatically when the platform grants capability access.",
+    "Metric chooser with education": "Toggles for which of the six fixture metrics (P/E, P/S, dividend yield, revenue growth, ROE, interest coverage) appear on cards and in the watchlist, plus a plain-language guide to each metric's meaning, basis and comparison limits."
+  },
+  "constraints": [
+    "Every metric value is a labelled deterministic fixture, never presented as a market observation",
+    "Random card order is not a financial ranking and the risk band never claims investment suitability",
+    "Missing fundamentals exclude a company from the screen and are shown as unavailable, never as zero",
+    "No buy or sell recommendations",
+    "Self-contained in the platform sandbox; no network, imports or embedded credentials"
+  ]
+}

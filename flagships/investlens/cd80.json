@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "name": "InvestLens",
+  "protocol": "portfolio",
+  "permissions": [
+    "market.prices",
+    "finance.calculate",
+    "storage.read",
+    "storage.write",
+    "ai.explain"
+  ]
+}

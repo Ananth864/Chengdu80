@@ -1,0 +1,32 @@
+{
+  "name": "BoardSight",
+  "purpose": "Read one annual report and see the year clearly: revenue, net profit, operating cash flow, total assets, total liabilities and net margin for the current and prior year, each with its source line one click away, alongside a strategy-contract view of the price path over the same window so the reported story and what the market paid can be checked side by side.",
+  "protocol": "strategy",
+  "inputs": [
+    "Report text pasted from one annual report (income statement and balance sheet rows with both comparative year columns)",
+    "Financial year of the report when it is not detectable from the text",
+    "Company name for the workspace",
+    "Manual figure assignment when a metric row is ambiguous"
+  ],
+  "outputs": [
+    "Six metric cards with year-over-year deltas",
+    "The year at a glance bars",
+    "What changed ledger",
+    "What the market paid panel",
+    "Evidence citations for every figure"
+  ],
+  "outputDetails": {
+    "Six metric cards with year-over-year deltas": "Current-year value with prior-year comparison; percentage change only when the prior value is positive, margin change in percentage points; unavailable when no sourced pair exists — never estimated or defaulted.",
+    "The year at a glance bars": "Current and prior year revenue and net profit on one shared scale, prior year shown as presented in the same report.",
+    "What changed ledger": "Plain-language increases and decreases for revenue, net profit and operating cash flow computed from workspace figures, with the calculation disclosed.",
+    "What the market paid panel": "Gross return, net return after a disclosed two-transaction fee approximation, and maximum drawdown computed with the strategy contract on a deterministic sample price series, or on the platform's shared series when capability access is granted. Historical sample only, never a forecast.",
+    "Evidence citations for every figure": "Each figure carries a tag opening the exact source line with candidate numbers; assignments can be corrected manually and the basis is stated. The fictional example workspace is labelled as fictional."
+  },
+  "constraints": [
+    "Figures without a source stay unavailable; missing or ambiguous values are never estimated",
+    "Both years come from the pasted report; prior-year figures are shown as presented there",
+    "Historical results only; no forecast, look-ahead or predictive claim",
+    "Fee approximation disclosed wherever net return is shown",
+    "Self-contained in the platform sandbox; no network, imports or embedded credentials"
+  ]
+}

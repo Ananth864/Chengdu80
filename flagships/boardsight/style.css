@@ -1,0 +1,545 @@
+/* BoardSight — the annual report as a printed statement.
+ * Bond-white paper, ink rules, double-line statement headers, tabular
+ * monospaced figures. Signature: the evidence tags [p.3 · row 12] that open
+ * the exact source line behind every figure. */
+:root {
+  --ground: #eceeea;
+  --sheet: #ffffff;
+  --sheet-2: #f7f7f3;
+  --ink: #14181c;
+  --dim: #5c646b;
+  --faint: #9a9f9c;
+  --rule: #d9d9d2;
+  --rule-2: #b9bcb2;
+  --audit: #0e5a3c;
+  --audit-soft: rgba(14, 90, 60, 0.08);
+  --flag: #a03a2e;
+  --flag-soft: rgba(160, 58, 46, 0.08);
+  --tag: #33475b;
+  --tag-soft: rgba(51, 71, 91, 0.08);
+  --serif: Georgia, "Times New Roman", serif;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font: 15px/1.55 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+button {
+  font: inherit;
+  cursor: pointer;
+  color: inherit;
+}
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+:focus-visible {
+  outline: 2.5px solid var(--tag);
+  outline-offset: 2px;
+}
+
+/* ---------- masthead ---------- */
+header.mast {
+  background: var(--sheet);
+  border-bottom: 3px double var(--ink);
+}
+.mast-in {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font: 600 22px/1 var(--serif);
+  letter-spacing: -0.4px;
+}
+.logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: var(--ink);
+  color: var(--sheet);
+  font: 700 14px var(--mono);
+  border-radius: 2px;
+}
+.mast-note {
+  font: 700 10.5px var(--sans);
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--audit);
+  border: 1px solid var(--audit);
+  border-radius: 2px;
+  padding: 6px 10px;
+  background: var(--audit-soft);
+}
+.mast-note.dim {
+  color: var(--dim);
+  border-color: var(--rule-2);
+  background: none;
+}
+
+/* ---------- hero ---------- */
+main {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 30px 24px 48px;
+}
+.top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.eyebrow {
+  font: 700 10.5px var(--sans);
+  letter-spacing: 2.2px;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+h1 {
+  font: 500 40px/1.08 var(--serif);
+  letter-spacing: -1.2px;
+  margin: 10px 0 8px;
+  max-width: 640px;
+}
+h1 em {
+  font-style: italic;
+  color: var(--audit);
+}
+.sub {
+  color: var(--dim);
+  margin: 0;
+  max-width: 560px;
+}
+.toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 18px 0 22px;
+}
+.company {
+  border: 1px solid var(--rule-2);
+  background: var(--sheet);
+  padding: 9px 13px;
+  font: 600 14px var(--sans);
+  min-width: 200px;
+}
+.period {
+  border: 1px solid var(--ink);
+  background: var(--sheet);
+  padding: 9px 13px;
+  font: 700 13px var(--mono);
+}
+.btn {
+  border: 1px solid var(--ink);
+  background: var(--sheet);
+  padding: 10px 15px;
+  font: 600 13px var(--sans);
+}
+.btn:hover {
+  background: var(--sheet-2);
+}
+.btn.primary {
+  background: var(--ink);
+  color: var(--sheet);
+}
+.btn.primary:hover {
+  background: var(--tag);
+  border-color: var(--tag);
+}
+
+/* ---------- notices ---------- */
+.banner {
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--tag);
+  padding: 12px 16px;
+  font-size: 13px;
+  margin: 0 0 20px;
+  color: var(--dim);
+}
+.banner b {
+  color: var(--ink);
+}
+.banner.demo {
+  border-left-color: var(--audit);
+  background: var(--audit-soft);
+}
+.banner b.demo-k {
+  color: var(--audit);
+}
+
+/* ---------- statement cards ---------- */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.card {
+  background: var(--sheet);
+  border: 1px solid var(--rule-2);
+  padding: 0 20px 18px;
+}
+.card .head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 3px double var(--ink);
+  margin: 0 -20px 14px;
+  padding: 14px 20px 10px;
+  font: 700 12px var(--sans);
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.card .value {
+  font: 600 33px/1 var(--mono);
+  letter-spacing: -1px;
+  margin: 12px 0 10px;
+  font-variant-numeric: tabular-nums;
+}
+.card .value.na {
+  color: var(--faint);
+  font-size: 22px;
+  font-weight: 400;
+}
+.delta {
+  display: inline-block;
+  font: 700 12px var(--mono);
+  padding: 5px 9px;
+  border-radius: 2px;
+  background: var(--audit-soft);
+  color: var(--audit);
+  font-variant-numeric: tabular-nums;
+}
+.delta.down {
+  background: var(--flag-soft);
+  color: var(--flag);
+}
+.delta.flat {
+  background: var(--sheet-2);
+  color: var(--dim);
+}
+.prior {
+  font-size: 12px;
+  color: var(--dim);
+  margin: 12px 0 8px;
+  font-variant-numeric: tabular-nums;
+}
+.prior b {
+  font-family: var(--mono);
+  color: var(--ink);
+}
+.ev {
+  border: 0;
+  background: var(--tag-soft);
+  color: var(--tag);
+  font: 700 11px var(--mono);
+  padding: 3px 8px;
+  border-radius: 2px;
+  border-bottom: 1.5px solid var(--tag);
+}
+.ev:hover {
+  background: var(--tag);
+  color: var(--sheet);
+}
+.card .info {
+  width: 20px;
+  height: 20px;
+  border-radius: 2px;
+  border: 1px solid var(--rule-2);
+  background: var(--sheet-2);
+  font: 700 11px/18px var(--sans);
+  text-align: center;
+  padding: 0;
+  color: var(--dim);
+  flex: none;
+}
+
+/* ---------- bottom panels ---------- */
+.bottom {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 16px;
+  margin-top: 20px;
+}
+.panel {
+  background: var(--sheet);
+  border: 1px solid var(--rule-2);
+  padding: 0 20px 18px;
+}
+.panel .head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 3px double var(--ink);
+  margin: 0 -20px 14px;
+  padding: 14px 20px 10px;
+}
+.panel .head h2 {
+  font: 700 13px var(--sans);
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  margin: 0;
+}
+.panel .head span {
+  font: 600 11px var(--mono);
+  color: var(--dim);
+}
+.chart-row {
+  margin: 18px 0;
+}
+.chart-row .lab {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--dim);
+  margin-bottom: 5px;
+  font-variant-numeric: tabular-nums;
+}
+.chart-row .lab b {
+  font-family: var(--mono);
+  color: var(--ink);
+}
+.bar {
+  height: 16px;
+  border-radius: 1px;
+  margin: 0 0 6px;
+}
+.legend {
+  display: flex;
+  gap: 18px;
+  font-size: 11.5px;
+  color: var(--dim);
+  margin-top: 14px;
+}
+.legend i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 6px;
+  border-radius: 1px;
+}
+.change {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+.change:last-child {
+  border-bottom: 0;
+}
+.change b {
+  font-family: var(--mono);
+}
+.change .up {
+  color: var(--audit);
+}
+.change .down {
+  color: var(--flag);
+}
+.change .why {
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+/* market check (protocol view) */
+.market svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.market .grid-l {
+  stroke: var(--rule);
+  stroke-width: 1;
+}
+.market .axis {
+  fill: var(--dim);
+  font: 10.5px var(--mono);
+}
+.market .line {
+  fill: none;
+  stroke: var(--tag);
+  stroke-width: 2;
+}
+.market .area {
+  fill: var(--tag-soft);
+}
+.mk-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid var(--rule);
+  margin-top: 14px;
+}
+.mk-stats div {
+  padding: 11px 13px;
+  border-right: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+.mk-stats .k {
+  font: 700 10px var(--sans);
+  letter-spacing: 1.3px;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.mk-stats .v {
+  font: 600 18px/1.2 var(--mono);
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.mk-stats .v.up {
+  color: var(--audit);
+}
+.mk-stats .v.down {
+  color: var(--flag);
+}
+svg .pt {
+  fill: transparent;
+}
+
+/* ---------- dialogs ---------- */
+dialog {
+  border: 1px solid var(--ink);
+  background: var(--sheet);
+  color: var(--ink);
+  width: min(720px, 92vw);
+  max-height: 85vh;
+  border-radius: 2px;
+  padding: 24px;
+  box-shadow: 8px 8px 0 rgba(20, 24, 28, 0.1);
+}
+dialog::backdrop {
+  background: rgba(20, 24, 28, 0.42);
+}
+dialog h3 {
+  font: 500 22px var(--serif);
+  margin: 0 0 6px;
+  letter-spacing: -0.4px;
+}
+dialog .sec {
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--dim);
+}
+dialog .sec b {
+  color: var(--ink);
+  display: block;
+  font: 700 10.5px var(--sans);
+  letter-spacing: 1.3px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+dialog .x {
+  float: right;
+  border: 1px solid var(--rule-2);
+  background: var(--sheet-2);
+  padding: 6px 11px;
+  border-radius: 2px;
+}
+dialog .go {
+  margin-top: 14px;
+  background: var(--ink);
+  color: var(--sheet);
+  border: 0;
+  padding: 9px 16px;
+}
+textarea {
+  width: 100%;
+  min-height: 150px;
+  border: 1px solid var(--rule-2);
+  background: var(--sheet-2);
+  padding: 11px;
+  font: 12.5px/1.6 var(--mono);
+  border-radius: 2px;
+  resize: vertical;
+}
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--sheet-2);
+  border-left: 3px solid var(--tag);
+  padding: 12px 14px;
+  font: 12px/1.7 var(--mono);
+  margin: 8px 0;
+}
+.review {
+  border-top: 1px solid var(--rule);
+  padding: 12px 0;
+}
+.review .pick {
+  margin: 3px 4px 3px 0;
+  border: 1px solid var(--rule-2);
+  background: var(--sheet);
+  padding: 5px 10px;
+  font: 700 12px var(--mono);
+}
+.review .pick:hover {
+  border-color: var(--tag);
+  background: var(--tag-soft);
+}
+.fine {
+  font-size: 11.5px;
+  color: var(--dim);
+  line-height: 1.55;
+}
+.error {
+  color: var(--flag);
+  font-size: 12.5px;
+}
+
+footer.pagefoot {
+  margin-top: 34px;
+  color: var(--dim);
+  font-size: 11px;
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  letter-spacing: 0.6px;
+}
+
+@media (max-width: 940px) {
+  .grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .bottom {
+    grid-template-columns: 1fr;
+  }
+  h1 {
+    font-size: 32px;
+  }
+}
+@media (max-width: 600px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  .card .value {
+    font-size: 27px;
+  }
+  .mk-stats {
+    grid-template-columns: 1fr;
+  }
+}

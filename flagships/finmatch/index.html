@@ -1,0 +1,284 @@
+<div class="shell">
+  <header class="top">
+    <div class="brand">
+      <span class="mark">FM</span><b>FinMatch</b><small>discover one card at a time</small>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button role="tab" id="tab-play" aria-selected="true" data-tab="play">Play</button>
+      <button role="tab" id="tab-metrics" aria-selected="false" data-tab="metrics">Metrics</button>
+      <button role="tab" id="tab-watchlist" aria-selected="false" data-tab="watchlist">
+        Watchlist<span class="wl-badge" id="wl-count">0</span>
+      </button>
+      <button role="tab" id="tab-data" aria-selected="false" data-tab="data">Data</button>
+    </nav>
+  </header>
+
+  <div class="notice" id="mode-banner">
+    <b>Sample deck.</b> Companies, industries and sizes describe a bundled 40-stock SSE-style
+    universe. All six financial metrics are <b>deterministic local fixtures</b> — clearly labelled,
+    not market observations, and not tradeable information. No investment advice.
+  </div>
+
+  <!-- ================= PLAY ================= -->
+  <section id="screen-play">
+    <div id="s-home">
+      <h1>Deal your next watchlist</h1>
+      <p class="lead">
+        Answer seven behavioural questions, pick the industries you like, set a plain value screen,
+        then work through a dealt round of up to five company cards. Keep the interesting ones, fold
+        the rest.
+      </p>
+      <div class="card">
+        <div class="stat" id="home-stat">
+          <div>Behavioural match<b>Not started</b></div>
+          <div>Company size pool<b>—</b></div>
+          <div>Value screen<b>PE ≤ 30 · yield ≥ 1%</b></div>
+          <div>Watchlist<b>0 kept</b></div>
+        </div>
+        <div class="divider"></div>
+        <div class="row" style="flex-wrap: wrap">
+          <button class="btn primary" id="go-quiz">Start — behavioural match</button>
+          <button class="btn" id="go-metrics">Choose card metrics</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="s-quiz" class="hidden" aria-live="polite">
+      <div class="q-head">
+        <div>
+          <h2>Behavioural match</h2>
+          <span class="q-count">Question <b id="q-num">1</b> of 7</span>
+        </div>
+        <button class="btn ghost" id="q-quit">Exit</button>
+      </div>
+      <div class="dealt" id="q-dealt" aria-hidden="true">
+        <i class="cur"></i><i></i><i></i><i></i><i></i><i></i><i></i>
+      </div>
+      <div class="card">
+        <div class="q-text" id="q-text">
+          How comfortable are you with the value of an investment moving up and down over time?
+        </div>
+        <div id="q-choices" role="radiogroup" aria-label="Answer"></div>
+        <div class="row spread" style="margin-top: 14px">
+          <button class="btn ghost" id="q-back">Back</button>
+          <button class="btn primary" id="q-next" disabled>Next</button>
+        </div>
+      </div>
+      <p class="fine" style="margin-top: 12px">
+        All questions carry equal weight. Your numeric score and profile label stay hidden — they
+        only select which company-size pool you are shown, never a suitability verdict.
+      </p>
+    </div>
+
+    <div id="s-industries" class="hidden">
+      <h1>Pick your industries</h1>
+      <p class="lead">
+        Choose any, all, or none. Selecting none deals across all five industries in the bundled
+        universe.
+      </p>
+      <div class="card">
+        <div class="chips" id="ind-chips" role="group" aria-label="Industries"></div>
+        <div class="divider"></div>
+        <div class="row spread">
+          <button class="btn ghost" id="ind-clear">Select none</button>
+          <button class="btn primary" id="ind-save">Next — value screen</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="s-screen" class="hidden">
+      <h1>Set a plain value screen</h1>
+      <p class="lead">
+        The deck is filtered with one transparent rule, computed exactly like the platform's
+        screening contract: keep a company when its P/E is positive and at or below the ceiling
+        <b>and</b> its dividend yield is at or above the floor. Companies missing either number are
+        excluded — never counted as zero.
+      </p>
+      <div class="card">
+        <div class="screen-grid">
+          <div class="sliderbox">
+            <label>P/E ceiling (TTM) <b id="pe-out">30×</b></label>
+            <input
+              type="range"
+              id="pe-max"
+              min="5"
+              max="60"
+              step="1"
+              value="30"
+              aria-label="Maximum P/E"
+            />
+            <p class="fine">keeps companies with 0 &lt; P/E ≤ ceiling</p>
+          </div>
+          <div class="sliderbox">
+            <label>Dividend yield floor <b id="dy-out">1.0%</b></label>
+            <input
+              type="range"
+              id="dy-min"
+              min="0"
+              max="6"
+              step="0.1"
+              value="1"
+              aria-label="Minimum dividend yield"
+            />
+            <p class="fine">keeps companies with yield ≥ floor (percentage, not fraction)</p>
+          </div>
+        </div>
+        <div class="screen-out" id="screen-out">
+          <div><b id="sc-pass">0</b><span class="k">pass the screen</span></div>
+          <div><b id="sc-miss">0</b><span class="k">missing a number</span></div>
+          <div><b id="sc-pool">0</b><span class="k">in your size &amp; industry pool</span></div>
+        </div>
+        <div class="divider"></div>
+        <div class="row spread">
+          <button class="btn ghost" id="sc-back">Change industries</button>
+          <button class="btn primary" id="sc-deal">Deal the cards</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="s-game" class="hidden">
+      <div class="roundmeta">
+        <div class="dots" id="g-dots" aria-label="Round progress"></div>
+        <button class="btn ghost" id="g-exit">End round</button>
+      </div>
+      <div class="stage" id="stage" aria-label="Company card. Drag right to keep, left to fold.">
+        <div class="deck-back two"></div>
+        <div class="deck-back"></div>
+        <div class="gcard" id="gcard">
+          <span class="stamp keep" id="stamp-keep">Keep</span>
+          <span class="stamp fold" id="stamp-fold">Fold</span>
+          <div class="cardtop">
+            <div>
+              <div class="cname">Kweichow Moutai 贵州茅台</div>
+              <div class="cticker">600519 · SH</div>
+              <div class="cind">Consumer staples · Large cap</div>
+            </div>
+            <div class="cprice"><b>25.6×</b><span>P/E sample fixture</span></div>
+          </div>
+          <div class="kv"><span>market cap ¥ 1.94万亿</span><span>fixture metrics</span></div>
+          <div class="metrics">
+            <div class="mrow">
+              <div>
+                <div class="mname">P/E (TTM)</div>
+                <div class="mbasis">Trailing twelve months</div>
+              </div>
+              <div class="mval">25.6×</div>
+            </div>
+            <div class="mrow">
+              <div>
+                <div class="mname">Dividend yield</div>
+                <div class="mbasis">Cash actually paid, TTM</div>
+              </div>
+              <div class="mval">2.8%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn fold" id="b-fold">Fold</button>
+        <button class="btn keep" id="b-keep">Keep</button>
+      </div>
+      <p class="fine" style="margin-top: 10px">
+        Drag the card or use the buttons. Keyboard: <b>←</b> fold, <b>→</b> keep. Tap a metric name
+        for what it means. Fixture values only — this is not a ranking.
+      </p>
+    </div>
+
+    <div id="s-end" class="hidden">
+      <h1 id="end-title">Round complete</h1>
+      <div class="card">
+        <div id="end-body"></div>
+        <div class="divider"></div>
+        <div class="row" style="flex-wrap: wrap">
+          <button class="btn primary" id="end-new">Deal another round</button>
+          <button class="btn" id="end-wl">Open my watchlist</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= METRICS ================= -->
+  <section id="screen-metrics" class="hidden">
+    <h1>Card metrics</h1>
+    <p class="lead">
+      Pick which of the six fixture metrics appear on your decision cards and in the watchlist.
+      Company name, ticker, industry and size are always shown. Tap any metric name for what it
+      means.
+    </p>
+    <div class="card"><div id="metric-toggles"></div></div>
+    <div class="row" style="margin-top: 12px">
+      <button class="btn" id="m-all">Show all six</button>
+      <button class="btn ghost" id="m-none">Show none</button>
+    </div>
+    <div class="notice">
+      <b>Every metric is a demo fixture.</b> Bases follow the capability contract: P/E and P/S are
+      trailing-twelve-month; dividend yield is TTM cash paid; revenue growth, ROE and interest
+      coverage use the latest completed financial year. ROE fixtures are labelled simple-average and
+      must not be read as weighted-average.
+    </div>
+  </section>
+
+  <!-- ================= WATCHLIST ================= -->
+  <section id="screen-watchlist" class="hidden">
+    <h1>Watchlist</h1>
+    <p class="lead" id="wl-lead">
+      Companies you kept. The sandboxed preview has no durable storage of its own, so the list lives
+      for this session — when the platform grants storage access to imported builds, keeps persist
+      as shared app data.
+    </p>
+    <div class="card" id="wl-body"></div>
+    <div class="row" style="margin-top: 12px">
+      <button class="btn" id="wl-play">Deal more companies</button>
+      <button class="btn ghost" id="wl-clear">Clear all</button>
+    </div>
+  </section>
+
+  <!-- ================= DATA ================= -->
+  <section id="screen-data" class="hidden">
+    <h1>Where the numbers come from</h1>
+    <p class="lead">
+      This build runs self-contained inside the platform sandbox: no network, no token, no proxy.
+      Everything on the cards is deterministic fixture data generated locally from the bundled
+      universe, and it is labelled as fixtures everywhere it appears.
+    </p>
+    <div class="card">
+      <div class="stat">
+        <div>Universe<b id="d-universe">40</b></div>
+        <div>Industries<b>5</b></div>
+        <div>Metric source<b>Fixtures</b></div>
+        <div>Platform link<b id="d-bridge">checking…</b></div>
+      </div>
+      <div class="divider"></div>
+      <p class="fine" id="d-note">
+        Matching rule: your risk band selects a company-size pool (low → Large cap, medium → Mid
+        cap, high → Small cap), crossed with your industry picks and the value screen. Random order
+        inside a round is not a financial ranking, and none of this establishes investment
+        suitability or predicts returns.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    Bundled SSE-style sample universe · deterministic fixtures · matching rule: risk band → size
+    pool × industries × value screen · session-only watchlist. The platform appends its own advisory
+    disclaimer below.
+  </footer>
+</div>
+
+<dialog id="edu">
+  <span class="tag">Fixture metric</span>
+  <h3 id="edu-title"></h3>
+  <div class="sec">
+    <b>What it means</b>
+    <div id="edu-meaning"></div>
+  </div>
+  <div class="sec">
+    <b>Why it is useful</b>
+    <div id="edu-useful"></div>
+  </div>
+  <div class="sec">
+    <b>Reading the industry comparison</b>
+    <div id="edu-compare"></div>
+  </div>
+  <button class="btn close" id="edu-close">Close</button>
+</dialog>

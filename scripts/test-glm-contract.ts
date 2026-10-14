@@ -139,8 +139,36 @@ try {
   assert.equal(cancelled, true);
   assert.equal(await boundedModelRequest(async () => "complete", 20), "complete");
   console.log("PASS Stalled model calls are cancelled at the deadline; normal calls still finish");
+  {
+    const { createThinkScrubber } = await import("../apps/web/src/server/agent");
+    const block = createThinkScrubber();
+    let blockText = "";
+    const blockEmit = (text: string) => (blockText += text);
+    for (const delta of ["Here is <thi", "nk>hidden reasoning</thi", "nk>the answer."])
+      block.push(delta, blockEmit);
+    block.end(blockEmit);
+    assert.equal(blockText, "Here is the answer.");
+    assert.equal(block.leaked, false);
+    console.log("PASS Streamed think blocks are stripped across chunk boundaries");
+    const stray = createThinkScrubber();
+    let strayText = "";
+    const strayEmit = (text: string) => (strayText += text);
+    for (const delta of ["Good text ", "</thi", "nk>corrupt", "ed tail"])
+      stray.push(delta, strayEmit);
+    stray.end(strayEmit);
+    assert.equal(strayText, "Good text corrupted tail");
+    assert.equal(stray.leaked, true);
+    console.log("PASS A stray closing think marker is removed and the reply is flagged");
+    const unterminated = createThinkScrubber();
+    let openText = "";
+    const openEmit = (text: string) => (openText += text);
+    unterminated.push("visible <think>never closed", openEmit);
+    unterminated.end(openEmit);
+    assert.equal(openText, "visible ");
+    console.log("PASS An unterminated think block suppresses everything after it");
+  }
   console.log(
-    "10 GLM transport/deadline checks passed using local fixtures; live access is a separate check.",
+    "13 GLM transport/deadline checks passed using local fixtures; live access is a separate check.",
   );
 } finally {
   for (const key of [

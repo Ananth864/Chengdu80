@@ -106,9 +106,7 @@ assert(bundle.files["src/routes/__root.tsx"]!.includes("<FinancialDemo"));
 assert(
   bundle.files["src/components/financial-app.tsx"]!.includes("Live · Shanghai Stock Exchange"),
 );
-assert(
-  bundle.files["src/components/financial-app.tsx"]!.includes("export function FinancialDemo"),
-);
+assert(bundle.files["src/components/financial-app.tsx"]!.includes("export function FinancialDemo"));
 assert(bundle.files["src/components/financial-app.tsx"]!.includes("@/components/ui/card"));
 // A themed record stays valid; presentation files no longer need permission to
 // differ — the recorded theme is a descriptor, not a styling gate.

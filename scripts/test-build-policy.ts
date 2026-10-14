@@ -52,7 +52,9 @@ try {
       "removed grounded-chatbot catalog entry does not prohibit",
     ),
   );
-  assert(chatbotSkill.includes("convex database within the application is the sole factual source"));
+  assert(
+    chatbotSkill.includes("convex database within the application is the sole factual source"),
+  );
   assert(chatbotSkill.includes("conversational"));
   assert(chatbotSkill.includes("clarification_needed"));
   assert(chatbotSkill.includes("Do not require a selected company for a greeting"));

@@ -1,0 +1,415 @@
+<div class="mast">
+  <div class="mast-row">
+    <span class="brand">InvestLens<small>投资透镜</small></span>
+    <span class="mast-sub">Shanghai Stock Exchange research memo · one company at a time</span>
+    <span class="mast-modes">
+      <span class="mode-chip warn" id="mode-data">Sample dataset</span>
+      <span class="mode-chip" id="mode-bridge">Platform link: checking…</span>
+    </span>
+  </div>
+  <div class="strip" id="strip" aria-hidden="true">
+    <span class="strip-track" id="strip-track">
+      <span class="tk"
+        ><b>600519</b><span class="p">MOUTAI</span><span class="u">+0.6%</span> 1,542.60</span
+      >
+      <span class="tk"
+        ><b>600036</b><span class="p">CMB</span><span class="u">+0.4%</span> 43.10</span
+      >
+      <span class="tk"
+        ><b>601318</b><span class="p">PING AN</span><span class="d">−0.3%</span> 59.20</span
+      >
+      <span class="tk"
+        ><b>688981</b><span class="p">SMIC</span><span class="u">+1.2%</span> 96.45</span
+      >
+      <span class="tk"
+        ><b>601899</b><span class="p">SHENHUA</span><span class="u">+0.2%</span> 41.80</span
+      >
+      <span class="tk"
+        ><b>600887</b><span class="p">YILI</span><span class="d">−0.5%</span> 28.90</span
+      >
+      <span class="tk"
+        ><b>600104</b><span class="p">SAIC</span><span class="d">−0.8%</span> 17.05</span
+      >
+      <span class="tk"
+        ><b>600009</b><span class="p">SH AIRPORT</span><span class="u">+0.1%</span> 37.55</span
+      >
+    </span>
+  </div>
+</div>
+
+<div class="controls">
+  <div class="search-wrap">
+    <input
+      class="search"
+      id="search"
+      type="search"
+      autocomplete="off"
+      spellcheck="false"
+      placeholder="Search the sample universe — ticker, name or industry (e.g. 600036, bank)"
+      aria-label="Search companies"
+    />
+    <div class="results" id="results" hidden></div>
+  </div>
+  <div class="periods" role="group" aria-label="Chart period">
+    <button data-p="1m" aria-pressed="false">1M</button>
+    <button data-p="6m" aria-pressed="false">6M</button>
+    <button data-p="1y" aria-pressed="true">1Y</button>
+    <button data-p="5y" aria-pressed="false">5Y</button>
+  </div>
+  <span class="legend" id="basis-note">sample daily closes · CNY · not market quotes</span>
+</div>
+
+<div class="wrap" id="wrap">
+  <div class="col" id="research">
+    <section class="panel rule-top" id="company-panel">
+      <div class="company-h">
+        <h2>Kweichow Moutai</h2>
+        <span class="cid">SSE 600519</span>
+        <span class="ind">Consumer staples · Large cap</span>
+        <span class="stamp ok">Sample record</span>
+      </div>
+      <p class="sub">
+        Every panel reports its own source. Bundled observations are stamped as samples; nothing on
+        this page is a live market quote.
+      </p>
+      <div class="quote">
+        <div class="q">
+          <div class="k">Latest close</div>
+          <div class="v">CNY 1,542.60</div>
+        </div>
+        <div class="q">
+          <div class="k">Daily change</div>
+          <div class="v up">+0.6%</div>
+        </div>
+        <div class="q">
+          <div class="k">52-week high</div>
+          <div class="v">1,755.00</div>
+        </div>
+        <div class="q">
+          <div class="k">52-week low</div>
+          <div class="v">1,305.10</div>
+        </div>
+        <div class="q">
+          <div class="k">Max drawdown</div>
+          <div class="v down">−14.9%</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>Price history <span class="stamp" id="price-stamp">Sample series</span></h3>
+      <p class="sub" id="price-meta">
+        deterministic series · 1-year window · hover points for values
+      </p>
+      <svg
+        id="price-chart"
+        viewBox="0 0 900 250"
+        role="img"
+        aria-label="Sample daily closing prices"
+      >
+        <line class="grid-l" x1="42" y1="52" x2="858" y2="52" />
+        <line class="grid-l" x1="42" y1="104" x2="858" y2="104" />
+        <line class="grid-l" x1="42" y1="156" x2="858" y2="156" />
+        <line class="grid-l" x1="42" y1="208" x2="858" y2="208" />
+        <path
+          class="area"
+          d="M42,224 L150,198 L258,178 L366,188 L474,150 L582,160 L690,120 L798,134 L858,116 L858,224 Z"
+        />
+        <polyline
+          class="line"
+          points="42,224 150,198 258,178 366,188 474,150 582,160 690,120 798,134 858,116"
+        />
+      </svg>
+    </section>
+
+    <section class="panel">
+      <h3>Company metrics <span class="stamp ok">Sample record</span></h3>
+      <p class="sub">
+        quote as of 2026-09-30 · latest completed financial year 2025 · CNY basis · amber tick marks
+        the industry median of the sample universe
+      </p>
+      <div class="mgrid" id="metrics">
+        <div class="mcard">
+          <div class="lab">
+            P/E (TTM) <button class="info" data-x="pe" aria-label="Explain P/E">i</button>
+          </div>
+          <div class="val">25.6×</div>
+          <div class="bm">
+            <div class="bar">
+              <div class="fill" style="width: 61%"></div>
+              <div class="med" style="left: 47%"></div>
+            </div>
+            <div class="txt"><span>this company 25.6×</span><span>median 19.8×</span></div>
+          </div>
+        </div>
+        <div class="mcard">
+          <div class="lab">
+            P/S (TTM) <button class="info" data-x="ps" aria-label="Explain P/S">i</button>
+          </div>
+          <div class="val">12.1×</div>
+          <div class="fine">provider ratio · FY2025</div>
+        </div>
+        <div class="mcard">
+          <div class="lab">
+            Dividend yield (TTM)
+            <button class="info" data-x="dy" aria-label="Explain dividend yield">i</button>
+          </div>
+          <div class="val">2.8%</div>
+          <div class="fine">cash actually paid</div>
+        </div>
+        <div class="mcard">
+          <div class="lab">
+            ROE <button class="info" data-x="roe" aria-label="Explain ROE">i</button>
+          </div>
+          <div class="val">31.2%</div>
+          <div class="fine">simple-average basis · FY2025</div>
+        </div>
+        <div class="mcard">
+          <div class="lab">
+            Revenue growth
+            <button class="info" data-x="rg" aria-label="Explain revenue growth">i</button>
+          </div>
+          <div class="val">+11.4%</div>
+          <div class="fine">FY2025 vs FY2024</div>
+        </div>
+        <div class="mcard">
+          <div class="lab">
+            Interest coverage
+            <button class="info" data-x="ic" aria-label="Explain interest coverage">i</button>
+          </div>
+          <div class="val na">N/A</div>
+          <div class="fine">net-cash issuer — field not reported in sample record</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="peers-panel">
+      <h3 id="peers-title">Industry peers <span class="stamp">Sample universe</span></h3>
+      <p class="sub" id="peers-sub">
+        Consumer staples cohort inside the bundled 8-company sample — not an industry benchmark.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Company</th>
+            <th class="num">Close</th>
+            <th class="num">P/E</th>
+            <th class="num">Div yield</th>
+            <th class="num">ROE</th>
+          </tr>
+        </thead>
+        <tbody id="peers-body">
+          <tr class="me">
+            <td>Kweichow Moutai · 600519</td>
+            <td class="num">1,542.60</td>
+            <td class="num">25.6</td>
+            <td class="num">2.8%</td>
+            <td class="num">31.2%</td>
+          </tr>
+          <tr>
+            <td>Yili Group · 600887</td>
+            <td class="num">28.90</td>
+            <td class="num">17.4</td>
+            <td class="num">4.0%</td>
+            <td class="num">19.6%</td>
+          </tr>
+          <tr>
+            <td>Cohort median</td>
+            <td class="num">—</td>
+            <td class="num">21.5</td>
+            <td class="num">3.4%</td>
+            <td class="num">25.4%</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel" id="targets-panel">
+      <h3 id="targets-title">
+        Brokerage research summary <span class="stamp warn">Third-party opinions</span>
+      </h3>
+      <p class="sub" id="targets-sub">
+        reports dated 2026-06 → 2026-09 · counts are brokerages in the sample record, not analysts
+        or reports
+      </p>
+      <div id="targets-body">
+        <div class="ratebar">
+          <span>Buy</span><span class="t"><span class="f" style="width: 62%"></span></span
+          ><span class="n">5</span>
+        </div>
+        <div class="ratebar">
+          <span>Hold</span><span class="t"><span class="f" style="width: 25%"></span></span
+          ><span class="n">2</span>
+        </div>
+        <div class="ratebar">
+          <span>Sell</span><span class="t"><span class="f" style="width: 12%"></span></span
+          ><span class="n">1</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Brokerage</th>
+              <th>Report date</th>
+              <th class="num">Low</th>
+              <th class="num">High</th>
+              <th class="num">Midpoint</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Samples Securities</td>
+              <td>2026-09-02</td>
+              <td class="num">1,680</td>
+              <td class="num">1,860</td>
+              <td class="num">1,770</td>
+            </tr>
+            <tr>
+              <td>Demo Research Co.</td>
+              <td>2026-07-18</td>
+              <td class="num">1,540</td>
+              <td class="num">1,720</td>
+              <td class="num">1,630</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="fine">
+          A target midpoint is a price comparison, not a forecast return. Ratings are attributed
+          third-party opinions, never personalised advice.
+        </p>
+      </div>
+    </section>
+
+    <section class="panel" id="news-panel">
+      <h3 id="news-title">
+        Company &amp; industry news <span class="stamp">Sample headlines</span>
+      </h3>
+      <ul class="news" id="news-list">
+        <li>
+          <div class="mt">Company · sample record</div>
+          <div class="t">Moutai posts steady H1 as direct-sales channel keeps mix stable</div>
+          <div class="when">Sample Wire · 2026-08-28 · bundled for layout only</div>
+        </li>
+        <li>
+          <div class="mt">Industry · sample record</div>
+          <div class="t">
+            Consumer staples: premium liquor inventory cycles stay inside historical band
+          </div>
+          <div class="when">Sample Daily · 2026-09-12 · bundled for layout only</div>
+        </li>
+      </ul>
+      <p class="fine">
+        Story timing is not evidence that it moved the price. The sandboxed preview cannot open
+        outbound links, so headlines are shown as text.
+      </p>
+    </section>
+  </div>
+
+  <div class="col hold-rail">
+    <section class="panel rule-top">
+      <h3>Portfolio lens <span class="stamp ok">Protocol view</span></h3>
+      <p class="sub">
+        Holdings valued with the same bundled closes. Units × price per position; profit excludes
+        cash.
+      </p>
+      <div class="hsum">
+        <div>
+          <div class="k">Total value · CNY</div>
+          <div class="v">713,405</div>
+        </div>
+        <div>
+          <div class="k">Unrealized profit</div>
+          <div class="v up">+43,265</div>
+        </div>
+        <div>
+          <div class="k">Return</div>
+          <div class="v up">+6.5%</div>
+        </div>
+        <div>
+          <div class="k">Largest position</div>
+          <div class="v">43.3%</div>
+        </div>
+      </div>
+      <div class="conc">
+        <div class="bar"><div class="fill" style="width: 43%"></div></div>
+        <div class="txt">
+          <span>concentration: largest position weight</span><span>43.3% of total value</span>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Position</th>
+            <th class="num">Units</th>
+            <th class="num">Cost</th>
+            <th class="num">Price</th>
+            <th class="num">Weight</th>
+          </tr>
+        </thead>
+        <tbody id="holdings">
+          <tr>
+            <td>600519</td>
+            <td class="num">200</td>
+            <td class="num">1,520.00</td>
+            <td class="num">1,542.60</td>
+            <td class="num">43.3%</td>
+          </tr>
+          <tr>
+            <td>600036</td>
+            <td class="num">2,000</td>
+            <td class="num">38.50</td>
+            <td class="num">43.10</td>
+            <td class="num">12.1%</td>
+          </tr>
+          <tr>
+            <td>600887</td>
+            <td class="num">1,500</td>
+            <td class="num">26.00</td>
+            <td class="num">28.90</td>
+            <td class="num">6.1%</td>
+          </tr>
+          <tr>
+            <td>601899</td>
+            <td class="num">1,000</td>
+            <td class="num">36.00</td>
+            <td class="num">41.80</td>
+            <td class="num">5.9%</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="fine" id="hold-note">plus cash CNY 50,000 · sample cost basis</p>
+    </section>
+
+    <section class="panel">
+      <h3>Ask the memo <span class="stamp" id="chat-stamp">Local records only</span></h3>
+      <p class="sub">
+        Factual answers come only from the bundled sample records — no internet, no guessing. Try
+        “latest close”, “P/E vs median”, “max drawdown”, “broker targets”, “what news is stored”.
+      </p>
+      <div class="chatlog" id="chatlog" aria-live="polite"></div>
+      <div class="chatform">
+        <input
+          id="chatInput"
+          type="text"
+          autocomplete="off"
+          placeholder="Ask about the selected company…"
+          aria-label="Ask the memo"
+        />
+        <button class="chat-go" id="chatGo">Ask</button>
+      </div>
+    </section>
+  </div>
+
+  <p class="scopenote">
+    Demo scope: bundled 8-company SSE sample only · historical sample observations, no forecasts ·
+    broker ratings are attributed third-party opinions, not advice · every figure on this page is a
+    labelled sample, never a live quote. This build runs self-contained inside the platform sandbox;
+    when the platform grants capability access to imported builds, panels upgrade to live platform
+    data and are re-stamped.
+  </p>
+</div>
+
+<dialog id="explain">
+  <h3 id="explain-title"></h3>
+  <div id="explain-body"></div>
+  <button class="close" id="explain-close">Close</button>
+</dialog>

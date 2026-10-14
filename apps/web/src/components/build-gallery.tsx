@@ -66,7 +66,7 @@ export function BuildGallery({
   const built = apps.filter((app) => app.current?.verification.passed);
   const visible = built
     .filter((app) =>
-      `${app.name} ${app.current?.buildRecord?.plan.requirements ?? app.spec.purpose}`
+      `${app.chatTitle ?? app.name} ${app.current?.buildRecord?.plan.requirements ?? app.spec.purpose}`
         .toLowerCase()
         .includes(search.toLowerCase()),
     )
@@ -107,69 +107,76 @@ export function BuildGallery({
         </div>
         {visible.length ? (
           <div className="library-grid">
-            {visible.map((app) => (
-              <Card key={app.id} className="gallery-card">
-                <div className="build-cover">
-                  <div className="build-cover-label">
-                    <span>{buildCategory(app)}</span>
-                    <span className="build-data-status">
-                      {app.current!.buildRecord ? "Live · SSE Class A" : "Earlier build"}
-                    </span>
+            {visible.map((app) => {
+              // One display name everywhere: the chat title the user knows,
+              // falling back to the spec name for seeded examples.
+              const displayName = app.chatTitle ?? app.name;
+              return (
+                <Card key={app.id} className="gallery-card">
+                  <div className="build-cover">
+                    <div className="build-cover-label">
+                      <span>{buildCategory(app)}</span>
+                      <span className="build-data-status">
+                        {app.current!.buildRecord
+                          ? "Live · Shanghai Stock Exchange"
+                          : "Earlier build"}
+                      </span>
+                    </div>
+                    <div className="build-screen relative">
+                      <BuildThumbnail release={app.current!} name={displayName} />
+                      <Button
+                        variant="ghost"
+                        aria-label={`Select build ${displayName}`}
+                        disabled={busy}
+                        onClick={() => select(app.id)}
+                        className="build-select absolute inset-0 h-full w-full cursor-pointer rounded-none hover:bg-primary/5 focus-visible:outline-3 focus-visible:-outline-offset-3 focus-visible:outline-primary disabled:cursor-wait"
+                      />
+                    </div>
+                    <div className="build-cover-caption">
+                      <span>Layout preview</span>
+                      <span>Ready to open</span>
+                    </div>
                   </div>
-                  <div className="build-screen relative">
-                    <BuildThumbnail release={app.current!} name={app.name} />
-                    <Button
-                      variant="ghost"
-                      aria-label={`Select build ${app.name}`}
-                      disabled={busy}
-                      onClick={() => select(app.id)}
-                      className="build-select absolute inset-0 h-full w-full cursor-pointer rounded-none hover:bg-primary/5 focus-visible:outline-3 focus-visible:-outline-offset-3 focus-visible:outline-primary disabled:cursor-wait"
-                    />
-                  </div>
-                  <div className="build-cover-caption">
-                    <span>Layout preview</span>
-                    <span>Ready to open</span>
-                  </div>
-                </div>
-                <CardContent className="build-details">
-                  <div className="build-title-row">
-                    <Button
-                      variant="link"
-                      disabled={busy}
-                      onClick={() => select(app.id)}
-                      className="build-title"
-                    >
-                      {app.name}
-                    </Button>
-                    <a
-                      className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
-                      href={`/app/${app.id}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      aria-label={`Open ${app.name}`}
-                      title="Open app"
-                    >
-                      <ArrowUpRight />
-                    </a>
-                  </div>
-                  <p className="line-clamp-2">
-                    {app.current!.buildRecord?.plan.requirements ?? app.spec.purpose}
-                  </p>
-                  <div className="build-footer">
-                    <span>Built {buildDate(app.current!.createdAt)}</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => select(app.id)}
-                    >
-                      Open in studio
-                      <ArrowRight />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  <CardContent className="build-details">
+                    <div className="build-title-row">
+                      <Button
+                        variant="link"
+                        disabled={busy}
+                        onClick={() => select(app.id)}
+                        className="build-title"
+                      >
+                        {displayName}
+                      </Button>
+                      <a
+                        className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+                        href={`/app/${app.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={`Open ${displayName}`}
+                        title="Open app"
+                      >
+                        <ArrowUpRight />
+                      </a>
+                    </div>
+                    <p className="line-clamp-2">
+                      {app.current!.buildRecord?.plan.requirements ?? app.spec.purpose}
+                    </p>
+                    <div className="build-footer">
+                      <span>Built {buildDate(app.current!.createdAt)}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => select(app.id)}
+                      >
+                        Open in studio
+                        <ArrowRight />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         ) : (
           <Empty className="library-empty">

@@ -30,8 +30,9 @@ For Node 24+ using an HTTP proxy, set `NODE_USE_ENV_PROXY=1`, `HTTPS_PROXY`, `HT
 2. Build with the model or labelled example builder. Review the app and Checks tab; accept the release.
 3. Edit shared inputs from the accepted app. Preview storage is read-only.
 4. Request a change. The accepted release keeps running while its update is checked. Accepting retains shared data.
-5. Import a compatible bundle from `examples/` or another coding tool. Choose New application for a separate app; import while an app is selected for an update.
-6. For an accepted Strategy app, open Connections and load real daily prices. Local mode uses the narrow Alpha Vantage public demo for `600104.SHH`; hosted mode uses configured Tushare. Source, dates and limits accompany the data.
+5. For an accepted Strategy app, open Connections and load real daily prices. Local mode uses the narrow Alpha Vantage public demo for `600104.SHH`; hosted mode uses configured Tushare. Source, dates and limits accompany the data.
+
+Direct source import from the studio is disabled while imports do not yet support the internal capability contract; apps are scoped through the conversation. The `examples/` bundles remain reference material for the source format.
 
 Portfolio, screening and strategy protocols are provisional feasibility examples. Final application categories remain open. Additional compatible apps can be imported and run.
 
@@ -51,7 +52,7 @@ Nine capabilities cover normalized market data, reusable financial functions, cu
 bun run test:prototype       # 12 financial, sandbox, hash and persistence checks
 bun run test:flow            # 13 HTTP lifecycle checks on temporary data
 bun run test:model-contract  # 3 mock Responses transport checks, not live inference
-bun run test:glm-contract    # 10 mock GLM format/recovery/deadline checks
+bun run test:glm-contract    # 13 mock GLM format/recovery/deadline/think-marker checks
 bun run test:query-stream    # 2 query-stream hydration regressions
 bun run check
 bun run build

@@ -1,0 +1,33 @@
+{
+  "name": "InvestLens",
+  "purpose": "A Shanghai Stock Exchange research memo: pick a company from a bundled sample universe and read independently sourced panels — price history, valuation metrics against cohort medians, peer comparison, attributed brokerage opinions and stored headlines — next to a portfolio lens that values holdings with the same closes.",
+  "protocol": "portfolio",
+  "inputs": [
+    "Company selection from the bundled 8-company SSE sample universe (ticker, name or industry search)",
+    "Chart period selection (1M, 6M, 1Y, 5Y)",
+    "Portfolio holdings with symbol, units, cost per unit and current price per unit, plus cash in CNY"
+  ],
+  "outputs": [
+    "Price history chart with window statistics",
+    "Valuation and quality metric cards with sample-universe cohort medians",
+    "Industry peer comparison table",
+    "Brokerage research summary with rating distribution and target midpoints",
+    "Stored company and industry headlines",
+    "Portfolio valuation summary"
+  ],
+  "outputDetails": {
+    "Price history chart with window statistics": "Deterministic sample close series generated per ticker, drawn as an SVG line; latest close, daily change and max drawdown are computed from that series. Clearly stamped as samples, never live quotes; upgrades to the platform market.prices series when capability access is granted.",
+    "Valuation and quality metric cards with sample-universe cohort medians": "P/E, P/S, dividend yield, ROE, revenue growth and interest coverage from the bundled record; amber markers show same-industry medians of the sample universe. Missing fields render N/A with a reason, never zero.",
+    "Industry peer comparison table": "Same-industry rows within the bundled sample with a cohort median row; not an industry or market benchmark.",
+    "Brokerage research summary with rating distribution and target midpoints": "Fictional brokerages bundled for layout; rating counts are brokerages, and the average midpoint is presented as a price comparison, not a forecast return or advice.",
+    "Stored company and industry headlines": "Static sample headlines attributed to fictional publishers, shown as text; the sandbox cannot open outbound links and story timing is not claimed to move prices.",
+    "Portfolio valuation summary": "Units-times-price position values, invested cost, profit excluding cash, return percentage and largest-position concentration, mirroring the verified portfolio calculation contract; shared platform inputs replace the bundled holdings when available."
+  },
+  "constraints": [
+    "CNY reporting with 万/亿 display units",
+    "Every figure carries its source stamp; bundled sample data is never presented as live market data",
+    "No trading or investment advice; brokerage views are attributed third-party opinions",
+    "Historical sample observations only; no forecasts",
+    "Self-contained in the platform sandbox; no network, imports or embedded credentials"
+  ]
+}

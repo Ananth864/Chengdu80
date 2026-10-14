@@ -1,3 +1,8 @@
 @import "tailwindcss";
 @import "fumadocs-ui/css/neutral.css";
 @import "fumadocs-ui/css/preset.css";
+
+/* Without this, the docs' own Tailwind build compiles `dark:` utilities as
+   prefers-color-scheme media queries: toggling .dark on <html> flips the
+   token-driven colors (content) but not the sidebar and TOC overrides. */
+@custom-variant dark (&:is(.dark *));

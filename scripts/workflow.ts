@@ -207,7 +207,7 @@ async function main() {
         "Timed out waiting for the approval receipt's turn. Check the studio; do not reapprove. " +
           "The server has no durable crash recovery.",
       );
-    await Bun.sleep(2000);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
     const apps = await list();
     const latest = apps.find((entry) => entry.id === appId);
     if (!latest) throw new Error("Approved application is no longer accessible. Check the studio.");

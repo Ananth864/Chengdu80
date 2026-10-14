@@ -57,6 +57,13 @@ const requestSchema = z.discriminatedUnion("action", [
       expectedRevision: z.number().int().positive(),
     })
     .strict(),
+  z
+    .object({
+      action: z.literal("rename-chat"),
+      appId: z.string(),
+      title: z.string().trim().min(1).max(60),
+    })
+    .strict(),
   z.object({ action: z.literal("clarify"), prompt: text }),
   z.object({
     action: z.literal("save-design"),
@@ -228,6 +235,10 @@ export async function dispatch(access: Access, raw: unknown) {
       "Use the financial-capability conversation to scope this request. Legacy direct builds, imports and provider tests are disabled until they support the internal capability contract.",
     );
   if (req.action === "delete-chat") return deleteChat(access, req.appId, req.expectedRevision);
+  if (req.action === "rename-chat")
+    return mutateApp(access, req.appId, (current) => {
+      current.chatTitle = req.title;
+    });
   if (req.action === "approve-workflow") {
     const current = await findApp(access, req.appId);
     if (current.workflowApproval?.proposalId === req.proposalId) return current;

@@ -1,6 +1,7 @@
 import type { ConvexQueryClient } from "@convex-dev/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
+import { ThemeProvider } from "next-themes";
 import { Toaster } from "@web-starter/ui/components/sonner";
 import { TooltipProvider } from "@web-starter/ui/components/tooltip";
 import type { ConvexReactClient } from "convex/react";
@@ -64,13 +65,15 @@ function RootDocument() {
         <HeadContent />
       </head>
       <body>
-        <TooltipProvider>
-          <div className="flex min-h-svh min-w-0 flex-col">
-            <Header />
-            <Outlet />
-          </div>
-          <Toaster theme="light" />
-        </TooltipProvider>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+          <TooltipProvider delay={300}>
+            <div className="flex min-h-svh min-w-0 flex-col">
+              <Header />
+              <Outlet />
+            </div>
+            <Toaster />
+          </TooltipProvider>
+        </ThemeProvider>
         <Scripts />
       </body>
     </html>

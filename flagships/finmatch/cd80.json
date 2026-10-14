@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "name": "FinMatch",
+  "protocol": "screening",
+  "permissions": ["market.assets", "finance.calculate", "storage.read", "storage.write"]
+}

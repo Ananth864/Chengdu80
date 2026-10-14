@@ -1,4 +1,16 @@
-import { Code2, Plus, Settings, LayoutGrid, MoreHorizontal, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useTheme } from "next-themes";
+import {
+  Code2,
+  Plus,
+  Settings,
+  LayoutGrid,
+  MoreHorizontal,
+  Moon,
+  Pencil,
+  Sun,
+  Trash2,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -7,6 +19,7 @@ import {
   DropdownMenuItem,
 } from "@web-starter/ui/components/dropdown-menu";
 import { Button } from "@web-starter/ui/components/button";
+import { Skeleton } from "@web-starter/ui/components/skeleton";
 import {
   Sidebar,
   SidebarHeader,
@@ -32,6 +45,7 @@ export function ConversationNavigation({
   openGallery,
   galleryActive,
   requestDelete,
+  requestRename,
 }: {
   apps: Application[];
   selected: string | null;
@@ -41,6 +55,7 @@ export function ConversationNavigation({
   openGallery: () => void;
   galleryActive: boolean;
   requestDelete: (app: Application) => void;
+  requestRename: (app: Application) => void;
 }) {
   const { setOpenMobile } = useSidebar();
   function navigate(id: string | null) {
@@ -52,14 +67,14 @@ export function ConversationNavigation({
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <a href="/#view=builds" aria-label="Linus home" className="studio-wordmark">
+            <a href="/#view=builds" aria-label="Linus — Built apps" className="studio-wordmark">
               <span>Linus</span>
             </a>
           </SidebarMenuItem>
           <SidebarMenuItem>
             <Button
               variant="outline"
-              className="studio-new-chat w-full justify-between"
+              className="studio-new-chat w-full"
               disabled={busy}
               onClick={() => navigate(null)}
             >
@@ -127,6 +142,15 @@ export function ConversationNavigation({
                         <DropdownMenuGroup>
                           <DropdownMenuItem
                             onClick={() => {
+                              requestRename(app);
+                              setOpenMobile(false);
+                            }}
+                          >
+                            <Pencil />
+                            Rename chat
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
                               requestDelete(app);
                               setOpenMobile(false);
                             }}
@@ -146,6 +170,9 @@ export function ConversationNavigation({
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
+            <ThemeToggle />
+          </SidebarMenuItem>
+          <SidebarMenuItem>
             <SidebarMenuButton
               onClick={() => {
                 openSettings();
@@ -158,7 +185,10 @@ export function ConversationNavigation({
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton render={<a href="/docs" />} tooltip="Developer docs">
+            <SidebarMenuButton
+              render={<a href="/docs" target="_blank" rel="noreferrer" />}
+              tooltip="Developer docs"
+            >
               <Code2 />
               <span>Developer docs</span>
             </SidebarMenuButton>
@@ -166,5 +196,32 @@ export function ConversationNavigation({
         </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
+  );
+}
+
+// next-themes resolves the stored theme after hydration; keep the layout stable
+// until then so the icon never flashes the wrong mode.
+function ThemeToggle() {
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const dark = resolvedTheme === "dark";
+  if (!mounted)
+    return (
+      <Skeleton
+        data-slot="sidebar-menu-button"
+        className="h-9 w-full rounded-md"
+        aria-label="Loading theme toggle"
+      />
+    );
+  return (
+    <SidebarMenuButton
+      tooltip="Toggle theme"
+      aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}
+      onClick={() => setTheme(dark ? "light" : "dark")}
+    >
+      {dark ? <Sun /> : <Moon />}
+      <span>{dark ? "Light theme" : "Dark theme"}</span>
+    </SidebarMenuButton>
   );
 }

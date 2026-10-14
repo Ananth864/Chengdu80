@@ -20,7 +20,7 @@ Preparing the internal record freezes its version for that build. A builder must
 
 | Capability                                   | Required behavior and dependencies                                                                                                                                                         |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Market research                              | Standalone requests produce industry research. Company-card details use company-specific research plus relevant industry context.         |
+| Market research                              | Standalone requests produce industry research. Company-card details use company-specific research plus relevant industry context.                                                          |
 | Historical analysis and sourced price target | Always offered together; may run without market research. Target price comes from an external financial source, never a builder-created prediction model.                                  |
 | Risk appetite assessment                     | Internal input to matching; not offered alone. Expert questions and scoring remain to be supplied.                                                                                         |
 | Industry preference                          | Separate assessment/input, not offered alone; uses the provided company-universe industries.                                                                                               |

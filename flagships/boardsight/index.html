@@ -1,0 +1,225 @@
+<header class="mast">
+  <div class="mast-in">
+    <div class="brand"><span class="logo">B▚</span>BoardSight</div>
+    <span class="mast-note" id="mode-note">Example workspace · fictional figures</span>
+  </div>
+</header>
+
+<main>
+  <div class="top">
+    <div>
+      <div class="eyebrow">Your annual report, made clear</div>
+      <h1>See the year. <em>Check the change.</em></h1>
+      <p class="sub">
+        Six figures that matter, each with its source line one click away — plus what the market
+        paid over the same two years.
+      </p>
+    </div>
+    <button class="btn primary" id="open-report">Work on a report</button>
+  </div>
+
+  <div class="toolbar">
+    <input class="company" id="company" value="Northstar Studio" aria-label="Company name" />
+    <span class="period" id="period">2025 vs 2024</span>
+    <button class="btn" id="demo">Load example</button>
+    <button class="btn" id="clear">Clear workspace</button>
+  </div>
+
+  <div class="banner demo" id="notice">
+    <b class="demo-k">Example workspace.</b> Fictional figures for Northstar Studio. Paste report
+    text from your own annual report to replace this example — every figure keeps a citation to the
+    line it came from.
+  </div>
+
+  <section class="grid" id="metrics" aria-label="Report metrics">
+    <article class="card">
+      <div class="head">
+        Revenue <button class="info" data-x="revenue" aria-label="Explain revenue">i</button>
+      </div>
+      <div class="value">CNY 128.4m</div>
+      <span class="delta">+13.8% year over year</span>
+      <div class="prior">2024: <b>CNY 112.8m</b></div>
+      <button class="ev" data-ev="revenue">p.1 · row 3 ↗</button>
+    </article>
+    <article class="card">
+      <div class="head">
+        Net profit <button class="info" data-x="profit" aria-label="Explain net profit">i</button>
+      </div>
+      <div class="value">CNY 18.6m</div>
+      <span class="delta">+31.0% year over year</span>
+      <div class="prior">2024: <b>CNY 14.2m</b></div>
+      <button class="ev" data-ev="profit">p.1 · row 4 ↗</button>
+    </article>
+    <article class="card">
+      <div class="head">
+        Operating cash flow
+        <button class="info" data-x="cash" aria-label="Explain operating cash flow">i</button>
+      </div>
+      <div class="value">CNY 23.1m</div>
+      <span class="delta down">−9.1% year over year</span>
+      <div class="prior">2024: <b>CNY 25.4m</b></div>
+      <button class="ev" data-ev="cash">p.1 · row 5 ↗</button>
+    </article>
+    <article class="card">
+      <div class="head">
+        Total assets
+        <button class="info" data-x="assets" aria-label="Explain total assets">i</button>
+      </div>
+      <div class="value">CNY 182.5m</div>
+      <span class="delta">+7.8% year over year</span>
+      <div class="prior">2024: <b>CNY 169.3m</b></div>
+      <button class="ev" data-ev="assets">p.1 · row 6 ↗</button>
+    </article>
+    <article class="card">
+      <div class="head">
+        Total liabilities
+        <button class="info" data-x="debt" aria-label="Explain total liabilities">i</button>
+      </div>
+      <div class="value">CNY 67.2m</div>
+      <span class="delta">+3.7% year over year</span>
+      <div class="prior">2024: <b>CNY 64.8m</b></div>
+      <button class="ev" data-ev="debt">p.1 · row 7 ↗</button>
+    </article>
+    <article class="card">
+      <div class="head">
+        Net profit margin
+        <button class="info" data-x="margin" aria-label="Explain net profit margin">i</button>
+      </div>
+      <div class="value">14.5%</div>
+      <span class="delta">+1.8 pp year over year</span>
+      <div class="prior">2024: <b>12.6%</b></div>
+      <button class="ev" data-ev="margin">derived ↗</button>
+    </article>
+  </section>
+
+  <section class="bottom">
+    <div class="panel">
+      <div class="head">
+        <h2>The year at a glance</h2>
+        <span>revenue · net profit · same basis</span>
+      </div>
+      <div class="chart-row">
+        <div class="lab">
+          <span>Revenue</span><span>2025 <b>CNY 128.4m</b> · 2024 <b>CNY 112.8m</b></span>
+        </div>
+        <div class="bar" style="width: 100%; background: #0e5a3c"></div>
+        <div class="bar" style="width: 87.9%; background: #b9bcb2"></div>
+      </div>
+      <div class="chart-row">
+        <div class="lab">
+          <span>Net profit</span><span>2025 <b>CNY 18.6m</b> · 2024 <b>CNY 14.2m</b></span>
+        </div>
+        <div class="bar" style="width: 100%; background: #0e5a3c"></div>
+        <div class="bar" style="width: 76.3%; background: #b9bcb2"></div>
+      </div>
+      <div class="legend">
+        <span><i style="background: #0e5a3c"></i>2025 · current year</span
+        ><span><i style="background: #b9bcb2"></i>2024 · prior year as presented</span>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="head">
+        <h2>What changed?</h2>
+        <span>calculated from workspace figures</span>
+      </div>
+      <div class="change">
+        <b>Revenue</b> increased <b class="up">13.8%</b> from 2024 to 2025.
+        <div class="why">
+          change = (current ÷ prior − 1) × 100, shown only when the prior value is positive
+        </div>
+      </div>
+      <div class="change">
+        <b>Net profit</b> increased <b class="up">31.0%</b>.
+        <div class="why">faster than revenue — margin widened</div>
+      </div>
+      <div class="change">
+        <b>Operating cash flow</b> decreased <b class="down">9.1%</b>.
+        <div class="why">
+          earnings grew while cash from operations fell — worth a question at the source
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel market" style="margin-top: 20px">
+    <div class="head">
+      <h2>What the market paid</h2>
+      <span id="mk-basis">sample daily closes · strategy contract</span>
+    </div>
+    <svg id="mk-chart" viewBox="0 0 900 210" role="img" aria-label="Two-year sample price path">
+      <line class="grid-l" x1="40" y1="45" x2="860" y2="45" />
+      <line class="grid-l" x1="40" y1="90" x2="860" y2="90" />
+      <line class="grid-l" x1="40" y1="135" x2="860" y2="135" />
+      <line class="grid-l" x1="40" y1="180" x2="860" y2="180" />
+      <path
+        class="area"
+        d="M40,150 L200,132 L360,158 L520,112 L680,126 L860,84 L860,180 L40,180 Z"
+      />
+      <polyline class="line" points="40,150 200,132 360,158 520,112 680,126 860,84" />
+    </svg>
+    <div class="mk-stats" id="mk-stats">
+      <div>
+        <div class="k">Gross return · 2y</div>
+        <div class="v up">+15.4%</div>
+      </div>
+      <div>
+        <div class="k">Net of fees</div>
+        <div class="v up">+15.0%</div>
+      </div>
+      <div>
+        <div class="k">Max drawdown</div>
+        <div class="v down">−18.2%</div>
+      </div>
+    </div>
+    <p class="fine" style="margin-top: 12px">
+      Computed with the strategy contract on the bundled sample series: gross return = (last ÷ first
+      − 1) × 100; net return subtracts two transactions of fee (10 bps each) as a simple
+      approximation; drawdown is the largest peak-to-trough drop. Report figures above and price
+      action below are independent records — one describing the company, the other what investors
+      paid. Historical samples only; not a forecast.
+    </p>
+  </section>
+
+  <footer class="pagefoot">
+    <span>BOARDSIGHT · clarity for your next decision</span>
+    <span>self-contained sandbox build · no external APIs · no cloud uploads</span>
+  </footer>
+</main>
+
+<dialog id="detail">
+  <button class="x" id="detail-x" aria-label="Close">✕</button>
+  <div id="detailBody"></div>
+</dialog>
+
+<dialog id="report">
+  <button class="x" id="report-x" aria-label="Close">✕</button>
+  <h3>Work on a report</h3>
+  <p class="fine">
+    Paste the text of one annual report — the income statement and balance sheet pages are enough.
+    BoardSight reads the current-year and previous-year comparative figures it can find, shows every
+    candidate row, and lets you assign the right one. Figures without a source stay unavailable;
+    nothing is estimated. (The original full app also reads PDFs locally; the sandboxed preview
+    accepts pasted text.)
+  </p>
+  <div class="sec">
+    <b>Financial year of the report</b>
+    <input
+      class="company"
+      id="r-year"
+      type="number"
+      min="1901"
+      max="2200"
+      value="2025"
+      style="width: 120px"
+    />
+  </div>
+  <div class="sec">
+    <b>Report text</b>
+    <textarea
+      id="r-text"
+      placeholder="Paste income statement / balance sheet text, e.g.&#10;Total revenue        128,455,302   112,830,177&#10;Net profit for the year  18,622,415   14,221,900"
+    ></textarea>
+  </div>
+  <button class="go" id="r-go">Read the report</button>
+  <p class="error" id="r-status" role="status"></p>
+</dialog>

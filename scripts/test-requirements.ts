@@ -203,7 +203,9 @@ const blocked: BuildRecord = {
   ...record,
   readiness: "blocked",
   plan: { ...record.plan, capabilities: ["market-research"] },
-  resolvedCapabilities: ["market-research", "news"],
+  // "news" is deliberately outside the capability union: the blocked record
+  // must survive validation without it ever being resolvable.
+  resolvedCapabilities: ["market-research", "news"] as BuildRecord["resolvedCapabilities"],
 };
 const app: Application = {
   id: "app-1",

@@ -40,14 +40,14 @@ const metricNames: Record<string, string> = {
 const metricHints: Record<string, string> = {
   pe: "Share price divided by the company's yearly profit per share. Lower can mean cheaper, but it can also mean slower expected growth.",
   ps: "Share price divided by yearly revenue per share. Useful when profits are thin or uneven.",
-  dividendYield:
-    "Cash dividends paid over the past year as a percentage of the share price.",
+  dividendYield: "Cash dividends paid over the past year as a percentage of the share price.",
   revenueGrowth: "How much the company's yearly income grew compared with the previous year.",
   roe: "Profit earned per yuan of shareholders' capital — how efficiently the company uses its capital.",
   interestCoverage: "How comfortably the company's profits cover its interest payments.",
 };
 function formatMetric(id: string, value: number) {
-  if (id === "dividendYield" || id === "revenueGrowth" || id === "roe") return `${value.toFixed(2)}%`;
+  if (id === "dividendYield" || id === "revenueGrowth" || id === "roe")
+    return `${value.toFixed(2)}%`;
   return value.toFixed(2);
 }
 const money = (value: number) =>
@@ -473,7 +473,9 @@ const compactRmb = new Intl.NumberFormat("zh-CN", {
   maximumFractionDigits: 2,
 });
 const day = (value: string | null | undefined) =>
-  value && value.length === 8 ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}` : (value ?? "—");
+  value && value.length === 8
+    ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`
+    : (value ?? "—");
 
 function CompanyResearch({ companies }: { companies: readonly string[] }) {
   const [tsCode, setTsCode] = useState<string | null>(companies[0] ?? null);
@@ -569,7 +571,9 @@ function CompanyResearch({ companies }: { companies: readonly string[] }) {
               )}
               {data.industry?.valuation && (
                 <div className="rounded-xl border p-4 text-sm">
-                  <p className="font-medium">Industry snapshot · as of {day(data.industry.valuation.asOf)}</p>
+                  <p className="font-medium">
+                    Industry snapshot · as of {day(data.industry.valuation.asOf)}
+                  </p>
                   <p className="text-muted-foreground">
                     Total market value {compactRmb.format(data.industry.valuation.totalMvRmb)} · P/E{" "}
                     {data.industry.valuation.pe ?? "unavailable"} · P/B{" "}
@@ -579,7 +583,9 @@ function CompanyResearch({ companies }: { companies: readonly string[] }) {
               )}
               {data.industry && data.industry.peers.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold">Industry peers ({data.industry.peers.length})</h3>
+                  <h3 className="text-sm font-semibold">
+                    Industry peers ({data.industry.peers.length})
+                  </h3>
                   <p className="mt-1 text-sm leading-6 text-muted-foreground">
                     {data.industry.peers.map((peer, index) => (
                       <span key={peer.tsCode}>
