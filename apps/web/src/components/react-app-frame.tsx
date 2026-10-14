@@ -131,7 +131,8 @@ export function ReactAppFrame({
         role="note"
         className="shrink-0 border-b bg-accent px-4 py-2 text-xs text-accent-foreground"
       >
-        Synthetic demo. Company identities are examples; live Wind data is not connected.
+        Synthetic demo. Company identities and values are examples; live market data is not
+        connected.
       </p>
       {!ready && !error && (
         <Empty className="absolute inset-0 bg-background" role="status" aria-live="polite">

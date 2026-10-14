@@ -24,15 +24,15 @@ Describe a financial app → clarify material ambiguity → summarize intent →
 
 ## Platform managed data
 
-The company table and Wind configuration belong to the product team. End users do not supply either. For internal setup, set `CD80_COMPANY_TABLE_PATH` to a server-readable team CSV or normalized JSON file. In Docker mount the file read-only and set the path inside the container. No actual CSV has been delivered in this session.
+The company table and Tushare configuration belong to the product team. End users do not supply either. For internal setup, set `CD80_COMPANY_TABLE_PATH` to a server-readable team CSV or normalized JSON file. In Docker mount the file read-only and set the path inside the container. No actual CSV has been delivered in this session.
 
 Required CSV headings: Company Name, Ticker Symbol, Industry, A-share Market Capitalisation (RMB), Size Category. Supported size labels are small/medium/large and their cap variants, with mid cap recognized as medium. Invalid categories, capitalization, field counts, quoting or duplicate ticker IDs reject the table. Ambiguous company names require a ticker choice. Normalized JSON uses name/ticker/industry/marketCapRmb/size.
 
-The explicit synthetic table uses DEMO001, DEMO002 and DEMO003. It is separate from the live company table and is never a live fallback. A fixture build requires the user's demo intent. Wind remains the official production target; no alternative provider is selected for scoped builds.
+The explicit synthetic table uses DEMO001, DEMO002 and DEMO003. It is separate from the live company table and is never a live fallback. A fixture build requires the user's demo intent. Tushare is the official data provider. Scoped live builds stay blocked until the platform token is set and verified; fixtures remain the demo path.
 
 ## What this first change does not implement
 
-Live Wind integration, historical metric calculations, sourced target prices and approved assessment/research/explanation content remain pending. Fixed company matching, cards and watchlists are implemented. React/shadcn assembly is integrated. Research and historical modules show unavailable outputs until approved inputs arrive. The old numeric scaffold remains compatibility infrastructure for existing releases.
+Live Tushare market-data wiring in scoped builds, historical metric calculations, sourced target prices and approved assessment/research/explanation content remain pending. Fixed company matching, cards and watchlists are implemented. React/shadcn assembly is integrated. Research and historical modules show unavailable outputs until approved inputs arrive. The old numeric scaffold remains compatibility infrastructure for existing releases.
 
 Markdown instructions guide the agent. Schemas and tool gates enforce declared scope, dependency and readiness rules. New React builds reuse protected financial UI and server-owned matching/card rules. Independent checks compile the pinned starter, run type checks and inspect its financial SSR output. These checks do not prove the meaning of arbitrary added presentation code; it can still misrepresent information. Domain acceptance tests and approved data adapters remain necessary.
 
@@ -40,7 +40,7 @@ The generated-application LLM protocol is included for the builder to follow, bu
 
 ## Verification
 
-Run `bun run test:conversation` for verbatim discussion persistence and chat deletion semantics. Run `bun run test:company-capabilities` for the fixed company rules. Run `bun run test:build-policy` for dependency, identity, readiness and source-permission gates. Run `VITE_LOCAL_MODE=1 bun run build`, then `bun scripts/test-agent.ts` for the chat/tool/browser flow. If repository Playwright has no downloaded browser, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to an available compatible browser. Transport fixtures never verify live inference or Wind.
+Run `bun run test:conversation` for verbatim discussion persistence and chat deletion semantics. Run `bun run test:company-capabilities` for the fixed company rules. Run `bun run test:build-policy` for dependency, identity, readiness and source-permission gates. Run `VITE_LOCAL_MODE=1 bun run build`, then `bun scripts/test-agent.ts` for the chat/tool/browser flow. If repository Playwright has no downloaded browser, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to an available compatible browser. Transport fixtures never verify live inference or Tushare.
 
 The scoped API flow suite checks repeated attempts through retired endpoints. The prototype suite checks sandbox isolation and numerical fixtures. The agent browser suite exercises the new conversation flow and repeated attempts to mislabel unrelated requests. These are fixture tests, not a guarantee that a live model can never misclassify free-form intent. Reusable capability modules and independent business-output checks remain necessary.
 

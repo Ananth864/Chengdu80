@@ -35,7 +35,7 @@ export type BuildRecord = {
   companyIds: string[];
   companyTableVersion: string;
   protocolHashes: Record<string, string>;
-  provider: "wind";
+  provider: "tushare";
   moduleVersions: Record<string, string>;
   theme: string;
   readiness: "fixture" | "blocked";

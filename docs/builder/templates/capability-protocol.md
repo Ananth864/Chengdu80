@@ -44,7 +44,7 @@ Approved explanations and English/Simplified Chinese wording: TODO.
 
 ## Data and readiness
 
-Official provider: Wind. Exact product/adapter fields: TODO.
+Official provider: Tushare (platform-held token). Exact api_name/fields: TODO.
 Do not select Tushare or substitute providers as production defaults; clearly label fixtures.
 Freshness and coverage requirements: TODO.
 Dependencies pending: TODO.

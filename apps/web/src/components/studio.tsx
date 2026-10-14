@@ -839,13 +839,17 @@ export function Studio() {
               </TableRow>
               <TableRow>
                 <TableCell>Market data</TableCell>
-                <TableCell>Wind integration pending · synthetic demos only</TableCell>
+                <TableCell>
+                  {snapshot?.status.tushareConfigured
+                    ? "Tushare token configured · live daily prices"
+                    : "Tushare token not set · synthetic demos only"}
+                </TableCell>
               </TableRow>
             </TableBody>
           </Table>
           <p className="text-sm text-muted-foreground">
-            The platform team manages the company table and Wind access. You do not need to upload
-            company data or configure a data API.
+            The platform team manages the company table and the Tushare token. You do not need to
+            upload company data or provide API keys.
           </p>
           <Button
             variant="ghost"

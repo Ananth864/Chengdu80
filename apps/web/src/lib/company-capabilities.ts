@@ -123,7 +123,7 @@ export function unavailableCardMetrics(selected = defaultCardMetrics) {
     id,
     value: null,
     status: "unavailable" as const,
-    reason: "Wind financial fields and approved metric definitions are pending.",
+    reason: "Tushare financial fields and approved metric definitions are pending.",
   }));
 }
 export const companyCardsInputSchema = z.discriminatedUnion("action", [

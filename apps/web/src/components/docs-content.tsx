@@ -19,9 +19,9 @@ export function OverviewContent() {
     <>
       <p>
         The conversational builder now scopes requests to supported financial capabilities and uses
-        internal build records. Synthetic demos are available; live Wind data and reusable financial
-        modules are pending. The older numerical protocols below document the transitional source
-        transport. Direct source import is pending capability validation.
+        internal build records. Synthetic demos are available; live Tushare market data and reusable
+        financial modules are pending. The older numerical protocols below document the transitional
+        source transport. Direct source import is pending capability validation.
       </p>
       <div className="not-prose flex flex-wrap gap-2">
         <a href="/api/docs" className={buttonVariants({ variant: "outline" })}>

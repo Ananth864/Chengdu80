@@ -24,7 +24,7 @@ assert.deepEqual(record.resolvedCapabilities, ["market-research", "news"]);
 assert.equal(record.theme, "starter-default");
 requireBuild(record, "turn-1");
 assert.throws(() =>
-  requireBuild({ ...record, readiness: "fixture", provider: "tushare" } as never, "turn-1"),
+  requireBuild({ ...record, readiness: "fixture", provider: "wind" } as never, "turn-1"),
 );
 assert.throws(() =>
   requireBuild({ ...record, plan: { ...record.plan, capabilities: ["company-cards"] } }, "turn-1"),
@@ -96,7 +96,7 @@ try {
   assert.equal(
     valid.readiness,
     "blocked",
-    "Company membership does not prove Wind or module readiness",
+    "Company membership does not prove data-provider or module readiness",
   );
   await writeFile(file, JSON.stringify([companies.companies[0], companies.companies[0]]));
   await assert.rejects(() => managedCompanies("live"));

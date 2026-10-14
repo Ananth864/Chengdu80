@@ -116,10 +116,14 @@ export async function prepareBuild(
     blockers.push(
       "Select a supported company for the historical-analysis and price-target package.",
     );
-  if (plan.mode === "live")
+  if (plan.mode === "live") {
+    const config = await settings();
     blockers.push(
-      "Wind integration, approved research/target sources and expert protocols are pending. Live builds are not ready.",
+      config.TUSHARE_TOKEN
+        ? "Live scoped builds are not enabled yet. The platform team must verify the Tushare token and open the market-data capability."
+        : "Live builds need the platform's Tushare token. The platform team must set TUSHARE_TOKEN on the server; users never provide API keys.",
     );
+  }
   const protocolHashes = Object.fromEntries(
     [
       ...Object.entries(agentProtocols),
@@ -137,7 +141,7 @@ export async function prepareBuild(
     companyIds,
     companyTableVersion: table.version,
     protocolHashes,
-    provider: "wind" as const,
+    provider: "tushare" as const,
     moduleVersions: { companies: companyModuleVersion, starter: financialStarterVersion },
     theme: plan.themeOverride ?? "starter-default",
     readiness: blockers.length ? ("blocked" as const) : ("fixture" as const),
@@ -181,7 +185,7 @@ export function validateScopedBundle(bundle: AppBundle, record: BuildRecord) {
   }
   if (bundle.manifest.permissions.some((id) => !allowed.includes(id)))
     throw new Error(
-      "This build can use only its approved platform modules and app storage. Wind, arbitrary plugins and LLM research are not wired yet.",
+      "This build can use only its approved platform modules and app storage. The market-data capability, arbitrary plugins and LLM research are not wired yet.",
     );
   if (!project && !bundle.files["index.html"].includes("Synthetic demo"))
     throw new Error('Fixture applications must visibly include the label "Synthetic demo".');

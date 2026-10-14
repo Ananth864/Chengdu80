@@ -4,11 +4,11 @@ export const buildContext: {
   capabilities: string[];
   companies: string[];
   theme: string;
-  provider: "wind";
+  provider: "tushare";
 } = {
   name: "Financial demo",
   capabilities: [],
   companies: [],
   theme: "starter-default",
-  provider: "wind",
+  provider: "tushare",
 };

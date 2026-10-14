@@ -83,7 +83,7 @@ const app = {
   history: [],
   events: [],
   data: { _companyCards: { watchlist: ["DEMO001"] } },
-  buildRecords: [{ id: "approved-contract", provider: "wind" }],
+  buildRecords: [{ id: "approved-contract", provider: "tushare" }],
   conversation: [
     {
       id: "user-1",

@@ -83,7 +83,7 @@ const record = {
   companyIds: ["DEMO001"],
   companyTableVersion: "synthetic-companies-v1",
   protocolHashes: {},
-  provider: "wind" as const,
+  provider: "tushare" as const,
   moduleVersions: {},
   theme: "starter-default",
   readiness: "fixture" as const,

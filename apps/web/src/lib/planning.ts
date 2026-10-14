@@ -60,7 +60,7 @@ export function workflowGraph(
           : "Live platform data"
         : "Application inputs",
       detail: record
-        ? `Company table ${record.companyTableVersion} · provider ${record.provider} (integration pending)`
+        ? `Company table ${record.companyTableVersion} · provider ${record.provider}`
         : "Inputs are confirmed when the internal build record is prepared.",
       inputs: [
         spec.inputs.join("; "),

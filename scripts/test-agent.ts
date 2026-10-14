@@ -560,7 +560,7 @@ try {
   assert(!requests.at(-1)?.input.some((item) => item.name === "call_plugin"));
   assert(built.current.buildRecord?.resolvedCapabilities.includes("news"));
   assert(built.current.buildRecord?.protocolHashes.builder);
-  assert.equal(built.current.buildRecord?.provider, "wind");
+  assert.equal(built.current.buildRecord?.provider, "tushare");
   assert.equal(built.current.buildRecord?.readiness, "fixture");
   const legacy = await fetch(`${base}/api/platform`, {
     method: "POST",

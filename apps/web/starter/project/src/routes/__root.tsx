@@ -13,7 +13,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: buildContext.name },
       {
         name: "description",
-        content: "Synthetic financial demo. Live Wind data is not connected.",
+        content: "Synthetic financial demo. Live Tushare market data is not connected.",
       },
     ],
     links: [{ rel: "stylesheet", href: appCss }],

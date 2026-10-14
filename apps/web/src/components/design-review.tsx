@@ -367,7 +367,7 @@ export function DesignReview({
         )}
         <p className="text-xs text-muted-foreground">
           Passing checks activate a build automatically. Failed changes keep the working app. The
-          company table and Wind access are platform-managed.
+          company table and the Tushare token are platform-managed.
         </p>
       </section>
     </section>

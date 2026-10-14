@@ -66,8 +66,8 @@ export function FinancialDemo() {
         <section aria-label="Historical analysis" className="space-y-4">
           <h2 className="text-xl font-semibold">Historical analysis and sourced price target</h2>
           <p className="text-muted-foreground">
-            {buildContext.companies.join(", ")} · Wind data and the financial website source are
-            pending.
+            {buildContext.companies.join(", ")} · Tushare market data and the financial website
+            source are pending.
           </p>
           <div className="rounded-xl border p-8 text-muted-foreground">Price chart unavailable</div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

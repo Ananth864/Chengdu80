@@ -12,7 +12,7 @@ The builder receives the internal versioned record and selected protocols automa
 
 The Stage A review is high level and plain language: requested outcomes, what the user will see/do and material limitations. Keep technical configuration, dependency graphs, SDK choices and provider fields inside the builder contract, not in the required user review.
 
-Feasibility validates every requested company against the platform-managed company table before preparing a build. Resolve ambiguous names, preserve ticker identity and reject companies outside the supported table with a supported alternative. Table membership does not by itself prove Wind field coverage.
+Feasibility validates every requested company against the platform-managed company table before preparing a build. Resolve ambiguous names, preserve ticker identity and reject companies outside the supported table with a supported alternative. Table membership does not by itself prove Tushare field coverage.
 
 Preparing the internal record freezes its version for that build. A builder must not silently change scope, metric definitions, dependencies or data sources to make a build pass. Return an explicit blocked result or request a revised contract. Passing verification activates the release. Failed updates preserve the existing release and app data.
 
@@ -33,9 +33,9 @@ The company CSV has Company Name, Ticker Symbol, Industry, A-share Market Capita
 
 ## Official data provider
 
-Wind is the selected official provider for the redesigned platform, superseding Tushare and current substitute-provider defaults. Use a Wind adapter as the production target; fixtures remain explicitly labeled demo data. Do not silently fall back to another provider.
+Tushare is the official data provider for the platform. The platform server holds `TUSHARE_TOKEN`; builders and generated apps never see it and call data only through platform capabilities such as `market.prices`. Fixtures remain explicitly labeled demo data. Do not silently fall back to another provider.
 
-Reference products: [Wind Client API](https://www.wind.com.cn/portal/zh/ClientApi/index.html) and [Wind market-data service](https://www.wind.com.cn/mobile/WDS/marketdata/zh.html). Exact product, credentials, licensed fields and display/caching permissions remain to be confirmed. Historical-feed availability does not establish fundamentals, target-price or news entitlements. Live Wind integration remains pending; scoped builds cannot call the old substitute-provider APIs.
+Reference endpoint: the documented Tushare HTTP API at `http://api.tushare.pro` with `{api_name, token, params, fields}` request bodies. The competition token's licensed tables, row limits and frequency limits must be verified with real calls before live builds open. Daily-price access does not establish fundamentals, target-price or news entitlements.
 
 ## Required outputs
 
@@ -103,7 +103,7 @@ Use separate files/components for these work areas and agree contract/module int
 - Research protocol, evidence requirements, approved chatbot library and bilingual copy.
 - Historical metric conventions and reviewed calculation examples.
 - Financial-card calculation approval, industry classification/minimum peer count and freshness limits.
-- Data credentials and verified field coverage, for Wind, including whether price targets and news are covered by the selected product. Provider selection is settled; exact field access and integration remain pending.
+- Verified Tushare field coverage, including whether price targets and news are covered by the competition token. Provider selection is settled; entitlement verification and scoped-build wiring remain pending.
 - Full-history coverage for all-time values and financial fields for every required card.
 
 Missing items have placeholders below. Teammates may build against labeled fixtures while readiness stays `template`; do not present the capability as live-ready.

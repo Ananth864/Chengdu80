@@ -1,8 +1,8 @@
 # Provider handoff template
 
-Provider: Wind, selected official provider. Adapter ID: wind. Owner: TODO. Integration status: pending.
-Product: TODO, confirm Client API versus market-data service and required entitlements.
-References: https://www.wind.com.cn/portal/zh/ClientApi/index.html and https://www.wind.com.cn/mobile/WDS/marketdata/zh.html
+Provider: Tushare, selected official provider. Adapter ID: tushare. Owner: TODO. Integration status: pending.
+Product: Tushare HTTP API, `POST http://api.tushare.pro` with `{api_name, token, params, fields}`; success responses use `code=0` with `data.fields` and `data.items`.
+References: the competition Financial Data Resource Guide and the official Tushare API documentation.
 Capabilities served: TODO.
 
 ## Access
@@ -33,4 +33,4 @@ Live sample result/date with secrets removed: TODO.
 Coverage verified by/date: TODO.
 Usage permission evidence: TODO.
 Open gaps: TODO.
-Do not mark live-ready based on a table name, marketing statement or untested API inventory entry.
+Do not mark live-ready based on a table name, marketing statement or untested API inventory entry. The token stays in server configuration; never in app source or client code.
