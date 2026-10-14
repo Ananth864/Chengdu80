@@ -1,5 +1,6 @@
 import { requireBuild, validateScopedBundle } from "./build-policy";
 import {
+  companyCardMetrics,
   companyCardsInputSchema,
   companyModuleVersion,
   dailyCompanyCards,
@@ -7,7 +8,6 @@ import {
   emptyCardState,
   matchCompanies,
   shanghaiDay,
-  unavailableCardMetrics,
   type CardState,
 } from "../lib/company-capabilities";
 import { modelConfiguration } from "./model-config";
@@ -536,11 +536,17 @@ export async function dispatch(access: Access, raw: unknown) {
         synthetic: table.synthetic,
         moduleVersion: companyModuleVersion,
         exhausted,
-        companies: tickers.map((ticker) => ({
-          ...table.companies.find((company) => company.ticker === ticker),
-          metrics: unavailableCardMetrics(release.buildRecord!.plan.cardMetrics),
-          choice: state.batch?.day === day ? (state.batch.decisions[ticker] ?? null) : null,
-        })),
+        companies: tickers.map((ticker) => {
+          const company = table.companies.find((entry) => entry.ticker === ticker);
+          return {
+            ...company,
+            metrics: companyCardMetrics(
+              company?.fundamentals,
+              release.buildRecord!.plan.cardMetrics,
+            ),
+            choice: state.batch?.day === day ? (state.batch.decisions[ticker] ?? null) : null,
+          };
+        }),
         watchlist: state.watchlist,
         notice: exhausted
           ? "No unseen eligible companies remain. You may explicitly revisit dismissed companies."
@@ -572,10 +578,10 @@ export async function dispatch(access: Access, raw: unknown) {
   if (req.capability === "finance.backtest") return calculate("strategy", req.input);
   if (req.capability === "market.assets") return assetUniverse();
   if (req.capability === "market.prices") {
-    const input = z
-      .object({ provider: z.enum(["fixtures", "tushare"]).default("fixtures"), symbol: z.string() })
-      .parse(req.input);
-    return prices(input);
+    // Apps never choose the provider: platform-initiated calls always use the
+    // live SSE Class A feed, never fixtures.
+    const { symbol } = z.object({ symbol: z.string() }).parse(req.input);
+    return prices({ provider: "tushare", symbol });
   }
   if (req.capability === "storage.read") {
     const { key } = z.object({ key: z.string().regex(/^[a-zA-Z0-9_-]{1,50}$/) }).parse(req.input);

@@ -4,6 +4,6 @@ The application LLM answers only from prepared dated asset analysis and reviewed
 
 Retain sources, asset identity, periods and uncertainty. Explain missing, stale and conflicting evidence. Give no buy, hold or sell recommendation. Keep English and Simplified Chinese figures and qualifications identical.
 
-Research generation is a separate capability run. Company-card research includes the company plus industry context. Standalone research is industry-level. News retrieval is once per research run. Chat answers perform no new external research. Brokerage execution and continuous monitoring are outside current scope.
+Research generation is a separate capability run. Company-card research includes the company plus industry context. Standalone research is industry-level. Chat answers perform no new external research. Brokerage execution and continuous monitoring are outside current scope.
 
 The reviewed explanation library and research procedure are pending expert inputs. Unprepared sections display unavailable; never claim that prepared live analysis exists.

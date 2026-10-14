@@ -2,7 +2,7 @@ import { appProjectTemplateFiles } from "./app-project-template";
 import type { AppBundle, ProductSpec } from "./contracts";
 import type { BuildRecord } from "./build-plan";
 
-export const financialStarterVersion = "financial-react-v3";
+export const financialStarterVersion = "financial-react-v4";
 export const buildContextPath = "src/lib/build-context.ts";
 export function buildContextSource(record: BuildRecord, name: string) {
   return `// Platform-owned contract context.\nexport const buildContext = ${JSON.stringify({ name, mode: record.plan.mode, capabilities: record.resolvedCapabilities, companies: record.companyIds, industries: record.companyIndustries, theme: record.theme, provider: record.provider })} as const;\n`;
@@ -11,6 +11,8 @@ export function approvedPermissions(record: BuildRecord, project: boolean) {
   const permissions: AppBundle["manifest"]["permissions"] = ["storage.read", "storage.write"];
   if (!project) permissions.push("finance.calculate");
   if (record.resolvedCapabilities.includes("market-research")) permissions.push("finance.research");
+  if (record.resolvedCapabilities.includes("historical-analysis"))
+    permissions.push("market.prices");
   if (record.resolvedCapabilities.includes("risk-industry-matching"))
     permissions.push("finance.match-companies");
   if (record.resolvedCapabilities.includes("company-cards"))
@@ -28,13 +30,28 @@ export function projectStarterBundle(spec: ProductSpec): AppBundle {
     files: { ...appProjectTemplateFiles },
   };
 }
+// Everything the builder agent may reshape freely: the whole presentation
+// surface, including the financial shell, routes and styling. New files are
+// agent-owned by default.
+const agentOwnedProjectFiles = new Set([
+  "README.md",
+  "src/App.tsx",
+  "src/app.css",
+  "src/styles.css",
+  "src/components/capabilities.tsx",
+  "src/components/financial-app.tsx",
+  "src/router.tsx",
+  "src/routes/__root.tsx",
+  "src/routes/index.tsx",
+]);
 export function protectedProjectFiles() {
-  // Build tools, SDK, approved financial UI, router and shadcn primitives belong to the platform.
+  // SDK, build configuration and shadcn primitives belong to the platform.
+  // build-context.ts and routeTree.gen.ts are checked separately: the context
+  // must match its build record, the route tree is generated.
   return Object.fromEntries(
     Object.entries(appProjectTemplateFiles).filter(
       ([name]) =>
-        name !== "src/App.tsx" &&
-        name !== "src/app.css" &&
+        !agentOwnedProjectFiles.has(name) &&
         name !== buildContextPath &&
         name !== "src/routeTree.gen.ts",
     ),
@@ -48,9 +65,4 @@ export function inspectProjectProtection(bundle: AppBundle, record?: BuildRecord
     throw new Error("The project context does not match its feasible build record.");
   if (!record && bundle.files[buildContextPath] !== appProjectTemplateFiles[buildContextPath])
     throw new Error("A financial build record is required for generated project context.");
-  if (
-    !record?.plan.themeOverride &&
-    bundle.files["src/app.css"] !== appProjectTemplateFiles["src/app.css"]
-  )
-    throw new Error("Use the default starter theme unless the contract specifies an override.");
 }

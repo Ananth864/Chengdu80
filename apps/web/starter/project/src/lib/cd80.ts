@@ -5,7 +5,8 @@ type Capability =
   | "storage.write"
   | "finance.match-companies"
   | "finance.company-cards"
-  | "finance.research";
+  | "finance.research"
+  | "market.prices";
 declare global {
   interface Window {
     cd80: { call: (capability: Capability, input: unknown) => Promise<unknown>; ready: () => void };
@@ -27,9 +28,9 @@ const displayCompanySchema = companySchema.extend({
     .array(
       z.object({
         id: z.string(),
-        value: z.null(),
-        status: z.literal("unavailable"),
-        reason: z.string(),
+        value: z.number().nullable(),
+        status: z.enum(["available", "unavailable"]),
+        reason: z.string().optional(),
       }),
     )
     .default([]),
@@ -106,6 +107,23 @@ export const researchResultSchema = z.object({
     .nullable(),
   unavailable: z.array(z.string()),
 });
+export const priceHistorySchema = z.object({
+  symbol: z.string(),
+  prices: z
+    .array(z.object({ date: z.string(), close: z.number() }))
+    .min(1)
+    .refine(
+      (rows) => rows.every((row, index) => index === 0 || rows[index - 1].date <= row.date),
+      "Prices must be ordered by date",
+    ),
+  meta: z.object({
+    provider: z.string(),
+    synthetic: z.literal(false),
+    currency: z.literal("CNY"),
+    coverage: z.string(),
+    warning: z.string(),
+  }),
+});
 async function call(capability: Capability, input: unknown): Promise<unknown> {
   if (typeof window === "undefined" || !window.cd80)
     throw new Error("Financial capabilities are available only in the platform preview.");
@@ -132,6 +150,9 @@ export const cd80 = {
     },
     async research(tsCode: string) {
       return researchResultSchema.parse(await call("finance.research", { tsCode }));
+    },
+    async priceHistory(symbol: string) {
+      return priceHistorySchema.parse(await call("market.prices", { symbol }));
     },
   },
 };

@@ -1018,8 +1018,9 @@ try {
   await pluginTurn.text();
   const latest = await appById(id);
   assert.equal(latest.current?.id, activeRelease);
-  assert(!requests.at(-1)?.tools?.some((tool) => tool.name === "call_plugin"));
+  assert(!requests.at(-1)?.input.some((item) => item.name === "call_plugin"));
   assert.deepEqual(providerCities, [], "No weather provider call was made");
+  assert(built.current.buildRecord?.resolvedCapabilities.includes("market-research"));
   // News stays out of the closure: the platform does not offer news tracking.
   assert(!built.current.buildRecord?.resolvedCapabilities.includes("news"));
   assert(built.current.buildRecord?.protocolHashes.builder);

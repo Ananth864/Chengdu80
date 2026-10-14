@@ -41,16 +41,15 @@ bundleSchema.parse(bundle);
 validateScopedBundle(bundle, record);
 assert(inspectProject(bundle, spec, record).every((check) => check.passed));
 assert(!inspectProject(bundle, spec).every((check) => check.passed));
+// Platform-owned files (SDK, build config, shadcn primitives, contract context)
+// must stay unchanged; everything else is the agent's presentation canvas.
 for (const filename of [
   "package.json",
   "vite.config.ts",
   "tsconfig.json",
   "src/lib/cd80.ts",
   "src/lib/build-context.ts",
-  "src/components/financial-app.tsx",
   "src/components/ui/button.tsx",
-  "src/routes/__root.tsx",
-  "src/app.css",
 ]) {
   const changed = structuredClone(bundle);
   changed.files[filename] =
@@ -62,8 +61,21 @@ for (const filename of [
           },
         })
       : `${changed.files[filename]}\n// changed by builder`;
-  assert.throws(() => validateScopedBundle(changed, record), /starter|context|theme/);
+  assert.throws(() => validateScopedBundle(changed, record), /starter|context/);
   assert(!inspectProject(changed, spec, record).every((check) => check.passed));
+}
+for (const filename of [
+  "src/components/financial-app.tsx",
+  "src/routes/__root.tsx",
+  "src/routes/index.tsx",
+  "src/App.tsx",
+  "src/app.css",
+  "src/styles.css",
+]) {
+  const changed = structuredClone(bundle);
+  changed.files[filename] = `${changed.files[filename]}\n/* redesigned by builder */`;
+  validateScopedBundle(changed, record);
+  assert(inspectProject(changed, spec, record).every((check) => check.passed));
 }
 for (const permission of [
   "plugin.call",
@@ -89,8 +101,8 @@ for (const permission of [
 }
 assert(!bundle.files["src/lib/cd80.ts"]!.includes("tushare"));
 assert(!bundle.files["src/lib/cd80.ts"]!.includes("ai.explain"));
-assert(!bundle.files["src/routes/__root.tsx"]!.includes("<FinancialDemo"));
-assert(bundle.files["src/App.tsx"]!.includes("<FinancialDemo"));
+assert(bundle.files["src/lib/cd80.ts"]!.includes("priceHistory"));
+assert(bundle.files["src/routes/__root.tsx"]!.includes("<FinancialDemo"));
 assert(
   bundle.files["src/components/financial-app.tsx"]!.includes("Live · Shanghai Stock Exchange"),
 );
@@ -98,6 +110,8 @@ assert(
   bundle.files["src/components/financial-app.tsx"]!.includes("export function FinancialDemo"),
 );
 assert(bundle.files["src/components/financial-app.tsx"]!.includes("@/components/ui/card"));
+// A themed record stays valid; presentation files no longer need permission to
+// differ — the recorded theme is a descriptor, not a styling gate.
 const themed = await prepareBuild(
   { ...record.plan, themeOverride: "Use a warm terracotta accent" },
   "theme-turn",
@@ -109,5 +123,5 @@ customized.files["src/app.css"] = ":root { --primary: #9f4d37; }";
 validateScopedBundle(customized, themed);
 globalThis.fetch = originalFetch;
 console.log(
-  "PASS React starter, fixed SDK/modules/shadcn/configuration, fake-check rejection, financial permissions and contract-controlled theme overrides",
+  "PASS React starter, platform-owned SDK/config/shadcn with free presentation redesign, fake-check rejection, market.prices gating and recorded themes",
 );

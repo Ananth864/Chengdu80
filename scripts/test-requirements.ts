@@ -19,7 +19,7 @@ import {
 
 assert.equal(capabilityCatalog.library_id, "shared-financial-capabilities");
 assert.equal(capabilityCatalog.version, "2.0.0");
-assert.equal(businessCapabilities.length, 8);
+assert.equal(businessCapabilities.length, 7);
 assert.deepEqual(parseCapabilityCatalog(capabilityCatalog), capabilityCatalog);
 assert.ok(
   capabilityCatalog.capabilities.find((entry) => entry.id === "risk-profile")

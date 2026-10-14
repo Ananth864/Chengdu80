@@ -57,7 +57,6 @@ export const capabilityCatalog = parseCapabilityCatalog(source);
 // their scoring, discovery, data and architecture requirements differ.
 export const businessCapabilities = [
   "market-research",
-  "news",
   "historical-analysis",
   "price-target",
   "risk-assessment",
@@ -84,14 +83,6 @@ export const capabilityDefinitions: Record<BusinessCapability, RuntimeDefinition
     dependencies: [],
     protocol: "research",
     relatedCatalogIds: ["industry-research"],
-  },
-  news: {
-    label: "News retrieval",
-    description: "News accompanying research, not continuous monitoring.",
-    availability: "The v2 company/industry news adapter is pending.",
-    dependencies: ["market-research"],
-    protocol: "research",
-    relatedCatalogIds: ["company-industry-news"],
   },
   "historical-analysis": {
     label: "Historical analysis",

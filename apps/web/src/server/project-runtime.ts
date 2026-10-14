@@ -3,7 +3,6 @@ import path from "node:path";
 import type { AppBundle, Check, ProductSpec } from "../lib/contracts";
 import type { BuildRecord } from "../lib/build-plan";
 import { validateScopedBundle } from "./build-policy";
-import { financialStarterVersion } from "../lib/financial-starter";
 import { bundleSchema } from "../lib/contracts";
 import {
   prepareProject,
@@ -30,7 +29,7 @@ export function inspectProject(
       name: "Financial contract and protected starter",
       passed: true,
       detail:
-        "Fixed SDK, financial modules, shadcn source and build configuration match the approved platform starter and contract.",
+        "SDK, build configuration, contract context and shadcn primitives match the approved platform starter; all presentation files are agent-owned.",
     });
   } catch (error) {
     checks.push({
@@ -68,13 +67,9 @@ export async function verifyProject(
       const response = await readPreviewResponse(preview, "/");
       const html = await response.text();
       const expectedLabel = "Live · Shanghai Stock Exchange";
-      if (
-        response.status !== 200 ||
-        !html.includes(expectedLabel) ||
-        !html.includes(financialStarterVersion)
-      )
+      if (response.status !== 200 || !html.includes(expectedLabel))
         throw new Error(
-          "The compiled app did not render its fixed financial modules and live source label.",
+          "The compiled app did not render with its live-source label. Keep \"Live · Shanghai Stock Exchange\" visible in the page.",
         );
       const output = await readProjectFiles(workspace);
       for (const [name, source] of Object.entries(bundle.files))
@@ -95,7 +90,7 @@ export async function verifyProject(
         name: "Platform build, type checks and financial render",
         passed: true,
         detail:
-          "Platform-owned Vite+ commands compiled the pinned project inside Linux isolation. SSR rendered the fixed financial module; source remained unchanged.",
+          "Platform-owned Vite+ commands compiled the pinned project inside Linux isolation. SSR rendered the app with its live-source label; source remained unchanged.",
       });
     } catch (error) {
       checks.push({

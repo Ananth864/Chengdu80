@@ -16,4 +16,4 @@ The user requested a separate reviewer and required the frontend-design skill. T
 | Responsive tabs lacked panel relationships             | Added explicit trigger/panel IDs and ARIA associations; chat remains mounted when preview opens.                     |
 | Layout-only thumbnails look similar for dynamic apps   | Pending safe capture of rendered releases. Current thumbnails remain honestly labeled Layout preview.                |
 
-Fixture browser checks cover loading, contract review, search, gallery navigation, browser history, tablet/mobile panels, deletion and restart persistence. Live model inference and Wind are outside this verification.
+Fixture browser checks cover loading, contract review, search, gallery navigation, browser history, tablet/mobile panels, deletion and restart persistence. Live model inference and Tushare are outside this verification.

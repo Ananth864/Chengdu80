@@ -8,6 +8,6 @@ Show up to five randomly selected company cards per China calendar day. Preserve
 
 Each card represents one company. Metric menu: P/E, P/S, dividend yield, revenue growth, ROE, interest coverage. Defaults: P/E, dividend yield, ROE, interest coverage. Explicit selections replace defaults. Keep unavailable selected metrics with reasons. Detailed calculation and industry-benchmark rules need expert validation.
 
-Company research detail is optional and requires market research plus news. Matching may alternatively include the historical/target package without research. All builds serve the real Shanghai Stock Exchange Class A table (identity plus daily_basic market-cap sizing); per-metric financial values, questionnaires and expert assessment remain pending.
+Company research detail is optional and requires market research. Matching may alternatively include the historical/target package without research. All builds serve the real Shanghai Stock Exchange Class A table (identity plus daily_basic market-cap sizing); per-metric financial values, questionnaires and expert assessment remain pending.
 
 The platform provides company-capabilities-v1. Reuse its matching, daily selection and decision APIs. Questionnaire scoring remains pending; apps label the real SSE source. Never write module data via storage.write. Selected metric values are unavailable until approved fields and definitions are wired.

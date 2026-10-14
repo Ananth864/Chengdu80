@@ -145,7 +145,20 @@ export function sizeForCap(marketCapRmb: number) {
       ? ("medium" as const)
       : ("small" as const);
 }
-export function parseDailyBasic(body: unknown): Map<string, number> {
+// Fundamentals the exchange publishes in the same daily_basic row: trailing
+// twelve-month multiples (P/E can be negative for loss-making companies) and
+// dividend yield in percent. Null means the feed did not publish the field.
+export type DailyBasicFundamentals = {
+  peTtm: number | null;
+  psTtm: number | null;
+  dividendYieldTtm: number | null;
+};
+export type DailyBasicRow = { marketCapRmb: number; fundamentals: DailyBasicFundamentals };
+function dailyBasicNumber(raw: unknown, floor: number): number | null {
+  const value = typeof raw === "number" ? raw : Number(cellText(raw));
+  return Number.isFinite(value) && value >= floor ? value : null;
+}
+export function parseDailyBasic(body: unknown): Map<string, DailyBasicRow> {
   if (!body || typeof body !== "object") throw new Error("Tushare returned an invalid response");
   const payload = body as {
     code?: number;
@@ -160,21 +173,35 @@ export function parseDailyBasic(body: unknown): Map<string, number> {
     );
   const codeAt = fields.indexOf("ts_code");
   const capAt = fields.indexOf("total_mv");
+  const peAt = fields.indexOf("pe_ttm");
+  const psAt = fields.indexOf("ps_ttm");
+  const dvAt = fields.indexOf("dv_ttm");
   if (codeAt < 0 || capAt < 0) throw new Error("Tushare response is missing required fields");
-  const caps = new Map<string, number>();
+  const rows = new Map<string, DailyBasicRow>();
   for (const row of items) {
     if (!row || typeof row !== "object" || !Array.isArray(row)) continue;
     const ticker = cellText(row[codeAt]);
     const raw = row[capAt];
     const capWan = typeof raw === "number" ? raw : Number(cellText(raw));
     if (!ticker || !Number.isFinite(capWan) || capWan <= 0) continue;
-    caps.set(ticker, capWan * 10_000);
+    rows.set(ticker, {
+      marketCapRmb: capWan * 10_000,
+      fundamentals: {
+        peTtm: peAt < 0 ? null : dailyBasicNumber(row[peAt], -Infinity),
+        psTtm: psAt < 0 ? null : dailyBasicNumber(row[psAt], 0),
+        dividendYieldTtm: dvAt < 0 ? null : dailyBasicNumber(row[dvAt], 0),
+      },
+    });
   }
-  if (!caps.size) throw new Error("Tushare returned no usable market-cap rows");
-  return caps;
+  if (!rows.size) throw new Error("Tushare returned no usable market-cap rows");
+  return rows;
 }
 type SizedCompanyCache = {
-  companies: (LiveCompany & { marketCapRmb: number; size: "small" | "medium" | "large" })[];
+  companies: (LiveCompany & {
+    marketCapRmb: number;
+    size: "small" | "medium" | "large";
+    fundamentals: DailyBasicFundamentals;
+  })[];
   version: string;
   asOf: string;
   fetchedAt: number;
@@ -183,8 +210,8 @@ let sizedCompanyCache: SizedCompanyCache | undefined;
 export function resetSizedCompanyCache() {
   sizedCompanyCache = undefined;
 }
-// Latest trading day's caps: walk back over weekends and holidays.
-async function dailyBasicCaps(token: string, base: string, doFetch: typeof fetch) {
+// Latest trading day's daily_basic rows: walk back over weekends and holidays.
+async function dailyBasicRows(token: string, base: string, doFetch: typeof fetch) {
   for (let back = 0; back < 10; back++) {
     const day = new Date(Date.now() - back * 24 * 60 * 60 * 1000);
     const response = await doFetch(base, {
@@ -194,13 +221,13 @@ async function dailyBasicCaps(token: string, base: string, doFetch: typeof fetch
         api_name: "daily_basic",
         token,
         params: { trade_date: compactDay(day) },
-        fields: "ts_code,total_mv",
+        fields: "ts_code,total_mv,pe_ttm,ps_ttm,dv_ttm",
       }),
       signal: AbortSignal.timeout(20000),
     });
     if (!response.ok) throw new Error(`Tushare HTTP request failed with status ${response.status}`);
-    const caps = parseDailyBasic(await response.json());
-    if (caps.size) return { caps, asOf: compactDay(day) };
+    const rows = parseDailyBasic(await response.json());
+    if (rows.size) return { rows, asOf: compactDay(day) };
   }
   throw new Error("Tushare returned no market-cap rows for the last ten days");
 }
@@ -212,7 +239,11 @@ export async function sizedSseCompanies(options?: { fetch?: typeof fetch }): Pro
       synthetic: false;
       version: string;
       asOf: string;
-      companies: (LiveCompany & { marketCapRmb: number; size: "small" | "medium" | "large" })[];
+      companies: (LiveCompany & {
+        marketCapRmb: number;
+        size: "small" | "medium" | "large";
+        fundamentals: DailyBasicFundamentals;
+      })[];
     }
   | { available: false; synthetic: false; reason: string }
 > {
@@ -234,16 +265,23 @@ export async function sizedSseCompanies(options?: { fetch?: typeof fetch }): Pro
     const doFetch = options?.fetch ?? fetch;
     const base = await sseACompanies(options);
     if (!base.available) return { available: false, synthetic: false, reason: base.reason };
-    const { caps, asOf } = await dailyBasicCaps(
+    const { rows, asOf } = await dailyBasicRows(
       config.TUSHARE_TOKEN,
       tushareEndpoint(config),
       doFetch,
     );
     const companies = base.companies.flatMap((company) => {
-      const marketCapRmb = caps.get(company.ticker);
-      return marketCapRmb === undefined
+      const row = rows.get(company.ticker);
+      return row === undefined
         ? []
-        : [{ ...company, marketCapRmb, size: sizeForCap(marketCapRmb) }];
+        : [
+            {
+              ...company,
+              marketCapRmb: row.marketCapRmb,
+              size: sizeForCap(row.marketCapRmb),
+              fundamentals: row.fundamentals,
+            },
+          ];
     });
     if (!companies.length) throw new Error("Tushare returned no sized SSE Class A companies");
     const fetchedAt = new Date();
@@ -391,7 +429,7 @@ export function assetUniverse() {
 
 // ---- Market research (verified Tushare sources; see the platform audit) ----
 // Every section fails independently: one missing source never blocks the rest,
-// and unsupported claims (market size, five-year outlook, news) are never sent.
+// and unsupported claims (market size, five-year outlook) are never sent.
 type TushareRow = Record<string, string>;
 function tushareRows(body: unknown, label: string): TushareRow[] {
   if (!body || typeof body !== "object") throw new Error("Tushare returned an invalid response");
