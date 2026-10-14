@@ -35,6 +35,7 @@ command -v docker >/dev/null 2>&1 || die "docker is required. Install Docker Des
 docker compose version >/dev/null 2>&1 || die "docker compose (v2) is required. Update Docker Desktop/Engine."
 command -v openssl >/dev/null 2>&1 || die "openssl is required to generate secrets."
 command -v curl >/dev/null 2>&1 || die "curl is required."
+command -v node >/dev/null 2>&1 || die "node is required to run the web app. Install Node.js 22 or later."
 
 if ! command -v bun >/dev/null 2>&1; then
   log "bun not found; installing (curl -fsSL https://bun.sh/install | bash)"
@@ -149,6 +150,7 @@ log "Building the web app (VITE_DEMO_MODE/VITE_CONVEX_URL must be set at build t
 )
 
 log "Starting the web app as a local Node process"
+web_port="${CD80_PORT:-3098}"
 web_pid_file="$repo_root/.selfhosted-web.pid"
 if [ -f "$web_pid_file" ] && kill -0 "$(cat "$web_pid_file")" 2>/dev/null; then
   echo "Web app already running (pid $(cat "$web_pid_file")); stopping it first."
@@ -162,20 +164,21 @@ fi
   source .env
   set +a
   export VITE_DEMO_MODE="${CD80_DEMO_MODE:-1}"
-  export PORT="${CD80_PORT:-3098}"
+  export PORT="$web_port"
   nohup node server/node-entry.mjs >"$repo_root/.selfhosted-web.log" 2>&1 &
   echo $! > "$web_pid_file"
 )
 sleep 2
 if ! kill -0 "$(cat "$web_pid_file")" 2>/dev/null; then
-  die "Web app failed to start. Check .selfhosted-web.log"
+  rm -f "$web_pid_file"
+  die "Web app failed to start on port ${web_port}. Check .selfhosted-web.log; if it reports EADDRINUSE, stop the process using that port or re-run with CD80_PORT=3099 ./scripts/setup-selfhosted.sh."
 fi
 
 # --- 10. Done --------------------------------------------------------------
 log "Self-hosted stack is ready"
 cat <<EOF
 
-Web app:           http://localhost:3098
+Web app:           http://localhost:${web_port}
 Convex backend:    http://127.0.0.1:3210
 Convex dashboard:  http://127.0.0.1:6791
 
@@ -191,10 +194,9 @@ since it's inlined into the browser bundle at build time):
     --build-arg VITE_DEMO_MODE=1 \\
     --build-arg VITE_CONVEX_URL=http://127.0.0.1:3210 \\
     -f apps/web/Dockerfile .
-  docker run -d --name chengdu80-web -p 3098:3098 \\
+  docker run -d --name chengdu80-web -p ${web_port}:3098 \\
+    --env-file apps/web/.env \\
     -e CD80_DEMO_MODE=1 -e PORT=3098 \\
-    -e PLATFORM_INTERNAL_KEY=${platform_internal_key} \\
     -e VITE_CONVEX_URL=http://127.0.0.1:3210 \\
     chengdu80-web
 EOF
-

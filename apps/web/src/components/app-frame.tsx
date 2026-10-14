@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Application, Release } from "../lib/contracts";
+import { SIMULATION_WARNING } from "@web-starter/capabilities";
 import { Alert, AlertTitle, AlertDescription } from "@web-starter/ui/components/alert";
 import { api } from "../lib/client";
 
@@ -7,6 +8,7 @@ export function AppFrame({ app, release }: { app: Application; release: Release 
   const frame = useRef<HTMLIFrameElement>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
+  const canPreview = release.verification.passed || release.simulationPassed === true;
   const nonce = useMemo(() => crypto.randomUUID().replaceAll("-", ""), [release.id]);
   const onFrameLoad = useMemo(() => {
     let loads = 0;
@@ -22,6 +24,7 @@ export function AppFrame({ app, release }: { app: Application; release: Release 
   useEffect(() => {
     setReady(false);
     setError("");
+    if (!canPreview) return;
     let calls = 0;
     let outstanding = 0;
     let logCount = 0;
@@ -50,6 +53,29 @@ export function AppFrame({ app, release }: { app: Application; release: Release 
         return;
       }
       if (typeof m.id !== "string" || typeof m.capability !== "string") return;
+      // Artifact previews expose only the saved server flow, never arbitrary RPC capabilities.
+      if (
+        release.capabilityArtifact &&
+        (m.capability !== "capability.flow" ||
+          !m.input ||
+          typeof m.input !== "object" ||
+          Array.isArray(m.input) ||
+          Object.keys(m.input).length !== 1 ||
+          !m.input.inputs ||
+          typeof m.input.inputs !== "object" ||
+          Array.isArray(m.input.inputs))
+      ) {
+        event.source?.postMessage(
+          {
+            channel: "cd80-result",
+            nonce,
+            id: m.id,
+            error: "Only capability.flow with {inputs: Record<string, unknown>} is allowed.",
+          },
+          { targetOrigin: "*" },
+        );
+        return;
+      }
       if (++calls > 250 || outstanding >= 5) {
         event.source?.postMessage(
           {
@@ -101,7 +127,7 @@ export function AppFrame({ app, release }: { app: Application; release: Release 
       window.removeEventListener("message", receive);
       clearTimeout(timer);
     };
-  }, [app.id, release.id, nonce]);
+  }, [app.id, release.id, release.capabilityArtifact, canPreview, nonce]);
   const doc = useMemo(() => {
     const sdk = `const report=message=>parent.postMessage({channel:'cd80',nonce:'${nonce}',log:{message:String(message)}},'*');window.addEventListener('error',e=>report(e.message));window.addEventListener('unhandledrejection',e=>report(e.reason instanceof Error?e.reason.message:e.reason));const pending=new Map();let count=0;window.cd80={call(capability,input={}){return new Promise((resolve,reject)=>{const id=String(++count);const timer=setTimeout(()=>{pending.delete(id);reject(new Error('Capability request timed out'));},100000);pending.set(id,{resolve,reject,timer});parent.postMessage({channel:'cd80',nonce:'${nonce}',id,capability,input},'*');});},ready(){parent.postMessage({channel:'cd80',nonce:'${nonce}',ready:true},'*');}};window.addEventListener('message',e=>{const m=e.data;if(e.source!==parent||!m||m.channel!=='cd80-result'||m.nonce!=='${nonce}')return;const p=pending.get(m.id);if(!p)return;clearTimeout(p.timer);pending.delete(m.id);m.error?p.reject(new Error(m.error)):p.resolve(m.result);});`;
     const csp = `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none';`;
@@ -109,7 +135,23 @@ export function AppFrame({ app, release }: { app: Application; release: Release 
   }, [nonce, release.bundle]);
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      {!ready && !error && (
+      {(release.capabilityArtifact?.simulation || release.simulationPassed) && (
+        <Alert className="shrink-0 rounded-none">
+          <AlertTitle>Simulation result only</AlertTitle>
+          <AlertDescription>{SIMULATION_WARNING}</AlertDescription>
+        </Alert>
+      )}
+      {!release.verification.passed && (
+        <Alert variant="destructive" className="shrink-0 rounded-none">
+          <AlertTitle>Unverified release: production blocked</AlertTitle>
+          <AlertDescription>
+            {canPreview
+              ? "Simulation passed, but production verification has not. This preview is not an approved application."
+              : "Neither verification nor simulation passed. Preview execution is disabled."}
+          </AlertDescription>
+        </Alert>
+      )}
+      {canPreview && !ready && !error && (
         <p role="status" className="text-sm text-muted-foreground">
           Loading preview…
         </p>
@@ -120,17 +162,19 @@ export function AppFrame({ app, release }: { app: Application; release: Release 
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <iframe
-        ref={frame}
-        onLoad={onFrameLoad}
-        key={release.id}
-        title={`${app.name} application`}
-        aria-busy={!ready}
-        srcDoc={doc}
-        sandbox="allow-scripts"
-        referrerPolicy="no-referrer"
-        className="min-h-0 w-full flex-1 border-0"
-      />
+      {canPreview && (
+        <iframe
+          ref={frame}
+          onLoad={onFrameLoad}
+          key={release.id}
+          title={`${app.name} application`}
+          aria-busy={!ready}
+          srcDoc={doc}
+          sandbox="allow-scripts"
+          referrerPolicy="no-referrer"
+          className="min-h-0 w-full flex-1 border-0"
+        />
+      )}
     </div>
   );
 }

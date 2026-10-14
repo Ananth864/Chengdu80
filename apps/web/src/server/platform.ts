@@ -12,7 +12,21 @@ import {
 import { calculate, defaultData, fixtureMeta } from "../lib/finance";
 import { sampleBundle } from "../lib/samples";
 import { auth } from "../integrations/auth";
-import { clarify, explain, feasibility, generate } from "./models";
+import { clarify, explain, generate, planCapabilities } from "./models";
+import { validateCapabilityPlan, parseCapabilityMarkdown } from "@web-starter/capabilities";
+import { runCapabilityPlan } from "@web-starter/capabilities/runtime";
+import { assertCapabilityArtifact, makeCapabilityRelease } from "./capability-release";
+import { assertFeasible, assessDesign } from "./feasibility";
+import {
+  requirementsSchema,
+  initialRequirements,
+  designKey,
+  workflowGraph,
+  capabilityRequirements,
+  type Requirements,
+} from "../lib/planning";
+import type { RegisteredPlugin } from "../lib/plugins";
+import { listPlugins } from "./plugins";
 import { assetUniverse, prices } from "./providers";
 import { event, findApp, listApps, saveApp, mutateApp, type Access } from "./repository";
 import { execute, sourceHash, verify } from "./runtime";
@@ -20,6 +34,25 @@ import { demoMode, demoOwnerId, localMode, settings } from "./settings";
 
 const text = z.string().trim().min(1).max(4000);
 const requestSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("plan-capabilities"), appId: z.string() }),
+  z.object({ action: z.literal("simulate-capabilities"), appId: z.string() }),
+  z.object({
+    action: z.literal("save-capability-plan"),
+    appId: z.string(),
+    markdown: z.string().max(1000000),
+  }),
+  z.object({
+    action: z.literal("save-design"),
+    appId: z.string(),
+    spec: specSchema,
+    requirements: requirementsSchema,
+  }),
+  z.object({
+    action: z.literal("confirm-design"),
+    appId: z.string(),
+    designKey: z.string().max(30000),
+  }),
+  z.object({ action: z.literal("assess-design"), appId: z.string() }),
   z.object({ action: z.literal("clarify"), prompt: text }),
   z.object({ action: z.literal("create-workspace"), prompt: z.string().trim().min(1).max(12000) }),
   z.object({
@@ -43,7 +76,12 @@ const requestSchema = z.discriminatedUnion("action", [
     request: text,
     mode: z.enum(["sample", "model"]),
   }),
-  z.object({ action: z.literal("accept"), appId: z.string(), releaseId: z.string() }),
+  z.object({
+    action: z.literal("accept"),
+    appId: z.string(),
+    releaseId: z.string(),
+    artifactHash: z.string().optional(),
+  }),
   z.object({ action: z.literal("discard"), appId: z.string(), releaseId: z.string() }),
   z.object({ action: z.literal("reverify"), appId: z.string(), releaseId: z.string() }),
   z.object({
@@ -96,7 +134,23 @@ export async function makeRelease(
   bundle: AppBundle,
   origin: Release["origin"],
   notes: string,
+  design?: { requirements: Requirements; plugins: RegisteredPlugin[] },
 ): Promise<Release> {
+  if (design?.requirements.capabilityPlan) return makeCapabilityRelease(spec, design.requirements);
+  assertFeasible(spec);
+  const requirements = design?.requirements ?? {
+    ...initialRequirements(),
+    dataSource: origin === "sample" ? ("fixtures" as const) : ("user" as const),
+    analysisPeriod: spec.protocol === "strategy" ? "Provided chronological price series" : "",
+  };
+  const report = await assessDesign(spec, requirements, design?.plugins ?? []);
+  if (report.outcome !== "pass")
+    throw new Error(
+      `Feasibility requires revision: ${report.checks
+        .filter((check) => check.status !== "supported")
+        .map((check) => check.reason)
+        .join("; ")}`,
+    );
   return {
     id: crypto.randomUUID(),
     bundle,
@@ -105,6 +159,9 @@ export async function makeRelease(
     createdAt: new Date().toISOString(),
     origin,
     notes,
+    requirements,
+    feasibility: report,
+    workflow: workflowGraph(spec, requirements, bundle),
   };
 }
 function newApp(access: Access, spec: ProductSpec): Application {
@@ -124,6 +181,25 @@ function newApp(access: Access, spec: ProductSpec): Application {
 }
 // Verified source becomes active atomically; failed builds preserve the working release.
 export async function applyRelease(app: Application, release: Release) {
+  if (!release.capabilityArtifact && capabilityMode(app))
+    throw new Error("Capability-backed designs cannot be replaced by legacy source releases.");
+  if (release.capabilityArtifact) {
+    await assertCapabilityArtifact(release);
+    const ready = validateCapabilityPlan(
+      release.capabilityArtifact.plan,
+      capabilityRequirements(release.spec, release.requirements!),
+    ).productionReady;
+    if (
+      !ready ||
+      release.capabilityArtifact.simulation ||
+      release.approval?.artifactHash !== release.capabilityArtifact.artifactHash ||
+      release.approval.ownerId !== app.ownerId
+    ) {
+      app.preview = release;
+      return false;
+    }
+  }
+  assertFeasible(release.spec);
   if (!release.verification.passed) {
     app.preview = release;
     return false;
@@ -131,11 +207,31 @@ export async function applyRelease(app: Application, release: Release) {
   if (release.verification.sourceHash !== (await sourceHash(release.bundle)))
     throw new Error("Source changed after verification.");
   if (app.current) app.history = [app.current, ...app.history].slice(0, 2);
+  else if (app.spec.protocol !== release.spec.protocol) {
+    app.data.inputs = defaultData(release.spec.protocol);
+    app.data._provenance = fixtureMeta;
+  }
   app.current = release;
   app.preview = null;
   app.spec = release.spec;
   app.name = release.spec.name;
+  app.workspace = release.bundle;
+  app.workspaceSpec = release.spec;
+  app.requirements = release.requirements ?? initialRequirements();
+  app.feasibility = release.feasibility;
+  app.workflow = release.workflow ?? workflowGraph(release.spec, app.requirements, release.bundle);
+  if (app.confirmedDesign !== designKey(release.spec, app.requirements))
+    app.confirmedDesign = undefined;
   return true;
+}
+function capabilityMode(app: Application) {
+  return !!(
+    app.capabilityMode ||
+    app.requirements?.capabilityPlan ||
+    app.current?.capabilityArtifact ||
+    app.preview?.capabilityArtifact ||
+    app.history.some((release) => release.capabilityArtifact)
+  );
 }
 async function build(
   spec: ProductSpec,
@@ -143,6 +239,7 @@ async function build(
   request: string,
   previous?: Release,
 ) {
+  assertFeasible(spec);
   if (mode === "sample")
     return makeRelease(
       spec,
@@ -180,6 +277,12 @@ export async function dispatch(access: Access, raw: unknown) {
     scaffold.files["app.js"] = "cd80.ready();";
     scaffold.files["style.css"] = "";
     app.workspace = scaffold;
+    app.workspaceSpec = app.spec;
+    app.requirements = {
+      ...initialRequirements(),
+      missingInputs: ["Review the interpreted purpose, inputs, outputs and data source."],
+    };
+    app.workflow = workflowGraph(app.spec, app.requirements);
     const saved = await saveApp(access, app, null);
     const { generateChatTitle } = await import("./chat-title");
     void generateChatTitle(req.prompt)
@@ -192,13 +295,14 @@ export async function dispatch(access: Access, raw: unknown) {
     return saved;
   }
   if (req.action === "clarify") {
-    const gate = feasibility(req.prompt);
-    if (!gate.allowed) throw new Error(gate.reason);
+    const gate = assertFeasible(req.prompt);
     const config = await settings();
+    const spec = modelConfiguration(config).apiKey
+      ? await clarify(req.prompt)
+      : (await import("../lib/contracts")).getSuggestedSpec(req.prompt);
+    assertFeasible(spec);
     return {
-      spec: modelConfiguration(config).apiKey
-        ? await clarify(req.prompt)
-        : (await import("../lib/contracts")).getSuggestedSpec(req.prompt),
+      spec,
       generatedBy: modelConfiguration(config).apiKey ? "model" : "sample",
       feasibility: gate,
     };
@@ -215,16 +319,14 @@ export async function dispatch(access: Access, raw: unknown) {
         continue;
       const app = newApp(access, p.defaultSpec);
       const release = await build(app.spec, "sample", "Install example");
-      if (release.verification.passed) app.current = release;
-      else app.preview = release;
+      await applyRelease(app, release);
       event(app, "Installed a labelled example application.");
       created.push(await saveApp(access, app, null));
     }
     return created;
   }
   if (req.action === "create") {
-    const gate = feasibility(req.spec.purpose);
-    if (!gate.allowed) throw new Error(gate.reason);
+    assertFeasible(req.spec);
     const app = newApp(access, req.spec);
     const active = await applyRelease(
       app,
@@ -244,6 +346,15 @@ export async function dispatch(access: Access, raw: unknown) {
       name: req.bundle.manifest.name,
     };
     const app = req.appId ? await findApp(access, req.appId) : newApp(access, spec);
+    if (capabilityMode(app))
+      throw new Error(
+        "Capability-backed designs cannot be replaced by legacy source imports. Review a revised capability plan instead.",
+      );
+    if (
+      app.agentTurn?.status === "running" &&
+      Date.now() - Date.parse(app.agentTurn.startedAt) < 300000
+    )
+      throw new Error("Stop the active agent turn before importing source.");
     if (req.appId && spec.protocol !== app.spec.protocol)
       throw new Error(
         "Changing an existing app's protocol requires a new app to protect its data.",
@@ -261,6 +372,75 @@ export async function dispatch(access: Access, raw: unknown) {
     return saveApp(access, app, req.appId ? app.revision : null);
   }
   const app = await findApp(access, req.appId);
+  if (
+    req.action === "plan-capabilities" ||
+    req.action === "save-capability-plan" ||
+    req.action === "simulate-capabilities"
+  ) {
+    if (
+      app.agentTurn?.status === "running" &&
+      Date.now() - Date.parse(app.agentTurn.startedAt) < 300000
+    )
+      throw new Error("Stop the active agent turn before reviewing capabilities.");
+    const spec = app.workspaceSpec ?? app.spec;
+    const requirements = app.requirements ?? initialRequirements();
+    if (req.action === "simulate-capabilities") {
+      const release = await makeCapabilityRelease(spec, requirements);
+      await applyRelease(app, release);
+      event(app, "Created a contract-tested mock simulation. Production activation is blocked.");
+    } else {
+      const expected = capabilityRequirements(spec, requirements);
+      const plan =
+        req.action === "plan-capabilities"
+          ? await planCapabilities(expected)
+          : parseCapabilityMarkdown(req.markdown).plan;
+      const validation = validateCapabilityPlan(plan, expected);
+      if (!validation.valid)
+        throw new Error(validation.issues.map((issue) => issue.message).join("; "));
+      app.requirements = { ...requirements, capabilityPlan: plan };
+      app.capabilityMode = true;
+      app.confirmedDesign = undefined;
+      app.feasibility = await assessDesign(spec, app.requirements, await listPlugins(access));
+      app.workflow = workflowGraph(spec, app.requirements);
+      event(app, "Recorded pinned capability steps and explicit partial coverage/gaps.");
+    }
+    return saveApp(access, app, app.revision);
+  }
+  if (
+    req.action === "save-design" ||
+    req.action === "confirm-design" ||
+    req.action === "assess-design"
+  ) {
+    if (
+      app.agentTurn?.status === "running" &&
+      Date.now() - Date.parse(app.agentTurn.startedAt) < 300000
+    )
+      throw new Error("Stop the active agent turn before reviewing the design.");
+    const spec = req.action === "save-design" ? req.spec : (app.workspaceSpec ?? app.spec);
+    const requirements =
+      req.action === "save-design" ? req.requirements : (app.requirements ?? initialRequirements());
+    if (app.current && spec.protocol !== app.spec.protocol)
+      throw new Error("An active app's calculation protocol cannot change.");
+    const report = await assessDesign(spec, requirements, await listPlugins(access));
+    if (req.action === "confirm-design") {
+      if (req.designKey !== designKey(spec, requirements))
+        throw new Error("Design changed. Refresh before confirming.");
+      if (report.outcome !== "pass")
+        throw new Error("Resolve feasibility issues before confirming the design.");
+      app.confirmedDesign = req.designKey;
+    } else if (req.action === "save-design") app.confirmedDesign = undefined;
+    app.workspaceSpec = spec;
+    app.requirements = requirements;
+    app.feasibility = report;
+    app.workflow = workflowGraph(spec, requirements);
+    event(
+      app,
+      req.action === "confirm-design"
+        ? "User confirmed application requirements."
+        : "Reviewed draft requirements and feasibility.",
+    );
+    return saveApp(access, app, app.revision);
+  }
   if (req.action === "browser-log") {
     if (![app.current?.id, app.preview?.id].includes(req.releaseId))
       throw new Error("Unknown release");
@@ -274,6 +454,12 @@ export async function dispatch(access: Access, raw: unknown) {
   }
   if (req.action === "reverify") {
     if (app.preview?.id !== req.releaseId) throw new Error("Preview changed. Refresh first.");
+    if (app.preview.capabilityArtifact) {
+      await assertCapabilityArtifact(app.preview);
+      throw new Error(
+        "Mock capabilities cannot be promoted by source re-verification. Rebuild the simulation instead.",
+      );
+    }
     app.preview.verification = await verify(app.preview.bundle, app.preview.spec);
     const active = await applyRelease(app, app.preview);
     event(
@@ -310,8 +496,11 @@ export async function dispatch(access: Access, raw: unknown) {
     return saveApp(access, app, app.revision);
   }
   if (req.action === "update") {
-    const gate = feasibility(req.request);
-    if (!gate.allowed) throw new Error(gate.reason);
+    if (capabilityMode(app))
+      throw new Error(
+        "Revise the pinned capability plan and rebuild its preview instead of generating financial logic.",
+      );
+    assertFeasible(req.request);
     const spec = {
       ...app.spec,
       constraints: [...app.spec.constraints, `Change: ${req.request}`].slice(-20),
@@ -330,6 +519,23 @@ export async function dispatch(access: Access, raw: unknown) {
   }
   if (req.action === "accept") {
     const release = app.preview;
+    if (release?.capabilityArtifact) {
+      await assertCapabilityArtifact(release);
+      if (
+        !validateCapabilityPlan(release.capabilityArtifact.plan).productionReady ||
+        release.capabilityArtifact.simulation
+      )
+        throw new Error(
+          "Mock or unverified financial capabilities cannot be approved for production.",
+        );
+      if (req.artifactHash !== release.capabilityArtifact.artifactHash)
+        throw new Error("Artifact changed. Refresh before approval.");
+      release.approval = {
+        artifactHash: req.artifactHash,
+        ownerId: access.ownerId,
+        approvedAt: new Date().toISOString(),
+      };
+    }
     if (
       !release ||
       release.id !== req.releaseId ||
@@ -348,6 +554,15 @@ export async function dispatch(access: Access, raw: unknown) {
     return saveApp(access, app, app.revision);
   }
   const release = [app.current, app.preview].find((r) => r?.id === req.releaseId);
+  if (release?.capabilityArtifact) {
+    await assertCapabilityArtifact(release);
+    if (req.capability !== "capability.flow")
+      throw new Error("Capability simulations may call only their pinned registered flow");
+    const input = z.strictObject({ inputs: z.record(z.string(), z.unknown()) }).parse(req.input);
+    if (JSON.stringify(input).length > 150000)
+      throw new Error("Capability input exceeds size limit");
+    return runCapabilityPlan(release.capabilityArtifact.plan, input.inputs);
+  }
   if (
     !release?.verification.passed ||
     !release.bundle.manifest.permissions.includes(req.capability as any)
@@ -370,6 +585,7 @@ export async function dispatch(access: Access, raw: unknown) {
       input.pluginId,
       input.operationId,
       input.parameters,
+      { appId: app.id, releaseId: release.id },
     );
   }
   if (req.capability === "finance.calculate") return execute(release.bundle, req.input);

@@ -13,6 +13,8 @@ import {
   verify,
 } from "../apps/web/src/server/runtime";
 import { event, findApp, listApps, saveApp } from "../apps/web/src/server/repository";
+import { ConvexHttpClient } from "convex/browser";
+import { convexToJson } from "convex/values";
 
 process.env.CD80_LOCAL_MODE = "1";
 const dir = await mkdtemp(join(tmpdir(), "chengdu80-tests-"));
@@ -24,6 +26,51 @@ async function test(name: string, fn: () => Promise<void> | void) {
   console.log(`PASS ${name}`);
 }
 try {
+  await test("Hosted chat persistence converts Dates and omits undefined before Convex transport", async () => {
+    const keys = ["CD80_LOCAL_MODE", "CD80_DEMO_MODE", "VITE_CONVEX_URL", "PLATFORM_INTERNAL_KEY"];
+    const previous = keys.map((key) => process.env[key]);
+    const descriptor = Object.getOwnPropertyDescriptor(ConvexHttpClient.prototype, "action")!;
+    let checked = false;
+    try {
+      process.env.CD80_LOCAL_MODE = "0";
+      process.env.CD80_DEMO_MODE = "1";
+      process.env.VITE_CONVEX_URL = "http://127.0.0.1:3210";
+      process.env.PLATFORM_INTERNAL_KEY = "fixture-internal-key-not-a-real-secret";
+      ConvexHttpClient.prototype.action = (async (_function: unknown, args: any) => {
+        assert.doesNotThrow(() => convexToJson(args));
+        assert.equal(args.app.conversation[0].createdAt, "2026-10-13T16:46:39.698Z");
+        assert(!("optional" in args.app));
+        checked = true;
+        return { ...args.app, revision: 2 };
+      }) as typeof ConvexHttpClient.prototype.action;
+      const saved = await saveApp(
+        { ownerId: "shared-prototype-owner", accessToken: null },
+        {
+          id: "date-regression",
+          ownerId: "shared-prototype-owner",
+          revision: 1,
+          optional: undefined,
+          conversation: [
+            {
+              id: "message",
+              role: "user",
+              parts: [{ type: "text", content: "Discuss reports" }],
+              createdAt: new Date("2026-10-13T16:46:39.698Z"),
+            },
+          ],
+        } as any,
+        1,
+      );
+      assert(checked);
+      assert.equal(saved.revision, 2);
+    } finally {
+      Object.defineProperty(ConvexHttpClient.prototype, "action", descriptor);
+      keys.forEach((key, index) => {
+        if (previous[index] === undefined) delete process.env[key];
+        else process.env[key] = previous[index];
+      });
+    }
+  });
   await test("Release hashes survive storage key ordering and detect changed source", async () => {
     const original = sampleBundle(protocols[0]!.defaultSpec);
     const stored = {

@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { protocols } from "../apps/web/src/lib/contracts";
 import { sampleBundle } from "../apps/web/src/lib/samples";
+import { feasibility } from "../apps/web/src/server/feasibility";
+import { designKey, initialRequirements } from "../apps/web/src/lib/planning";
 
 const dir = await mkdtemp(join(tmpdir(), "chengdu80-flow-"));
 const port = "3011",
@@ -35,6 +37,9 @@ function pass(name: string) {
   console.log("PASS " + name);
 }
 try {
+  assert.equal(feasibility("No background monitoring").allowed, true);
+  assert.equal(feasibility("Provide real.time ticks").allowed, false);
+  assert.equal(feasibility("No background monitoring but automatically buy stocks").allowed, false);
   let ready = false;
   for (let i = 0; i < 80; i++) {
     try {
@@ -46,6 +51,62 @@ try {
     }
   }
   assert.ok(ready, "Test server failed to start");
+  let draft = await request({
+    action: "create-workspace",
+    prompt: "Analyze historical portfolio performance",
+  });
+  const draftSpec = { ...protocols[2]!.defaultSpec, name: "Requirements test" };
+  const draftRequirements = {
+    ...initialRequirements(),
+    dataSource: "tushare",
+    missingInputs: ["Choose holdings"],
+    questions: [{ id: "period", question: "Which period?", answer: "" }],
+  };
+  draft = await request({
+    action: "save-design",
+    appId: draft.id,
+    spec: draftSpec,
+    requirements: draftRequirements,
+  });
+  assert.equal(draft.feasibility.outcome, "revise");
+  assert(draft.workflow.nodes.length > 2);
+  await request(
+    {
+      action: "confirm-design",
+      appId: draft.id,
+      designKey: designKey(draftSpec, draftRequirements as any),
+    },
+    false,
+  );
+  const resolved = {
+    ...initialRequirements(),
+    dataSource: "fixtures",
+    analysisPeriod: "Fixture series",
+    questions: [{ id: "period", question: "Which period?", answer: "Fixture series" }],
+  };
+  draft = await request({
+    action: "save-design",
+    appId: draft.id,
+    spec: draftSpec,
+    requirements: resolved,
+  });
+  assert.equal(draft.feasibility.outcome, "pass");
+  await request({ action: "confirm-design", appId: draft.id, designKey: "stale" }, false);
+  draft = await request({
+    action: "confirm-design",
+    appId: draft.id,
+    designKey: designKey(draftSpec, resolved as any),
+  });
+  assert(draft.confirmedDesign);
+  draft = await request({
+    action: "save-design",
+    appId: draft.id,
+    spec: { ...draftSpec, outputs: ["Automatically buy stocks"] },
+    requirements: resolved,
+  });
+  assert.equal(draft.feasibility.outcome, "reject");
+  assert.equal(draft.confirmedDesign, undefined);
+  pass("Requirements answers, pass/revise/reject reports, stale confirmation and persisted graph");
   const spec = { ...protocols[0]!.defaultSpec, name: "Lifecycle test" };
   let app = await request({ action: "create", spec, mode: "sample" });
   assert.ok(app.current?.verification.passed);
@@ -145,7 +206,26 @@ try {
   assert.equal(app.preview, null);
   assert.ok(app.current.bundle.files["app.js"].includes("Imported custom portfolio view"));
   assert.deepEqual(app.data.inputs, inputs);
+  assert.deepEqual(app.workspace, app.current.bundle);
+  assert.deepEqual(app.workspaceSpec, app.current.spec);
   pass("External source import verifies, releases, and retains app data");
+  await request(
+    {
+      action: "import",
+      appId: app.id,
+      bundle: custom,
+      spec: { ...spec, outputs: ["Automatically buy stocks and place orders"] },
+    },
+    false,
+  );
+  await request(
+    { action: "create", spec: { ...spec, inputs: ["Background monitoring"] }, mode: "sample" },
+    false,
+  );
+  const retained = (await request()).apps.find((entry: any) => entry.id === app.id);
+  assert.equal(retained.current.id, app.current.id);
+  assert.deepEqual(retained.workspace, app.workspace);
+  pass("Full specifications are scope-checked on create and import without changing active source");
   await request(
     {
       action: "rpc",

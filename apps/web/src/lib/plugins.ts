@@ -8,6 +8,10 @@ export const pluginRegistrationSchema = z
     credentialEnv: z
       .string()
       .regex(/^CD80_PLUGIN_[A-Z0-9_]{1,90}$/)
+      .refine(
+        (value) => value !== "CD80_PLUGIN_CREDENTIAL_BINDINGS",
+        "Reserved configuration variable",
+      )
       .optional(),
   })
   .refine((value) => !!value.document !== !!value.schemaUrl, "Provide a document or schema URL");
@@ -24,6 +28,8 @@ export type PluginOperation = {
   method: string;
   path: string;
   parameters: PluginParameter[];
+  // Older stored operations inherit the plugin's authentication requirement.
+  authenticated?: boolean;
 };
 export type RegisteredPlugin = {
   id: string;

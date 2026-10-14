@@ -12,8 +12,8 @@ const { default: ssrHandler } = await import(join(here, "..", "dist", "server", 
 
 const staticMiddleware = serveStatic({ dir: clientDir });
 
-serve({
+await serve({
   port: process.env.PORT || process.env.CD80_PORT || 3001,
   hostname: process.env.HOST,
   fetch: (request) => staticMiddleware(request, () => ssrHandler.fetch(request)),
-});
+}).ready();

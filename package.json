@@ -33,6 +33,8 @@
     "test:prototype": "bun scripts/test-prototype.ts",
     "test:flow": "bun scripts/test-flow.ts",
     "test:model-contract": "bun scripts/test-model-contract.ts",
+    "test:capabilities": "bun test packages/capabilities/test && bun scripts/test-capability-compiler.ts && bun scripts/test-capability-flow.ts && bun scripts/test-capability-agent.ts",
+    "test:capability-ui": "VITE_LOCAL_MODE=1 bun run build && bun scripts/test-capability-ui.ts",
     "examples": "bun scripts/export-examples.ts",
     "dev": "vp run -r --parallel dev",
     "dev:web": "vp run --filter web dev",

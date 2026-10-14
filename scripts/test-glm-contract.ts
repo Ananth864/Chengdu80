@@ -1,17 +1,41 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { clarify, generate, explain, boundedModelRequest } from "../apps/web/src/server/models";
+import {
+  clarify,
+  generate,
+  explain,
+  boundedModelRequest,
+  planCapabilities,
+} from "../apps/web/src/server/models";
+import { b2cPerformancePlan } from "../packages/capabilities/src";
 import { protocols } from "../apps/web/src/lib/contracts";
 import { sampleBundle } from "../apps/web/src/lib/samples";
 
 const spec = protocols[0]!.defaultSpec;
 const bundle = sampleBundle(spec);
+const plan = {
+  ...structuredClone(b2cPerformancePlan),
+  requirements: Array.from({ length: 36 }, (_, index) => ({
+    id: `requirement-${index}`,
+    text: `Requirement ${index}: ${"Document citations and unknown report coverage. ".repeat(5)}`,
+    assetTypes: [],
+    markets: [],
+  })),
+  coverage: Array.from({ length: 36 }, (_, index) => ({
+    requirementId: `requirement-${index}`,
+    status: "unsupported" as const,
+    stepIds: [],
+    reason: "Product contract and document citation coverage are unknown.",
+  })),
+};
 const requests: any[] = [];
 let invalid = false;
 let fenced = false;
 let trailingText = false;
 let compactFence = false;
 let malformedResponses = 0;
+let disconnects = 0;
+let invalidPlans = 0;
 const server = createServer(async (req, res) => {
   assert.equal(req.url, "/v1/chat/completions");
   assert.equal(req.headers.authorization, "Bearer glm-local-fixture");
@@ -19,11 +43,31 @@ const server = createServer(async (req, res) => {
   for await (const chunk of req) raw += chunk;
   const body = JSON.parse(raw);
   requests.push(body);
+  if (disconnects > 0) {
+    disconnects--;
+    res.writeHead(503, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: { message: "Fixture provider temporarily unavailable" } }));
+    return;
+  }
   assert.equal(body.model, "GLM-5.3");
   assert.deepEqual(body.thinking, { type: "enabled" });
   const generating = body.messages.some((message: any) => message.content.includes('"manifest"'));
+  const planning = body.messages.some((message: any) =>
+    message.content.includes("Preserve every supplied requirement ID"),
+  );
+  const planResponse = structuredClone(plan);
+  if (planning && invalidPlans > 0) {
+    invalidPlans--;
+    planResponse.steps[0]!.inputs.query = {
+      kind: "input",
+      name: "company",
+      contract: "app.input.companyName",
+    };
+  }
   const json = body.response_format
-    ? JSON.stringify(invalid ? { invalid: true } : generating ? bundle : spec)
+    ? JSON.stringify(
+        invalid ? { invalid: true } : planning ? planResponse : generating ? bundle : spec,
+      )
     : "Explanation of verified calculations.";
   let text = fenced
     ? "```json\n" +
@@ -94,6 +138,30 @@ try {
   assert.equal(requests[2].reasoning_effort, "low");
   assert.equal(requests[2].response_format, undefined);
   console.log("PASS GLM explanation separates reasoning from answer content");
+  assert.ok(JSON.stringify(plan).length > 16000);
+  const beforePlan = requests.length;
+  assert.deepEqual(await planCapabilities(plan.requirements), plan);
+  assert.equal(requests[beforePlan].max_tokens, 16384);
+  assert.ok(JSON.stringify(requests[beforePlan]).includes("Return compact JSON"));
+  console.log(
+    "PASS Large capability plans get a dedicated output budget and compact coverage guidance",
+  );
+  invalidPlans = 1;
+  const beforePlanRepair = requests.length;
+  assert.deepEqual(await planCapabilities(plan.requirements), plan);
+  assert.equal(requests.length - beforePlanRepair, 2);
+  assert.ok(JSON.stringify(requests.at(-1)).includes("UNKNOWN_CONTRACT"));
+  invalidPlans = 3;
+  const beforeInvalidPlan = requests.length;
+  await assert.rejects(
+    planCapabilities(plan.requirements),
+    /Capability plan rejected: UNKNOWN_CONTRACT/,
+  );
+  assert.equal(requests.length - beforeInvalidPlan, 2);
+  invalidPlans = 0;
+  console.log(
+    "PASS Invented planner contracts get one validation-guided repair and fail closed if still invalid",
+  );
   invalid = true;
   await assert.rejects(() => clarify("Build an app"));
   console.log("PASS Invalid GLM JSON cannot become a product specification");
@@ -139,8 +207,22 @@ try {
   assert.equal(cancelled, true);
   assert.equal(await boundedModelRequest(async () => "complete", 20), "complete");
   console.log("PASS Stalled model calls are cancelled at the deadline; normal calls still finish");
+  disconnects = 1;
+  const beforeRetry = requests.length;
+  assert.deepEqual(await clarify("Build a portfolio app"), spec);
+  assert.equal(requests.length - beforeRetry, 2);
+  disconnects = 10;
+  const beforeExhausted = requests.length;
+  await assert.rejects(
+    () => clarify("Build a portfolio app"),
+    /temporarily unavailable|incomplete or invalid JSON/,
+  );
+  assert.equal(requests.length - beforeExhausted, 4);
   console.log(
-    "10 GLM transport/deadline checks passed using local fixtures; live access is a separate check.",
+    "PASS Transient provider failure retries once per request; JSON recovery remains bounded",
+  );
+  console.log(
+    "13 GLM transport/deadline checks passed using local fixtures; live access is a separate check.",
   );
 } finally {
   for (const key of [

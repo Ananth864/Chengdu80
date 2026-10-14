@@ -73,7 +73,8 @@ export function PluginSettings() {
             onChange={(event) => setDocument(event.target.value)}
           />
           <FieldDescription>
-            OpenAPI 3 JSON or YAML. The system registers operations for the AI and your apps.
+            OpenAPI 3 JSON or YAML. Only GET/HEAD read-only calls are allowed. Other operations
+            remain listed but cannot run; explicit approval is not supported.
           </FieldDescription>
         </Field>
         <Field>
@@ -85,7 +86,10 @@ export function PluginSettings() {
             onChange={(event) => setCredentialEnv(event.target.value)}
           />
           <FieldDescription>
-            Optional. Set the secret on the server; enter only its variable name here.
+            Optional for authenticated operations. Enter only the server variable name. The server
+            operator must bind it to this workspace owner and the exact API base URL, including its
+            path, in CD80_PLUGIN_CREDENTIAL_BINDINGS. Public operations receive no server
+            credential.
           </FieldDescription>
         </Field>
       </FieldGroup>

@@ -1,6 +1,8 @@
 import { AgentChat } from "./agent-chat";
 import { ConversationNavigation } from "./conversation-navigation";
 import { PluginSettings } from "./plugin-settings";
+import { DesignReview, WorkflowView } from "./design-review";
+import { resolveCapabilityDefinition } from "@web-starter/capabilities";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowUpRight,
@@ -10,6 +12,8 @@ import {
   Maximize,
   Minimize,
   Code2,
+  ClipboardList,
+  Workflow,
   RefreshCw,
   ShieldCheck,
   X,
@@ -63,6 +67,7 @@ import {
 } from "../lib/contracts";
 import { CodeWorkspace, type SourcePath } from "./code-workspace";
 import { AppFrame } from "./app-frame";
+import { designKey, initialRequirements } from "../lib/planning";
 
 type Snapshot = {
   apps: Application[];
@@ -75,11 +80,13 @@ type Snapshot = {
     runtime: string;
   };
 };
-type Tab = "preview" | "source" | "data";
+type Tab = "preview" | "source" | "data" | "requirements" | "workflow";
 const workspaceTabs = [
   { value: "preview", label: "Preview", Icon: Eye },
   { value: "source", label: "Code", Icon: Code2 },
   { value: "data", label: "Database (read-only)", Icon: Database },
+  { value: "requirements", label: "Requirements", Icon: ClipboardList },
+  { value: "workflow", label: "Workflow", Icon: Workflow },
 ] as const;
 export function Studio() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -112,7 +119,15 @@ export function Studio() {
     }
   }
   const app = snapshot?.apps.find((a) => a.id === selected) ?? null;
-  const release = app && (app.current ?? app.preview);
+  const release =
+    app && (app.preview?.capabilityArtifact ? app.preview : (app.current ?? app.preview));
+  const canPreview = !!(release?.verification.passed || release?.simulationPassed);
+  const stalePreview = !!(
+    app?.preview?.capabilityArtifact &&
+    (!app.preview.requirements ||
+      designKey(app.preview.spec, app.preview.requirements) !==
+        designKey(app.workspaceSpec ?? app.spec, app.requirements ?? initialRequirements()))
+  );
   const workspaceBundle = app?.workspace ?? release?.bundle;
   const refreshVersion = useRef(0);
   async function refresh() {
@@ -399,12 +414,13 @@ export function Studio() {
                 onValueChange={(value) => {
                   if (isTab(value)) {
                     setTab(value);
-                    if (value === "data") void run("Refreshing shared data…", refresh);
+                    if (value === "data" || value === "requirements" || value === "workflow")
+                      void run("Refreshing workspace...", refresh);
                   }
                 }}
                 className="min-h-0 min-w-0 flex-1 gap-0"
               >
-                <div className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] md:grid-cols-3 items-center gap-2 px-3 py-2">
+                <div className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2">
                   <TabsList aria-label="Workspace views">
                     {workspaceTabs.map(({ value, label, Icon }) => (
                       <TabsTrigger value={value} key={value} aria-label={label} title={label}>
@@ -419,13 +435,13 @@ export function Studio() {
                     >
                       {tab === "source" ? activeSourceFile : app.name}
                     </span>
-                    {tab !== "source" && (
+                    {(tab === "preview" || tab === "data") && (
                       <Button
                         variant="ghost"
                         size="icon-sm"
                         aria-label={tab === "data" ? "Refresh database" : "Refresh preview"}
                         title={tab === "data" ? "Refresh database" : "Refresh preview"}
-                        disabled={!!busy || (tab === "preview" && !release?.verification.passed)}
+                        disabled={!!busy || (tab === "preview" && !canPreview)}
                         onClick={() => {
                           if (tab === "data") void run("Refreshing shared data…", refresh);
                           else setPreviewRevision((revision) => revision + 1);
@@ -461,7 +477,17 @@ export function Studio() {
                 </div>
                 <Separator />
                 <TabsContent value="preview" className="flex min-h-0 flex-col">
-                  {release?.verification.passed ? (
+                  {stalePreview && (
+                    <Alert className="shrink-0 rounded-none">
+                      <AlertTitle>Stale capability preview</AlertTitle>
+                      <AlertDescription>
+                        This artifact was generated from a different saved design or capability
+                        plan. Its results do not represent the current draft. Review the saved plan
+                        and simulate again to generate an updated preview.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  {release && canPreview ? (
                     <AppFrame
                       key={`${release.id}:${previewRevision}`}
                       app={app}
@@ -478,7 +504,9 @@ export function Studio() {
                         </EmptyTitle>
                         <EmptyDescription>
                           {release
-                            ? "Execution is disabled until verification passes."
+                            ? release.capabilityArtifact
+                              ? "Execution is disabled until verification or capability simulation passes. Simulation never authorizes production activation."
+                              : "Execution is disabled until verification passes."
                             : "Request a build or import source."}
                         </EmptyDescription>
                       </EmptyHeader>
@@ -508,6 +536,69 @@ export function Studio() {
                     {JSON.stringify(app.data, null, 2)}
                   </pre>
                 </TabsContent>
+                <TabsContent value="requirements" className="min-h-0 overflow-y-auto">
+                  <DesignReview
+                    key={`${app.id}:${app.revision}`}
+                    app={app}
+                    disabled={!!busy || agentBusy}
+                    onSave={async (spec, requirements) => {
+                      await run("Saving design...", async () => {
+                        await api<Application>({
+                          action: "save-design",
+                          appId: app.id,
+                          spec,
+                          requirements,
+                        });
+                        await refresh();
+                      });
+                    }}
+                    onAssess={async () => {
+                      await run("Assessing design...", async () => {
+                        await api<Application>({ action: "assess-design", appId: app.id });
+                        await refresh();
+                      });
+                    }}
+                    onPlan={async () => {
+                      await run("Planning capabilities...", async () => {
+                        await api<Application>({ action: "plan-capabilities", appId: app.id });
+                        await refresh();
+                      });
+                    }}
+                    onSimulate={async () => {
+                      await run("Simulating capabilities...", async () => {
+                        await api<Application>({ action: "simulate-capabilities", appId: app.id });
+                        await refresh();
+                        setTab("preview");
+                      });
+                    }}
+                    onImportPlan={async (markdown) => {
+                      await run("Saving capability Markdown...", async () => {
+                        await api<Application>({
+                          action: "save-capability-plan",
+                          appId: app.id,
+                          markdown,
+                        });
+                        await refresh();
+                      });
+                    }}
+                    onConfirm={async () => {
+                      await run("Confirming design...", async () => {
+                        await api<Application>({
+                          action: "confirm-design",
+                          appId: app.id,
+                          designKey: designKey(
+                            app.workspaceSpec ?? app.spec,
+                            app.requirements ?? initialRequirements(),
+                          ),
+                        });
+                        await refresh();
+                      });
+                    }}
+                  />
+                </TabsContent>
+                <TabsContent value="workflow" className="min-h-0 overflow-y-auto">
+                  <WorkflowView key={app.id} app={app} />
+                </TabsContent>
               </Tabs>
             ) : (
               <Empty className="flex-1">
@@ -532,7 +623,25 @@ export function Studio() {
           </DialogHeader>
           {release &&
             (review === "checks" ? (
-              <Checks release={app?.preview ?? release} />
+              <Checks
+                release={app?.preview ?? release}
+                pending={!!app?.preview && app.preview.id !== app.current?.id}
+                disabled={!!busy || agentBusy}
+                onAccept={async () => {
+                  const preview = app?.preview;
+                  if (!app || !preview) return;
+                  await run("Approving capability release...", async () => {
+                    await api<Application>({
+                      action: "accept",
+                      appId: app.id,
+                      releaseId: preview.id,
+                      artifactHash:
+                        preview.capabilityArtifact?.artifactHash ?? preview.verification.sourceHash,
+                    });
+                    await refresh();
+                  });
+                }}
+              />
             ) : (
               <SpecView spec={release.spec} />
             ))}
@@ -638,10 +747,36 @@ export function Studio() {
 }
 
 function isTab(value: unknown): value is Tab {
-  return value === "preview" || value === "source" || value === "data";
+  return (
+    value === "preview" ||
+    value === "source" ||
+    value === "data" ||
+    value === "requirements" ||
+    value === "workflow"
+  );
 }
 
-function Checks({ release }: { release: Release }) {
+function Checks({
+  release,
+  pending,
+  disabled,
+  onAccept,
+}: {
+  release: Release;
+  pending: boolean;
+  disabled: boolean;
+  onAccept: () => Promise<void>;
+}) {
+  const artifact = release.capabilityArtifact;
+  const canApprove =
+    pending &&
+    release.verification.passed &&
+    artifact &&
+    artifact.simulation === false &&
+    artifact.plan.steps.length > 0 &&
+    artifact.plan.steps.every(
+      (step) => resolveCapabilityDefinition(step.capabilityId, step.version)?.status === "verified",
+    );
   return (
     <section className="flex min-w-0 flex-col gap-4">
       <Alert variant={release.verification.passed ? "default" : "destructive"}>
@@ -650,8 +785,9 @@ function Checks({ release }: { release: Release }) {
           {release.verification.passed ? "Mandatory checks passed" : "Release blocked"}
         </AlertTitle>
         <AlertDescription>
-          Fixtures validate the protocol contract. Passing builds activate automatically; failed
-          changes leave the working app in place.
+          {artifact
+            ? `Capability simulation: ${release.simulationPassed ? "passed" : "not passed"}. Simulation fixtures do not verify product behavior. Production requires a verified, nonmock artifact and explicit approval; blocked previews leave the working app in place.`
+            : "Fixtures validate the protocol contract. Passing builds activate automatically; failed changes leave the working app in place."}
         </AlertDescription>
       </Alert>
       <Table>
@@ -677,6 +813,35 @@ function Checks({ release }: { release: Release }) {
         <br />
         Checked {new Date(release.verification.checkedAt).toLocaleString()}
       </p>
+      {artifact && (
+        <>
+          <p className="break-all text-xs text-muted-foreground">
+            Capability artifact SHA-256 {artifact.artifactHash}
+          </p>
+          <details>
+            <summary className="cursor-pointer text-sm">Generated TypeScript (review only)</summary>
+            <pre className="mt-2 max-w-full overflow-x-auto rounded-md border p-3 text-xs">
+              <code>{artifact.typescript}</code>
+            </pre>
+            <p className="mt-2 text-sm text-muted-foreground">
+              The deterministic generated display calls capability.flow with named inputs. The
+              server runs the saved plan; this TypeScript is not executed in the browser and does
+              not grant arbitrary capability calls.
+            </p>
+          </details>
+          {!canApprove && (
+            <p className="text-sm text-muted-foreground">
+              Approval is unavailable for simulation, mock, unknown, or unverified capabilities. The
+              current catalog has no verified definitions.
+            </p>
+          )}
+          {canApprove && (
+            <Button disabled={disabled} onClick={() => void onAccept()}>
+              Approve capability release
+            </Button>
+          )}
+        </>
+      )}
     </section>
   );
 }

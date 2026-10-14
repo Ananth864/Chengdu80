@@ -13,7 +13,7 @@ import {
   type RegisteredPlugin,
   type StoredPlugin,
 } from "../lib/plugins";
-import type { Access } from "./repository";
+import { findApp, type Access } from "./repository";
 import { demoMode, demoOwnerId, localMode, settings } from "./settings";
 
 function object(value: unknown): Record<string, unknown> {
@@ -135,6 +135,47 @@ function publicPlugin(plugin: StoredPlugin): RegisteredPlugin {
 export async function listPlugins(access: Access) {
   return (await storage(access)).map(publicPlugin);
 }
+function normalizedBaseUrl(value: string) {
+  const url = new URL(value);
+  if (url.username || url.password || url.search || url.hash || value.includes("{"))
+    throw new Error("Server variables, credentials, query strings and fragments are unsupported");
+  if (/%(?:2e|2f|5c|25)/i.test(url.pathname))
+    throw new Error("Encoded path traversal is unsupported");
+  return url.href.replace(/\/+$/, "");
+}
+async function credentialBinding(ownerId: string, credentialEnv: string, baseUrl: string) {
+  const config = await settings();
+  let bindings: unknown;
+  try {
+    bindings = JSON.parse(config.CD80_PLUGIN_CREDENTIAL_BINDINGS ?? "[]");
+    if (
+      !Array.isArray(bindings) ||
+      bindings.some(
+        (entry) =>
+          !entry ||
+          typeof entry !== "object" ||
+          typeof entry.credentialEnv !== "string" ||
+          typeof entry.ownerId !== "string" ||
+          typeof entry.baseUrl !== "string",
+      )
+    )
+      throw new Error();
+    const approved = bindings.some(
+      (entry) =>
+        entry.credentialEnv === credentialEnv &&
+        entry.ownerId === ownerId &&
+        normalizedBaseUrl(entry.baseUrl) === normalizedBaseUrl(baseUrl),
+    );
+    if (!approved) throw new Error("Plugin credential is not bound to this owner and destination");
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Plugin credential")) throw error;
+    throw new Error("Invalid server plugin credential bindings configuration");
+  }
+  const credential = config[credentialEnv];
+  if (!credential || credentialEnv === "CD80_PLUGIN_CREDENTIAL_BINDINGS")
+    throw new Error("Plugin credentials are unavailable");
+  return credential;
+}
 export async function registerPlugin(access: Access, input: PluginRegistration) {
   const registration = pluginRegistrationSchema.parse(input);
   const text = registration.document ?? (await remote(new URL(registration.schemaUrl!)));
@@ -171,7 +212,7 @@ export async function registerPlugin(access: Access, input: PluginRegistration) 
     throw new Error("OpenAPI servers[0].url is required");
   const serverUrl = object(servers[0]).url;
   if (typeof serverUrl !== "string") throw new Error("OpenAPI server URL must be a string");
-  const baseUrl = serverUrl;
+  const baseUrl = normalizedBaseUrl(serverUrl);
   const base = new URL(baseUrl);
   if (base.search || base.hash || baseUrl.includes("{"))
     throw new Error("Server variables, query strings and fragments are unsupported");
@@ -190,11 +231,12 @@ export async function registerPlugin(access: Access, input: PluginRegistration) 
       !path.startsWith("/") ||
       path.startsWith("//") ||
       path.includes("..") ||
-      /[?#\\]/.test(path)
+      /[?#\\\s]/.test(path) ||
+      /%(?:2e|2f|5c|25)/i.test(path)
     )
       throw new Error("Invalid plugin operation path");
     const item = resolve(rawPath);
-    for (const method of ["get", "post", "put", "patch", "delete", "head"]) {
+    for (const method of ["get", "post", "put", "patch", "delete", "head", "options", "trace"]) {
       if (!item[method]) continue;
       const operation = resolve(item[method]);
       if (item.servers || operation.servers)
@@ -233,6 +275,9 @@ export async function registerPlugin(access: Access, input: PluginRegistration) 
         });
       }
       const security = operation.security ?? doc.security;
+      if (security !== undefined && !Array.isArray(security))
+        throw new Error("Invalid plugin operation security requirements");
+      const authenticated = Array.isArray(security) && security.length > 0;
       if (Array.isArray(security) && security.length) {
         if (security.length !== 1 || Object.keys(object(security[0])).length !== 1)
           throw new Error("Use one API key or bearer security scheme");
@@ -271,6 +316,7 @@ export async function registerPlugin(access: Access, input: PluginRegistration) 
             : ""
         ).slice(0, 2000),
         parameters,
+        authenticated,
       });
     }
   }
@@ -278,8 +324,10 @@ export async function registerPlugin(access: Access, input: PluginRegistration) 
     throw new Error("Plugin must contain 1–100 operations");
   if (auth && !registration.credentialEnv)
     throw new Error("Authenticated APIs require a server credential environment variable");
-  if (registration.credentialEnv && !(await settings())[registration.credentialEnv])
-    throw new Error("Plugin credential environment variable is not configured");
+  if (registration.credentialEnv && !auth)
+    throw new Error("A credential requires an authenticated plugin operation");
+  if (registration.credentialEnv)
+    await credentialBinding(access.ownerId, registration.credentialEnv, baseUrl);
   const plugin: StoredPlugin = {
     id: randomUUID(),
     ownerId: access.ownerId,
@@ -345,10 +393,26 @@ export async function callPlugin(
   pluginId: string,
   operationId: string,
   parameters: Record<string, unknown>,
+  options: { appId: string; releaseId?: string },
 ): Promise<unknown> {
+  if (!options?.appId) throw new Error("Plugin calls require an application context");
+  const app = await findApp(access, options.appId);
+  const release = options.releaseId ? app.current : undefined;
+  if (options.releaseId && (release?.id !== options.releaseId || !release.verification.passed))
+    throw new Error("Plugin calls require the current verified release");
+  const bundle = options.releaseId ? release?.bundle : app.workspace;
+  if (
+    !app.enabledPlugins?.includes(pluginId) ||
+    !bundle?.manifest.permissions.includes("plugin.call")
+  )
+    throw new Error("Plugin is not enabled or plugin.call is not permitted for this application");
   const plugin = (await storage(access)).find((entry) => entry.id === pluginId);
   const operation = plugin?.operations.find((entry) => entry.operationId === operationId);
   if (!plugin || !operation) throw new Error("Registered plugin operation not found");
+  if (!["GET", "HEAD"].includes(operation.method))
+    throw new Error(
+      "Only GET/HEAD read-only plugin operations are allowed; explicit approval for unsafe operations is not supported",
+    );
   for (const key of Object.keys(parameters))
     if (!operation.parameters.some((parameter) => parameter.name === key))
       throw new Error(`Unknown plugin parameter: ${key}`);
@@ -368,7 +432,11 @@ export async function callPlugin(
       body = JSON.stringify(value);
       headers["Content-Type"] = "application/json";
     } else if (parameter.location === "path") {
-      if (scalarString(value) === "." || scalarString(value) === "..")
+      if (
+        /[/\\%]/.test(scalarString(value)) ||
+        scalarString(value) === "." ||
+        scalarString(value) === ".."
+      )
         throw new Error("Invalid path parameter");
       path = path.replaceAll(`{${parameter.name}}`, encodeURIComponent(scalarString(value)));
     } else if (parameter.location === "query") {
@@ -378,16 +446,30 @@ export async function callPlugin(
   }
   if (path.includes("{") || (body && body.length > 250000))
     throw new Error("Invalid plugin request");
-  if (plugin.auth && plugin.credentialEnv) {
-    const credential = (await settings())[plugin.credentialEnv];
-    if (!credential) throw new Error("Plugin credentials are unavailable");
+  const base = new URL(normalizedBaseUrl(plugin.baseUrl));
+  const url = new URL(normalizedBaseUrl(plugin.baseUrl) + path);
+  const basePath = base.pathname.replace(/\/+$/, "");
+  if (
+    url.origin !== base.origin ||
+    !url.pathname.startsWith(basePath + "/") ||
+    url.username ||
+    url.password ||
+    url.hash ||
+    url.search ||
+    /%(?:2e|2f|5c|25)/i.test(url.pathname)
+  )
+    throw new Error("Plugin request escapes the approved base path or origin");
+  const authenticated = operation.authenticated ?? (plugin.authenticated || !!plugin.auth);
+  let credential: string | undefined;
+  if (authenticated) {
+    if (!plugin.auth || !plugin.credentialEnv)
+      throw new Error("Plugin credentials are unavailable");
+    credential = await credentialBinding(access.ownerId, plugin.credentialEnv, plugin.baseUrl);
     if (plugin.auth.location === "query") query.set(plugin.auth.name, credential);
     else headers[plugin.auth.name] = plugin.auth.prefix + credential;
   }
-  const url = new URL(plugin.baseUrl.replace(/\/$/, "") + path);
   url.search = query.toString();
   const result = await remote(url, operation.method, headers, body);
-  const credential = plugin.credentialEnv ? (await settings())[plugin.credentialEnv] : undefined;
   try {
     return JSON.parse(credential ? result.replaceAll(credential, "[redacted]") : result);
   } catch {

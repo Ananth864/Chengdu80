@@ -9,6 +9,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, type Browser } from "playwright";
 import type { Application, AppBundle } from "../apps/web/src/lib/contracts";
+import { protocols } from "../apps/web/src/lib/contracts";
+import { designKey, initialRequirements } from "../apps/web/src/lib/planning";
 
 type InputItem = {
   role?: string;
@@ -90,14 +92,6 @@ const fixture = createServer(async (req, res) => {
         { name: "list_plugins", arguments: {} },
         { name: "enable_plugin", arguments: { pluginId: registeredPluginId } },
         {
-          name: "call_plugin",
-          arguments: {
-            pluginId: registeredPluginId,
-            operationId: "getWeather",
-            parametersJson: JSON.stringify({ city: "London" }),
-          },
-        },
-        {
           name: "write_file",
           arguments: {
             path: "cd80.json",
@@ -105,6 +99,14 @@ const fixture = createServer(async (req, res) => {
               ...pluginManifest,
               permissions: [...new Set([...pluginManifest.permissions, "plugin.call"])],
             }),
+          },
+        },
+        {
+          name: "call_plugin",
+          arguments: {
+            pluginId: registeredPluginId,
+            operationId: "getWeather",
+            parametersJson: JSON.stringify({ city: "London" }),
           },
         },
         {
@@ -127,6 +129,26 @@ const fixture = createServer(async (req, res) => {
         },
       ][calls];
       text = "The site now displays London weather from the registered plugin.";
+    } else if (prompt.includes("Exercise server tool iteration limit")) {
+      tool = { name: "list_files", arguments: {} };
+    } else if (prompt.includes("Try to deploy and automatically buy")) {
+      tool = calls
+        ? undefined
+        : { name: "deploy_preview", arguments: { summary: "Attempt unsupported deployment" } };
+      text = "Unsupported deployment was rejected.";
+    } else if (prompt.includes("Set an unsupported specification")) {
+      tool = calls
+        ? undefined
+        : {
+            name: "set_specification",
+            arguments: { ...protocols[0]!.defaultSpec, outputs: ["Place orders automatically"] },
+          };
+      text = "Unsupported specification was rejected.";
+    } else if (prompt.includes("Redeploy the imported workspace")) {
+      tool = calls
+        ? undefined
+        : { name: "deploy_preview", arguments: { summary: "Redeploy imported source unchanged" } };
+      text = "Redeployed imported source.";
     } else if (prompt.includes("Stage a broken change")) {
       tool = [
         {
@@ -326,6 +348,31 @@ try {
     .waitFor();
   await page.getByRole("heading", { name: "Agent fixture site", exact: true }).waitFor();
   const dataBefore = (await appById(id)).data;
+  const blocked = await turn(id, "Redeploy the imported workspace without changing files.");
+  assert(blocked.ok);
+  assert((await blocked.text()).includes("Review and confirm"));
+  assert.equal((await appById(id)).current, null);
+  await page.reload();
+  await page.getByRole("tab", { name: "Requirements", exact: true }).click();
+  await page.getByLabel("Missing inputs", { exact: true }).fill("");
+  await page.getByRole("button", { name: "Save design", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Confirm design", exact: true })
+    .waitFor({ state: "visible" });
+  await page.getByRole("button", { name: "Confirm design", exact: true }).click();
+  await page.getByText("Saved design confirmed", { exact: true }).waitFor();
+  await page.getByRole("tab", { name: "Workflow", exact: true }).click();
+  await page.getByRole("region", { name: "Workflow nodes by kind" }).waitFor();
+  await page.getByRole("button", { name: "finance.calculate", exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  await page.getByRole("tab", { name: "Requirements", exact: true }).click();
+  assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole("tab", { name: "Preview", exact: true }).click();
+  results.push(
+    "Unconfirmed builds are blocked; browser review confirms requirements and inspects the graph",
+  );
   await page
     .getByRole("textbox", { name: "Message the AI" })
     .fill("Build the Copper Finch site now.");
@@ -497,6 +544,85 @@ try {
   results.push(
     "System registration feeds agent discovery and tools; the verified generated site reads live provider data through plugin.call",
   );
+  for (const prompt of [
+    "Try to deploy and automatically buy stocks and place orders.",
+    "Set an unsupported specification now.",
+  ]) {
+    const response = await turn(id, prompt);
+    assert(response.ok);
+    const events = await response.text();
+    assert(events.includes("outside its available capabilities"));
+    const latest = await appById(id);
+    assert.equal(latest.current?.id, connected.current.id);
+    assert.deepEqual(latest.workspaceSpec, connected.workspaceSpec);
+    assert.deepEqual(latest.data, connected.data);
+  }
+  results.push(
+    "Agent specification and deployment tools reject unsupported scope without activation",
+  );
+  const importedBundle = structuredClone(connected.current.bundle);
+  importedBundle.files["index.html"] = "<main><h1>Imported workspace marker</h1></main>";
+  importedBundle.files["app.js"] = "cd80.ready();";
+  const importedSpec = { ...connected.current.spec, name: "Imported specification marker" };
+  const importedResponse = await fetch(`${base}/api/platform`, {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: base },
+    body: JSON.stringify({
+      action: "import",
+      appId: id,
+      bundle: importedBundle,
+      spec: importedSpec,
+    }),
+  });
+  assert(importedResponse.ok, await importedResponse.clone().text());
+  const imported = (await importedResponse.json()) as Application;
+  assert.deepEqual(imported.workspace, imported.current!.bundle);
+  assert.deepEqual(imported.workspaceSpec, imported.current!.spec);
+  const confirmation = await fetch(`${base}/api/platform`, {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: base },
+    body: JSON.stringify({
+      action: "confirm-design",
+      appId: id,
+      designKey: designKey(imported.workspaceSpec!, imported.requirements ?? initialRequirements()),
+    }),
+  });
+  assert(confirmation.ok, await confirmation.clone().text());
+  const redeployedResponse = await turn(
+    id,
+    "Redeploy the imported workspace without changing files.",
+  );
+  assert(redeployedResponse.ok);
+  await redeployedResponse.text();
+  const redeployed = await appById(id);
+  assert.equal(redeployed.current?.bundle.files["index.html"], importedBundle.files["index.html"]);
+  assert.equal(redeployed.current?.spec.purpose, importedSpec.purpose);
+  assert.deepEqual(redeployed.data, connected.data);
+  results.push("Imported source and specification synchronize into the next agent turn");
+  const rejectedChats: number[] = [];
+  const observeChat = (response: import("playwright").Response) => {
+    if (response.url().includes("/api/ai/chat") && !response.ok())
+      rejectedChats.push(response.status());
+  };
+  page.on("response", observeChat);
+  await page.reload();
+  await page
+    .getByRole("textbox", { name: "Message the AI" })
+    .fill("Exercise server tool iteration limit without editing files.");
+  await page.getByRole("textbox", { name: "Message the AI" }).press("Enter");
+  await page.getByRole("button", { name: "Stop generation" }).waitFor();
+  await page
+    .getByRole("button", { name: "Stop generation" })
+    .waitFor({ state: "hidden", timeout: 60000 });
+  await page.waitForTimeout(500);
+  assert.deepEqual(
+    rejectedChats,
+    [],
+    "Server tool limit must not cause an assistant continuation request",
+  );
+  assert.equal(await page.getByText("Could not finish this turn", { exact: true }).count(), 0);
+  page.off("response", observeChat);
+  results.push("Tool-ending server turns settle without client assistant-message continuation");
   assert.deepEqual(browserErrors, []);
   console.log(results.map((result) => `PASS ${result}`).join("\n"));
   console.log(

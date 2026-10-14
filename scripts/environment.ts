@@ -3,9 +3,10 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const platformRoot = fileURLToPath(new URL("..", import.meta.url).href);
-export function configuredEnvironment() {
+export function configuredEnvironment(fallbackFiles: string[] = []) {
   const values = { ...process.env };
   for (const file of [
+    ...fallbackFiles,
     resolve(platformRoot, "apps/web/.env"),
     resolve(platformRoot, ".env"),
     resolve(platformRoot, "../.env"),

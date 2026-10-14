@@ -2,11 +2,29 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { protocols } from "../apps/web/src/lib/contracts";
 import { sampleBundle } from "../apps/web/src/lib/samples";
-import { clarify, generate, explain } from "../apps/web/src/server/models";
+import { capabilityRequirements, initialRequirements } from "../apps/web/src/lib/planning";
+import {
+  b2cPerformancePlan,
+  validateCapabilityPlan,
+  type CapabilityPlan,
+} from "../packages/capabilities/src";
+import { clarify, generate, explain, planCapabilities } from "../apps/web/src/server/models";
 
 // A local transport fixture checks SDK wiring. It does not prove live model access.
 const spec = protocols[0]!.defaultSpec;
 const bundle = sampleBundle(spec);
+const expected = capabilityRequirements(spec, initialRequirements());
+const plan: CapabilityPlan = {
+  ...structuredClone(b2cPerformancePlan),
+  requirements: expected.map((row) => ({ ...row, assetTypes: ["stocks"], markets: ["China"] })),
+  coverage: expected.map((row) => ({
+    requirementId: row.id,
+    status: "partial",
+    stepIds: ["dashboard"],
+    reason: "Only arbitrary simulation metrics; product contracts and coverage are UNKNOWN.",
+  })),
+};
+let unknownCapability = false;
 const requests: any[] = [];
 const server = createServer(async (req, res) => {
   assert.equal(req.url, "/v1/responses");
@@ -17,8 +35,16 @@ const server = createServer(async (req, res) => {
   requests.push(request);
   assert.equal(request.model, "gpt-6-luna");
   const schema = request.text?.format?.schema;
+  const planningFixture = structuredClone(plan);
+  if (unknownCapability) planningFixture.steps[0]!.capabilityId = "invented.capability";
   const text = schema
-    ? JSON.stringify(schema.properties?.manifest ? bundle : spec)
+    ? JSON.stringify(
+        schema.properties?.requirements
+          ? planningFixture
+          : schema.properties?.manifest
+            ? bundle
+            : spec,
+      )
     : "Fixture explanation of verified calculations.";
   const response = {
     id: "resp_fixture",
@@ -83,7 +109,32 @@ try {
     "Fixture explanation of verified calculations.",
   );
   console.log("PASS Deployed-app explanation uses the configured Responses adapter");
-  console.log("3 local model transport checks passed. Live OpenAI calls remain unverified.");
+  assert.deepEqual(await planCapabilities(expected), plan);
+  assert.equal(validateCapabilityPlan(plan, expected).productionReady, false);
+  const planningRequest = requests.find((r) => r.text?.format?.schema?.properties?.requirements);
+  assert.ok(planningRequest);
+  const planningPrompt = JSON.stringify(planningRequest);
+  for (const phrase of [
+    "UNKNOWN",
+    "exact versions",
+    "partial or unsupported",
+    "explicit gaps",
+    "registered IDs",
+  ])
+    assert.ok(planningPrompt.includes(phrase), `Planning prompt must include ${phrase}`);
+  assert.ok(planningPrompt.includes("data.stock-price-api"));
+  assert.ok(planningPrompt.includes("1.0.0"));
+  for (const row of expected) assert.ok(planningPrompt.includes(row.id));
+  console.log(
+    "PASS Planner sends pinned contracts and UNKNOWN coverage policy and preserves expected requirements",
+  );
+  unknownCapability = true;
+  await assert.rejects(
+    planCapabilities(expected),
+    /Capability plan rejected:.*No exact capability invented\.capability/,
+  );
+  console.log("PASS Planner rejects a schema-valid model plan containing an unknown capability ID");
+  console.log("5 local model transport checks passed. Live OpenAI calls remain unverified.");
 } finally {
   for (const key of [
     "CD80_LOCAL_MODE",

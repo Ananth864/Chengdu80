@@ -1,5 +1,7 @@
 import type { UIMessage } from "@tanstack/ai";
 import { z } from "zod";
+import type { Requirements, FeasibilityReport, WorkflowGraph } from "./planning";
+import type { CapabilityPlan } from "@web-starter/capabilities";
 
 export const capabilities = [
   "market.prices",
@@ -110,6 +112,17 @@ export type Release = {
   createdAt: string;
   origin: "sample" | "model" | "import";
   notes: string;
+  workflow?: WorkflowGraph;
+  requirements?: Requirements;
+  feasibility?: FeasibilityReport;
+  capabilityArtifact?: {
+    plan: CapabilityPlan;
+    typescript: string;
+    artifactHash: string;
+    simulation: boolean;
+  };
+  simulationPassed?: boolean;
+  approval?: { artifactHash: string; ownerId: string; approvedAt: string };
 };
 export type Application = {
   id: string;
@@ -127,8 +140,13 @@ export type Application = {
   conversation?: UIMessage[];
   workspace?: AppBundle;
   workspaceSpec?: ProductSpec;
+  requirements?: Requirements;
+  confirmedDesign?: string;
+  feasibility?: FeasibilityReport;
+  workflow?: WorkflowGraph;
   browserEvents?: { releaseId: string; at: string; message: string }[];
   enabledPlugins?: string[];
+  capabilityMode?: boolean;
   turns?: {
     id: string;
     startedAt: string;

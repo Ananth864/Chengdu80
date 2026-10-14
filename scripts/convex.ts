@@ -2,11 +2,15 @@ import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { configuredEnvironment, platformRoot } from "./environment";
 
-const env = configuredEnvironment();
+const env = configuredEnvironment([resolve(platformRoot, "packages/backend/.env.local")]);
 const task = process.argv[2] || "codegen";
 if (!["codegen", "push"].includes(task)) throw new Error("Unknown Convex task");
-if (!env.CONVEX_DEPLOY_KEY) throw new Error("Add CONVEX_DEPLOY_KEY to workspace .env");
-if (task === "push" && !env.CONVEX_DEPLOY_KEY.startsWith("dev:"))
+const selfHosted = !!(env.CONVEX_SELF_HOSTED_URL && env.CONVEX_SELF_HOSTED_ADMIN_KEY);
+if (!env.CONVEX_DEPLOY_KEY && !selfHosted)
+  throw new Error(
+    "Configure CONVEX_DEPLOY_KEY or both CONVEX_SELF_HOSTED_URL and CONVEX_SELF_HOSTED_ADMIN_KEY (packages/backend/.env.local is supported).",
+  );
+if (task === "push" && !env.CONVEX_DEPLOY_KEY?.startsWith("dev:"))
   throw new Error("Prototype backend push requires a development deploy key");
 env.CD80_DEMO_MODE ??= "1";
 console.log(
